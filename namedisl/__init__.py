@@ -43,7 +43,7 @@ from constantdict import constantdict
 import islpy as isl
 
 
-__version__ = metadata.version("pytools")
+__version__ = metadata.version("namedisl")
 _match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
 assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))

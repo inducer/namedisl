@@ -28,7 +28,7 @@ THE SOFTWARE.
 import namedisl as nisl
 
 
-def test_basic_set():
+def test_basic_set() -> None:
     bs = nisl.make_basic_set("[n] -> {[i]}: 0<=i<n}")
     print(bs._obj)
     print(bs)
