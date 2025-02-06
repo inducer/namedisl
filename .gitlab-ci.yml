@@ -20,9 +20,12 @@ Ruff:
   - tags
 
 Mypy:
-  script:
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-mypy.sh
-  - ". ./prepare-and-run-mypy.sh python3 mypy"
+  script: |
+    curl -L -O https://tiker.net/ci-support-v0
+    . ci-support-v0
+    build_py_project_in_venv
+    pip install mypy
+    mypy "$(get_proj_name)"
   tags:
   - python3
   except:
