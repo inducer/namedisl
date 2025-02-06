@@ -4,9 +4,9 @@ namedisl: Integer Set Library with Significant Names
 .. image:: https://gitlab.tiker.net/inducer/namedisl/badges/main/pipeline.svg
     :alt: Gitlab Build Status
     :target: https://gitlab.tiker.net/inducer/namedisl/commits/main
-.. image:: https://github.com/inducer/namedisl/workflows/CI/badge.svg?branch=main
+.. image:: https://github.com/inducer/namedisl/actions/workflows/ci.yml/badge.svg
     :alt: Github Build Status
-    :target: https://github.com/inducer/namedisl/actions?query=branch%3Amain+workflow%3ACI
+    :target: https://github.com/inducer/namedisl/actions/workflows/ci.yml
 .. image:: https://badge.fury.io/py/namedisl.svg
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/namedisl/
