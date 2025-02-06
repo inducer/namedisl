@@ -55,9 +55,10 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                EXTRA_INSTALL="numpy pymbolic orderedsets"
-                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
-                . ./prepare-and-run-pylint.sh "$(basename $GITHUB_REPOSITORY)"
+                curl -L -O https://tiker.net/ci-support-v0
+                . ci-support-v0
+                build_py_project_in_venv
+                run_pylint $(get_proj_name)
 
     mypy:
         name: Mypy
@@ -70,9 +71,11 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                EXTRA_INSTALL="numpy siphash24"
-                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-mypy.sh
-                . ./prepare-and-run-mypy.sh python3 mypy
+                curl -L -O https://tiker.net/ci-support-v0
+                . ci-support-v0
+                build_py_project_in_venv
+                pip install mypy
+                mypy "$(get_proj_name)"
 
     pytest:
         name: Pytest on Py${{ matrix.python-version }} ${{ matrix.os }}
@@ -89,8 +92,10 @@ jobs:
                 python-version: ${{ matrix.python-version }}
         -   name: "Main Script"
             run: |
-                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
-                . ./build-and-test-py-project.sh
+                curl -L -O https://tiker.net/ci-support-v0
+                . ci-support-v0
+                build_py_project_in_venv
+                test_py_project
 
     docs:
         name: Documentation
