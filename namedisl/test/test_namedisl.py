@@ -55,9 +55,9 @@ def test_named_basic_map_from_basic_map() -> None:
     bmap = isl.BasicMap(
         "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
     )
-    bmap = nisl.make_basic_map(bmap)
-    print(bmap._obj)
-    print(bmap)
+    named_bmap = nisl.make_basic_map(bmap)
+    print(named_bmap._obj)
+    print(named_bmap)
 
 
 if __name__ == "__main__":
