@@ -25,10 +25,45 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import islpy as isl
+
 import namedisl as nisl
 
 
-def test_basic_set() -> None:
-    bs = nisl.make_basic_set("[n] -> {[i]}: 0<=i<n}")
+def test_basic_set_from_str() -> None:
+    bs = nisl.make_basic_set("[n] -> { [i]: 0 <= i < n }")
     print(bs._obj)
     print(bs)
+
+
+def test_named_basic_set_from_basic_set() -> None:
+    bset = isl.BasicSet("[n] -> { [i, j] : 0 <= i, j < n }")
+    named_bset = nisl.make_basic_set(bset)
+    print(named_bset._obj)
+    print(named_bset)
+
+
+def test_basic_map_from_str() -> None:
+    bmap = nisl.make_basic_map(
+        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
+    )
+    print(bmap._obj)
+    print(bmap)
+
+
+def test_named_basic_map_from_basic_map() -> None:
+    bmap = isl.BasicMap(
+        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
+    )
+    bmap = nisl.make_basic_map(bmap)
+    print(bmap._obj)
+    print(bmap)
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])

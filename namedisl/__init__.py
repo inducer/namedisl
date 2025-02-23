@@ -48,8 +48,7 @@ _match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
 assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
-
-IslObject = TypeVar("IslObject", isl.BasicSet, isl.Set)
+IslObject = TypeVar("IslObject", isl.BasicSet, isl.Set, isl.BasicMap, isl.Map)
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
 
@@ -76,6 +75,7 @@ def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
 
     return obj
 
+# {{{ sets
 
 @dataclass(frozen=True)
 class BasicSet:
@@ -96,8 +96,42 @@ def make_basic_set(src: isl.BasicSet) -> BasicSet:
     ...
 
 
-def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
+def make_basic_set(src: str | isl.BasicSet,
+                   ctx: isl.Context | None = None) -> BasicSet:
     obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
 
     obj, name_to_dim = _strip_names(obj)
     return BasicSet(obj, name_to_dim)
+
+# }}}
+
+
+# {{{ maps
+
+@dataclass(frozen=True)
+class BasicMap:
+    _obj: isl.BasicMap
+    _name_to_dim: NameToDim
+
+    def __str__(self) -> str:
+        return str(_restore_names(self._obj, self._name_to_dim))
+
+
+@overload
+def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap:
+    ...
+
+
+@overload
+def make_basic_map(src: isl.BasicMap) -> BasicMap:
+    ...
+
+
+def make_basic_map(src: str | isl.BasicMap,
+                   ctx: isl.Context | None = None) -> BasicMap:
+    obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return BasicMap(obj, name_to_dim)
+
+# }}}
