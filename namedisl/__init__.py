@@ -82,6 +82,13 @@ class BasicSet:
     _obj: isl.BasicSet
     _name_to_dim: NameToDim
 
+    def __and__(self, other) -> BasicSet:
+        if self._name_to_dim == other._name_to_dim:
+            return BasicSet(self._obj & other._obj, self._name_to_dim)
+        else: # determine whether sets can be intersected
+            pass
+        raise ValueError("Name mismatch, cannot intersect sets")
+
     def __str__(self) -> str:
         return str(_restore_names(self._obj, self._name_to_dim))
 
@@ -112,6 +119,13 @@ def make_basic_set(src: str | isl.BasicSet,
 class BasicMap:
     _obj: isl.BasicMap
     _name_to_dim: NameToDim
+
+    def __and__(self, other) -> BasicMap:
+        if self._name_to_dim == other._name_to_dim:
+            return BasicMap(self._obj & other._obj, self._name_to_dim)
+        else: # do some analysis to figure out whether intersection is legal
+            pass
+        raise ValueError("Name mismatch, cannot intersect maps")
 
     def __str__(self) -> str:
         return str(_restore_names(self._obj, self._name_to_dim))
