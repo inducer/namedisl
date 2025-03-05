@@ -97,9 +97,7 @@ def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
 
 def _find_alignment_ordering(obj: NamedIslObject,
                              template: NamedIslObject) -> Sequence:
-    ordering = []
-
-    return ordering
+    return list(obj._name_to_dim.keys())
 
 
 def _apply_ordering(obj: NamedIslObject,
