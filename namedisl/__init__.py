@@ -71,29 +71,6 @@ class NamedIslObject:
     def dim_names(self):
         return list(self._name_to_dim.keys())
 
-    def get_dim_id(self, dt, idx):
-        return self._obj.get_dim_id(dt, idx)
-
-    def move_dims(self, dim_name, dest_dt, dest_idx, ndims) -> NamedIslObject:
-        src_dt, src_idx = self._name_to_dim[dim_name]
-
-        name_to_dim = dict(self._name_to_dim)
-        name_to_dim[dim_name] = (dest_dt, dest_idx)
-        new_obj = self._obj.move_dims(dest_dt, dest_idx, src_dt, src_idx, ndims)
-
-        return type(self)(new_obj, constantdict(name_to_dim))
-
-    def insert_dims(self, dim_id, dt, idx, ndims) -> NamedIslObject:
-        new_obj = self._obj.insert_dims(dt, idx, ndims)
-        name_to_dim = dict(self._name_to_dim)
-        name_to_dim[dim_id.name] = (dt, idx)
-
-        return type(self)(new_obj, constantdict(name_to_dim))
-
-    def set_dim_id(self, dt, pos, id) -> NamedIslObject:
-        new_obj = self._obj.set_dim_id(dt, pos, id)
-        return type(self)(new_obj, self._name_to_dim)
-
     def dim(self, dt) -> int:
         return self._obj.dim(dt)
 
