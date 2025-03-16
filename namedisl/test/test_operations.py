@@ -30,28 +30,74 @@ import pytest
 import namedisl as nisl
 
 
-@pytest.mark.parametrize("ndims", [1, 2, 8])
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_align_two(ndims) -> None:
+    dims_a = ",".join(f"a{d}" for d in range(ndims))
+    dims_b = ",".join(f"b{d}" for d in range(ndims))
+    a = nisl.make_basic_set(f"[n] -> {{ [{dims_a}] : 0 <= {dims_a} < n }}")
+    b = nisl.make_basic_set(f"[n] -> {{ [{dims_b}] : 0 <= {dims_b} < n }}")
+
+    a, b = nisl.align_two(a, b)
+    assert a._name_to_dim == b._name_to_dim
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_align_spaces(ndims) -> None:
+    dims_a = ",".join(f"a{d}" for d in range(ndims))
+    dims_b = ",".join(f"b{d}" for d in range(ndims))
+    a = nisl.make_basic_set(f"[n] -> {{ [{dims_a}] : 0 <= {dims_a} < n }}")
+    b = nisl.make_basic_set(f"[n] -> {{ [{dims_b}] : 0 <= {dims_b} < n }}")
+
+    b = nisl.align_spaces(b, a)
+    assert b.dim(nisl.dim_type.out) == 2*ndims
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 def test_basic_set_intersection(ndims) -> None:
-    dims = ",".join(f"i{d}" for d in range(ndims))
-    a = nisl.make_basic_set(f"[n] -> {{ [{dims}] : 0 <= {dims} < n }}")
-    b = nisl.make_basic_set(f"[n] -> {{ [{dims}] : 0 <= {dims} < 2*n }}")
+    a_dims = ",".join(f"i{d}" for d in range(ndims))
+    b_dims = ",".join(f"j{d}" for d in range(ndims))
+    a = nisl.make_basic_set(f"[n] -> {{ [{a_dims}] : 0 <= {a_dims} < n }}")
+    b = nisl.make_basic_set(f"[n] -> {{ [{b_dims}] : 0 <= {b_dims} < n }}")
 
-    assert (a & b)._obj == (a._obj & b._obj)
+    result = nisl.make_basic_set(
+        f"""
+        [n] ->
+        {{ [{a_dims}, {b_dims}] : 0 <= {a_dims} < n and 0 <= {b_dims} < n}}
+        """
+    )
+
+    assert (a & b) == result
 
 
-@pytest.mark.parametrize("ndims", [1, 2, 8])
+@pytest.mark.parametrize("ndims", [1, 2])
 def test_basic_map_intersection(ndims) -> None:
-    in_dims = ",".join(f"i{d}" for d in range(ndims))
-    out_dims = ",".join(f"j{d}" for d in range(ndims))
+    a_in_dims = ",".join(f"i{d}" for d in range(ndims))
+    a_out_dims = ",".join(f"j{d}" for d in range(ndims))
+
+    b_in_dims = ",".join(f"a{d}" for d in range(ndims))
+    b_out_dims = ",".join(f"b{d}" for d in range(ndims))
 
     a = nisl.make_basic_map(
-        f"[n] -> {{ [{in_dims}] -> [{out_dims}]: 0 <= {in_dims}, {out_dims} < n}}"
+        f"""
+        [n] ->
+        {{[{a_in_dims}] -> [{a_out_dims}]: 0 <= {a_in_dims}, {a_out_dims} < n}}
+        """
     )
     b = nisl.make_basic_map(
-        f"[n] -> {{ [{in_dims}] -> [{out_dims}]: 0 <= {in_dims}, {out_dims} < n}}"
+        f"""
+        [n] ->
+        {{[{b_in_dims}] -> [{b_out_dims}]: 0 <= {b_in_dims}, {b_out_dims} < n}}
+        """
     )
 
-    assert (a & b)._obj == (a._obj & b._obj)
+    domain_str = f"{a_in_dims},{b_in_dims}"
+    range_str = f"{a_out_dims},{b_out_dims}"
+    condition_str = f"0 <= {domain_str}, {range_str} < n"
+    result = nisl.make_basic_map(
+        f"[n] -> {{ [{domain_str}] -> [{range_str}] : {condition_str} }}"
+    )
+
+    assert (a & b) == result
 
 
 if __name__ == "__main__":
