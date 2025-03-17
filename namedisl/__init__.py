@@ -208,7 +208,11 @@ def _align_and_apply_op(
         obj2: NamedIslObject,
         op: Callable[[IslObject, IslObject], IslObject]) -> NamedIslObject:
     obj1, obj2 = align_two(obj1, obj2)
+
+    # NOTE: this relies on isl to tell us what operations are legal
     result = op(obj1._obj, obj2._obj)
+
+    # FIXME: actually check types instead of taking obj1 to be the truth
     obj_class = _upcast_if_necessary(obj1._obj, result)
     if obj_class is not None:
         return obj_class(result, obj1._name_to_dim)
