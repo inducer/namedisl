@@ -69,7 +69,7 @@ def test_basic_set_intersection(ndims) -> None:
     assert (a & b) == result
 
 
-@pytest.mark.parametrize("ndims", [1, 2])
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 def test_basic_map_intersection(ndims) -> None:
     a_in_dims = ",".join(f"i{d}" for d in range(ndims))
     a_out_dims = ",".join(f"j{d}" for d in range(ndims))
@@ -98,6 +98,92 @@ def test_basic_map_intersection(ndims) -> None:
     )
 
     assert (a & b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_basic_set_union(ndims) -> None:
+    a_dims = ",".join(f"i{d}" for d in range(ndims))
+    b_dims = ",".join(f"j{d}" for d in range(ndims))
+    a = nisl.make_basic_set(f"[n] -> {{ [{a_dims}] : 0 <= {a_dims} < n }}")
+    b = nisl.make_basic_set(f"[n] -> {{ [{b_dims}] : 0 <= {b_dims} < n }}")
+
+    result = nisl.make_set(
+        f"""
+        [n] ->
+        {{ [{a_dims}, {b_dims}] : (0 <= {a_dims} < n) or (0 <= {b_dims} < n)}}
+        """
+    )
+
+    assert (a | b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_basic_map_union(ndims) -> None:
+    a_in = ",".join(f"a_in{i}" for i in range(ndims))
+    a_out = ",".join(f"a_out{i}" for i in range(ndims))
+    a_cond = f"0 <= {a_in},{a_out} < n"
+    a = nisl.make_basic_map(
+        f"[n] -> {{ [{a_in}] -> [{a_out}] : {a_cond} }}"
+    )
+
+    b_in = ",".join(f"b_in{i}" for i in range(ndims))
+    b_out = ",".join(f"b_out{i}" for i in range(ndims))
+    b_cond = f"0 <= {b_in},{b_out} < n"
+    b = nisl.make_basic_map(
+        f"[n] -> {{ [{b_in}] -> [{b_out}] : 0 <= {b_in},{b_out} < n }}"
+    )
+
+    result = nisl.make_map(
+        f"""
+        [n] ->
+        {{ [{a_in},{b_in}] -> [{a_out},{b_out}] : ({a_cond}) or ({b_cond})}}
+        """
+    )
+
+    assert (a | b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_set_union(ndims) -> None:
+    a_dims = ",".join(f"i{d}" for d in range(ndims))
+    b_dims = ",".join(f"j{d}" for d in range(ndims))
+    a = nisl.make_set(f"[n] -> {{ [{a_dims}] : 0 <= {a_dims} < n }}")
+    b = nisl.make_set(f"[n] -> {{ [{b_dims}] : 0 <= {b_dims} < n }}")
+
+    result = nisl.make_set(
+        f"""
+        [n] ->
+        {{ [{a_dims}, {b_dims}] : (0 <= {a_dims} < n) or (0 <= {b_dims} < n)}}
+        """
+    )
+
+    assert (a | b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_map_union(ndims) -> None:
+    a_in = ",".join(f"a_in{i}" for i in range(ndims))
+    a_out = ",".join(f"a_out{i}" for i in range(ndims))
+    a_cond = f"0 <= {a_in},{a_out} < n"
+    a = nisl.make_map(
+        f"[n] -> {{ [{a_in}] -> [{a_out}] : {a_cond} }}"
+    )
+
+    b_in = ",".join(f"b_in{i}" for i in range(ndims))
+    b_out = ",".join(f"b_out{i}" for i in range(ndims))
+    b_cond = f"0 <= {b_in},{b_out} < n"
+    b = nisl.make_map(
+        f"[n] -> {{ [{b_in}] -> [{b_out}] : 0 <= {b_in},{b_out} < n }}"
+    )
+
+    result = nisl.make_map(
+        f"""
+        [n] ->
+        {{ [{a_in},{b_in}] -> [{a_out},{b_out}] : ({a_cond}) or ({b_cond})}}
+        """
+    )
+
+    assert (a | b) == result
 
 
 if __name__ == "__main__":

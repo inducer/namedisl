@@ -1,7 +1,16 @@
 """
 .. autoclass:: BasicSet
+.. autoclass:: Set
+.. autoclass:: BasicMap
+.. autoclass:: Map
 
 .. autofunction:: make_basic_set
+.. autofunction:: make_ap
+.. autofunction:: make_basic_map
+.. autofunction:: make_basic_map
+
+.. autofunction:: align_spaces
+.. autofunction:: align_two
 """
 
 
@@ -58,6 +67,8 @@ DIM_TYPES = [dim_type.in_, dim_type.param, dim_type.out]
 IslObject = TypeVar("IslObject", isl.BasicSet, isl.Set, isl.BasicMap, isl.Map)
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
+IMPLEMENTED_CLASSES = isl.Map | isl.BasicMap | isl.Set | isl.BasicSet
+
 
 @dataclass(frozen=True)
 class NamedIslObject:
@@ -75,7 +86,10 @@ class NamedIslObject:
         return self._obj.dim(dt)
 
     def __and__(self, other) -> NamedIslObject:
-        return align_and_apply_op(self, other, operator.and_)
+        return _align_and_apply_op(self, other, operator.and_)
+
+    def __or__(self, other) -> NamedIslObject:
+        return _align_and_apply_op(self, other, operator.or_)
 
     def __getitem__(self, dim_name):
         if dim_name in self._name_to_dim:
@@ -174,12 +188,30 @@ def align_two(obj1: NamedIslObject,
     return obj1, obj2
 
 
-def align_and_apply_op(
+def _upcast_if_necessary(old_obj: IslObject, new_obj: IslObject):
+    if not isinstance(new_obj, IMPLEMENTED_CLASSES):
+        raise NotImplementedError(
+            f"Attempted to upcast with {type(new_obj)}")
+    if not isinstance(old_obj, IMPLEMENTED_CLASSES):
+        raise NotImplementedError(
+            f"Attempted to upcast with {type(old_obj)}")
+
+    if isinstance(old_obj, isl.BasicSet) and isinstance(new_obj, isl.Set):
+        return Set
+
+    if isinstance(old_obj, isl.BasicMap) and isinstance(new_obj, isl.Map):
+        return Map
+
+
+def _align_and_apply_op(
         obj1: NamedIslObject,
         obj2: NamedIslObject,
         op: Callable[[IslObject, IslObject], IslObject]) -> NamedIslObject:
     obj1, obj2 = align_two(obj1, obj2)
     result = op(obj1._obj, obj2._obj)
+    obj_class = _upcast_if_necessary(obj1._obj, result)
+    if obj_class is not None:
+        return obj_class(result, obj1._name_to_dim)
     return type(obj1)(result, obj1._name_to_dim)
 
 # }}}
@@ -209,6 +241,29 @@ def make_basic_set(src: str | isl.BasicSet,
     obj, name_to_dim = _strip_names(obj)
     return BasicSet(obj, name_to_dim)
 
+
+@dataclass(frozen=True)
+class Set(NamedIslObject):
+    _obj: isl.Set
+
+
+@overload
+def make_set(src: str, ctx: isl.Context | None = None) -> Set:
+    ...
+
+
+@overload
+def make_set(src: isl.Set) -> Set:
+    ...
+
+
+def make_set(src: str | isl.Set,
+                   ctx: isl.Context | None = None) -> Set:
+    obj = isl.Set(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return Set(obj, name_to_dim)
+
 # }}}
 
 
@@ -236,5 +291,29 @@ def make_basic_map(src: str | isl.BasicMap,
 
     obj, name_to_dim = _strip_names(obj)
     return BasicMap(obj, name_to_dim)
+
+
+@dataclass(frozen=True)
+class Map(NamedIslObject):
+    _obj: isl.Map
+    _name_to_dim: NameToDim
+
+
+@overload
+def make_map(src: str, ctx: isl.Context | None = None) -> Map:
+    ...
+
+
+@overload
+def make_map(src: isl.Map) -> Map:
+    ...
+
+
+def make_map(src: str | isl.Map,
+                   ctx: isl.Context | None = None) -> Map:
+    obj = isl.Map(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return Map(obj, name_to_dim)
 
 # }}}
