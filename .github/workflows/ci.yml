@@ -60,8 +60,7 @@ jobs:
                 build_py_project_in_venv
                 run_pylint $(get_proj_name)
 
-    mypy:
-        name: Mypy
+    basedpyright:
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v4
@@ -74,8 +73,8 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_venv
-                pip install mypy
-                mypy "$(get_proj_name)"
+                pip install basedpyright
+                basedpyright
 
     pytest:
         name: Pytest on Py${{ matrix.python-version }} ${{ matrix.os }}
