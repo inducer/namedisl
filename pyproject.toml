@@ -72,13 +72,38 @@ lines-after-imports = 2
 required-imports = ["from __future__ import annotations"]
 
 
-[tool.mypy]
-python_version = "3.10"
-ignore_missing_imports = true
-warn_unused_ignores = true
-strict = true
-
 [tool.typos.default]
 extend-ignore-re = [
   "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"
 ]
+
+
+[tool.basedpyright]
+reportImplicitStringConcatenation = "none"
+reportUnnecessaryIsInstance = "none"
+reportUnusedCallResult = "none"
+reportExplicitAny = "none"
+reportPrivateUsage = "none"
+reportPrivateImportUsage = "none"
+
+reportUnreachable = "hint"
+reportUnnecessaryComparison = "hint"
+
+# This reports even cycles that are qualified by 'if TYPE_CHECKING'. Not what
+# we care about at this moment.
+# https://github.com/microsoft/pyright/issues/746
+reportImportCycles = "none"
+
+pythonVersion = "3.10"
+pythonPlatform = "All"
+
+exclude = [
+    "proto-tests/*.py",
+    "contrib/mem-pattern-explorer/*.py",
+    "loopy/ipython_ext.py",
+    "loopy/frontend/fortran/*.py",
+    "doc",
+    ".conda-root",
+    ".env",
+]
+
