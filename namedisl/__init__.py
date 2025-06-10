@@ -31,7 +31,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -39,6 +38,7 @@ from importlib import metadata
 from typing import TypeAlias, TypeVar, overload
 
 from constantdict import constantdict
+from typing_extensions import override
 
 import islpy as isl
 
@@ -54,7 +54,7 @@ NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
 
 def _strip_names(obj: IslObject) -> tuple[IslObject, NameToDim]:
-    name_to_dim = {}
+    name_to_dim: dict[str, tuple[isl.dim_type, int]] = {}
     for tp in isl._CHECK_DIM_TYPES:
         for i in range(obj.dim(tp)):
             name = obj.get_dim_name(tp, i)
@@ -82,6 +82,7 @@ class BasicSet:
     _obj: isl.BasicSet
     _name_to_dim: NameToDim
 
+    @override
     def __str__(self) -> str:
         return str(_restore_names(self._obj, self._name_to_dim))
 
