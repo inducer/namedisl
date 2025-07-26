@@ -30,64 +30,17 @@ import islpy as isl
 import namedisl as nisl
 
 
-def test_basic_set_from_str() -> None:
-    bs = nisl.make_basic_set("[n] -> { [i]: 0 <= i < n }")
-    print(bs._obj)
-    print(bs)
-
-
-def test_named_basic_set_from_basic_set() -> None:
-    bset = isl.BasicSet("[n] -> { [i, j] : 0 <= i, j < n }")
-    named_bset = nisl.make_basic_set(bset)
-    print(named_bset._obj)
-    print(named_bset)
-
-
 def test_set_from_str() -> None:
-    bs = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
-    print(bs._obj)
-    print(bs)
+    s = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
+    print(s._obj)
+    print(s)
 
 
 def test_named_set_from_set() -> None:
-    bset = isl.Set("[n] -> { [i, j] : 0 <= i, j < n }")
-    named_bset = nisl.make_set(bset)
-    print(named_bset._obj)
-    print(named_bset)
-
-
-def test_basic_map_from_str() -> None:
-    bmap = nisl.make_basic_map(
-        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
-    )
-    print(bmap._obj)
-    print(bmap)
-
-
-def test_named_basic_map_from_basic_map() -> None:
-    bmap = isl.BasicMap(
-        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
-    )
-    named_bmap = nisl.make_basic_map(bmap)
-    print(named_bmap._obj)
-    print(named_bmap)
-
-
-def test_map_from_str() -> None:
-    bmap = nisl.make_map(
-        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
-    )
-    print(bmap._obj)
-    print(bmap)
-
-
-def test_named_map_from_map() -> None:
-    bmap = isl.Map(
-        "[n] -> { [i0, j0] -> [i1, j1] : 0 <= i0, j0, i1, j1 < n }"
-    )
-    named_bmap = nisl.make_map(bmap)
-    print(named_bmap._obj)
-    print(named_bmap)
+    set = isl.Set("[n] -> { [i, j] : 0 <= i, j < n }")
+    named_set = nisl.make_set(set)
+    print(named_set._obj)
+    print(named_set)
 
 
 if __name__ == "__main__":

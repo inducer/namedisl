@@ -4,10 +4,8 @@
 .. autoclass:: BasicMap
 .. autoclass:: Map
 
-.. autofunction:: make_basic_set
-.. autofunction:: make_ap
-.. autofunction:: make_basic_map
-.. autofunction:: make_basic_map
+.. autofunction:: make_set
+.. autofunction:: make_map
 
 .. autofunction:: align_spaces
 .. autofunction:: align_two
@@ -46,7 +44,7 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
-from typing import TypeAlias, TypeVar, overload
+from typing import Self, TypeAlias, overload
 
 from constantdict import constantdict
 
@@ -59,16 +57,13 @@ _match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
 assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
-DIM_TYPES = [dim_type.in_, dim_type.param, dim_type.out]
+DIM_TYPES = [dim_type.param, dim_type.set]
 
 
 # {{{ typing
 
-IslObject = TypeVar("IslObject", isl.BasicSet, isl.Set, isl.BasicMap, isl.Map)
+IslObject = isl.Set 
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
-
-IMPLEMENTED_CLASSES = isl.Map | isl.BasicMap | isl.Set | isl.BasicSet
-
 
 @dataclass(frozen=True)
 class NamedIslObject:
@@ -79,29 +74,55 @@ class NamedIslObject:
     def space(self):
         return self._obj.space
 
+    @property
     def dim_names(self):
         return list(self._name_to_dim.keys())
 
-    def dim(self, dt) -> int:
-        return self._obj.dim(dt)
-
-    def __and__(self, other) -> NamedIslObject:
-        return _align_and_apply_op(self, other, operator.and_)
-
-    def __or__(self, other) -> NamedIslObject:
-        return _align_and_apply_op(self, other, operator.or_)
-
-    def __getitem__(self, dim_name):
+    def get_dim_from_name(self, dim_name):
         if dim_name in self._name_to_dim:
             return self._name_to_dim[dim_name]
         else:
             raise ValueError(f"{dim_name} is not a dimension")
 
+    # TODO: write test
+    def insert_dims(self, names_to_dims: NameToDim) -> Self:
+        new_obj = self._obj.copy()
+        new_name_to_dim = dict(self._name_to_dim)
+
+        for name, (dim_type, pos) in sorted(
+                names_to_dims.items(), key=lambda k: k[1][1]):
+            old_pos = new_obj.dim(dim_type)
+            new_obj = new_obj.insert_dims(dim_type, pos, 1)
+            new_name_to_dim = _update_name_to_dim(new_name_to_dim, dim_type,
+                                                  name, pos, old_pos)
+
+        return type(self)(new_obj, new_name_to_dim)
+
+    # {{{ set operations
+
+    # TODO: write test
+    def complement(self) -> Self:
+        return type(self)(self._obj.complement(), self._name_to_dim)
+
+    def __and__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.and_)
+
+    # TODO: write test
+    def __eq__(self, other) -> bool:
+        return (self._name_to_dim == other._name_to_dim) and \
+               (self._obj == other._obj)
+
+    def __or__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.or_)
+
+    # TODO: write test
+    def __sub__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.sub)
+
     def __str__(self) -> str:
         return str(_restore_names(self._obj, self._name_to_dim))
 
-
-NamedBinaryOp = Callable[[NamedIslObject, NamedIslObject], NamedIslObject]
+    # }}}
 
 # }}}
 
@@ -132,118 +153,153 @@ def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
     return obj
 
 
-def _find_ordering(obj: NamedIslObject, template: NamedIslObject) -> NameToDim:
+def _find_joint_name_to_dim(
+        obj: NamedIslObject, 
+        template: NamedIslObject) -> NameToDim:
     """
-    Creates a new mapping of dim names to type and index using the union of dim
-    names in *template* and *obj*. Dim names sharing a type will be ordered such
-    that *template* dim names appear before *obj* dim names.
+    Uses `template` to determine a name-to-dimension mapping used for aligning
+    the spaces between `obj` and `template`.
     """
     name_to_dim = template._name_to_dim
-    shared_dim_names = set(obj.dim_names()) & set(template.dim_names())
 
-    dim_indices = {
-        dim_type.out: template.dim(dim_type.out),
-        dim_type.in_: template.dim(dim_type.in_),
-        dim_type.param: template.dim(dim_type.param),
-    }
-    for name in obj.dim_names():
-        if name in shared_dim_names:
-            continue
+    shared_names = set(name_to_dim.keys()) & set(obj._name_to_dim.keys())
+    for name in sorted(shared_names):
+        dim_type_obj, _ = obj._name_to_dim[name] 
+        dim_type_template, _ = template._name_to_dim[name]
+        if dim_type_obj != dim_type_template:
+            raise ValueError(
+                f"{name} belongs to a different dim_type in `obj` than in "
+                "`template`"
+            )
 
-        obj_dt, _ = obj[name]
-        name_to_dim = constantdict(
-            dict(name_to_dim) | {name: (obj_dt, dim_indices[obj_dt])})
+    dim_type_to_idx = dict.fromkeys(DIM_TYPES, -1) 
+    for dim_type, pos in template._name_to_dim.values():
+        dim_type_to_idx[dim_type] = max(dim_type_to_idx[dim_type], pos + 1)
+     
+    unique_names = set(obj._name_to_dim.keys()) - shared_names
+    for name in sorted(unique_names):
+        dim_type, _ = obj._name_to_dim[name]
+        pos = dim_type_to_idx[dim_type]
+        name_to_dim = constantdict(dict(name_to_dim) | {name: (dim_type, pos)})
 
-        dim_indices[obj_dt] += 1
+        dim_type_to_idx[dim_type] += 1
 
     return name_to_dim
 
 
-def align_spaces(obj: NamedIslObject,
-                 template: NamedIslObject,
-                 ordering: NameToDim | None = None) -> NamedIslObject:
+def _update_name_to_dim(name_to_dim: NameToDim, 
+                        updated_dim_type: isl.dim_type,
+                        updated_name: str, 
+                        new_pos: int, 
+                        old_pos: int) -> NameToDim:
     """
-    Reorders the space of *obj* to match the space of *template*.
+    Update `name_to_dim` based on movement of `updated_name` from `old_pos` to
+    `new_pos`.
 
-    If the set of dimensions in *obj* are not a subset of the dimensions in
-    *template*, then a new space is created using the union of the two sets of
-    dimensions. The dimensions of *template* are ordered before the dimensions
-    of *obj*.
+    The behavior of `_update_isl_object` requires us to either increment or
+    decrement other dimension positions. See `_update_isl_object` for an
+    explanation of why this is necessary.
     """
-    if ordering is None:
-        ordering = _find_ordering(obj, template)
+    new_name_to_dim = dict(name_to_dim)
+    for name, (dim_type, pos) in sorted(name_to_dim.items(), key=lambda k: k[1][1]):
+        if dim_type != updated_dim_type:
+            continue
 
-    isl_obj = isl.align_spaces(obj._obj, template._obj, obj_bigger_ok=True)
-    isl_obj = _restore_names(isl_obj, ordering)
+        if (new_pos > old_pos) and (pos > old_pos):
+            new_name_to_dim[name] = (dim_type, pos - 1)
+        elif (new_pos < old_pos) and (pos < old_pos):
+            new_name_to_dim[name] = (dim_type, pos + 1)
 
-    return type(obj)(isl_obj, ordering)
+    new_name_to_dim[updated_name] = (updated_dim_type, new_pos)
+
+    return new_name_to_dim
 
 
-def align_two(obj1: NamedIslObject,
-              obj2: NamedIslObject) -> Sequence[NamedIslObject]:
-    ordering = _find_ordering(obj2, obj1)
-    obj2 = align_spaces(obj2, obj1, ordering=ordering)
-    obj1 = align_spaces(obj1, obj2, ordering=ordering)
+def _update_isl_object(isl_obj: IslObject,
+                       dim_type: isl.dim_type,
+                       new_pos: int, old_pos: int) -> IslObject:
+    """
+    Shuffle a dimension to-from different dim types to it's desired position.
+    ISL does not allow dimensions to be moved within the same dim type.
+    """
+    temp_dim_type = isl.dim_type.param
+    if temp_dim_type == dim_type:
+        temp_dim_type = isl.dim_type.set
+
+    temp_pos = isl_obj.dim(temp_dim_type)
+
+    new_isl_obj = isl_obj.move_dims(
+        temp_dim_type, temp_pos, dim_type, old_pos, 1)
+    new_isl_obj = new_isl_obj.move_dims(
+        dim_type, new_pos, temp_dim_type, temp_pos, 1)
+
+    return isl_obj
+
+
+def _align_space(obj: NamedIslObject,
+                 ordering: NameToDim) -> NamedIslObject:
+    """
+    Aligns the space and name-to-dimension mapping of `obj` to match what is
+    specified by `ordering`. Returns a new object whose dims are aligned
+    according to `ordering`.
+    """
+    new_isl_obj = obj._obj.copy()
+    temp_name_to_dim = dict(obj._name_to_dim)
+    for name, (dim_type, pos) in sorted(ordering.items(), key=lambda k: k[1][1]):
+        if name in obj._name_to_dim:
+            _, old_pos = temp_name_to_dim[name]
+            if old_pos == pos: 
+                    continue
+
+            new_isl_obj = _update_isl_object(
+                new_isl_obj, dim_type, pos, old_pos)
+        else:
+            # NOTE: this is a "shortcut" to appending a dimension to the end of
+            # the current dim_type, then moving it to the correct position.
+            # hence, the "old position" is the number of dimensions in the
+            # current dim_type *before* inserting the new dimension
+            old_pos = new_isl_obj.dim(dim_type)
+            new_isl_obj = new_isl_obj.insert_dims(dim_type, pos, 1)
+
+            # for some reason params are not automatically named when inserted
+            # like isl.dim_type.set dims are
+            if dim_type == isl.dim_type.param:
+                new_isl_obj = new_isl_obj.set_dim_name(dim_type, pos, name)
+
+        temp_name_to_dim = _update_name_to_dim(
+            temp_name_to_dim, dim_type, name, pos, old_pos)
+
+    return type(obj)(new_isl_obj, ordering)
+
+
+def _align_two(obj1: NamedIslObject,
+               obj2: NamedIslObject) -> Sequence[NamedIslObject]:
+    """
+    Aligns the spaces and name-to-dimension mappings of `obj1` and `obj2` so
+    that they are compatible for *named* set operations. `obj2` will first be
+    aligned to `obj1`, then `obj1` will be aligned to the result of the first
+    alignment.
+    """
+    ordering = _find_joint_name_to_dim(obj2, obj1)
+
+    obj2 = _align_space(obj2, ordering)
+    obj1 = _align_space(obj1, ordering)
 
     return obj1, obj2
 
 
-def _upcast_if_necessary(old_obj: IslObject, new_obj: IslObject):
-    if not isinstance(new_obj, IMPLEMENTED_CLASSES):
-        raise NotImplementedError(
-            f"Attempted to upcast with {type(new_obj)}")
-    if not isinstance(old_obj, IMPLEMENTED_CLASSES):
-        raise NotImplementedError(
-            f"Attempted to upcast with {type(old_obj)}")
-
-    if isinstance(old_obj, isl.BasicSet) and isinstance(new_obj, isl.Set):
-        return Set
-
-    if isinstance(old_obj, isl.BasicMap) and isinstance(new_obj, isl.Map):
-        return Map
-
-
+NamedOpResult: TypeAlias = NamedIslObject | bool
 def _align_and_apply_op(
         obj1: NamedIslObject,
         obj2: NamedIslObject,
-        op: Callable[[IslObject, IslObject], IslObject]) -> NamedIslObject:
-    obj1, obj2 = align_two(obj1, obj2)
+        op: Callable[[IslObject, IslObject], IslObject]) -> NamedOpResult:
+    obj1, obj2 = _align_two(obj1, obj2)
 
-    # NOTE: this relies on isl to tell us what operations are legal
     result = op(obj1._obj, obj2._obj)
 
-    # FIXME: actually check types instead of taking obj1 to be the truth
-    obj_class = _upcast_if_necessary(obj1._obj, result)
-    if obj_class is not None:
-        return obj_class(result, obj1._name_to_dim)
     return type(obj1)(result, obj1._name_to_dim)
 
 # }}}
-
-
-# {{{ sets
-
-@dataclass(frozen=True)
-class BasicSet(NamedIslObject):
-    _obj: isl.BasicSet
-
-
-@overload
-def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet:
-    ...
-
-
-@overload
-def make_basic_set(src: isl.BasicSet) -> BasicSet:
-    ...
-
-
-def make_basic_set(src: str | isl.BasicSet,
-                   ctx: isl.Context | None = None) -> BasicSet:
-    obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return BasicSet(obj, name_to_dim)
 
 
 @dataclass(frozen=True)
@@ -267,57 +323,3 @@ def make_set(src: str | isl.Set,
 
     obj, name_to_dim = _strip_names(obj)
     return Set(obj, name_to_dim)
-
-# }}}
-
-
-# {{{ maps
-
-@dataclass(frozen=True)
-class BasicMap(NamedIslObject):
-    _obj: isl.BasicMap
-    _name_to_dim: NameToDim
-
-
-@overload
-def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap:
-    ...
-
-
-@overload
-def make_basic_map(src: isl.BasicMap) -> BasicMap:
-    ...
-
-
-def make_basic_map(src: str | isl.BasicMap,
-                   ctx: isl.Context | None = None) -> BasicMap:
-    obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return BasicMap(obj, name_to_dim)
-
-
-@dataclass(frozen=True)
-class Map(NamedIslObject):
-    _obj: isl.Map
-    _name_to_dim: NameToDim
-
-
-@overload
-def make_map(src: str, ctx: isl.Context | None = None) -> Map:
-    ...
-
-
-@overload
-def make_map(src: isl.Map) -> Map:
-    ...
-
-
-def make_map(src: str | isl.Map,
-                   ctx: isl.Context | None = None) -> Map:
-    obj = isl.Map(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return Map(obj, name_to_dim)
-
-# }}}
