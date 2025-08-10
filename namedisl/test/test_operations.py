@@ -28,81 +28,100 @@ THE SOFTWARE.
 import pytest
 
 import namedisl as nisl
+from random import randint
 
 
-def _generate_dims_and_random_conditions(n, has_params):
-    from random import randint 
+def _generate_random_named_set(
+        ndims: int, 
+        dim_prefix: str,
+        param: str | None
+        ) -> Tuple[nisl.NamedSet, str, str]:
+    dims = [f"{dim_prefix}_{i}" for i in range(ndims)]
+    dim_str = ",".join(d for d in dims)
 
-    a_dims = [f"i{i}" for i in range(n)]
-    b_dims = [f"j{i}" for i in range(n)]
-
-    if not has_params:
-        a_cond = " and ".join(f"0 <= {a} <= {randint(0, 100)}" for a in a_dims)
-        b_cond = " and ".join(f"0 <= {b} <= {randint(0, 100)}" for b in b_dims)
+    if param is not None:
+        conditions = f"0 <= {dim_str} < {param}"
+        set_str = f"[{param}] -> {{ [{dim_str}] : {conditions} }}"
     else:
-        a_cond = ""
-        b_cond = ""
+        upper_bounds = [randint(1, 100) for _ in range(ndims)]
+        lower_bounds = [randint(0, upper_bound - 1) for upper_bound in upper_bounds]
 
-    a_dim_string = ",".join(a for a in a_dims)
-    b_dim_string = ",".join(b for b in b_dims)
+        conditions = " and ".join(
+                f"{lower_bound} <= {d} < {upper_bound}"
+                for d, lower_bound, upper_bound in zip(dims, lower_bounds,
+                                                       upper_bounds))
+        set_str = f"{{ [{dim_str}] : {conditions} }}"
 
-    return a_dim_string, a_cond, b_dim_string, b_cond
+    return nisl.make_set(set_str), dim_str, conditions 
+
+
+@pytest.mark.parametrize("ndims", [2, 3, 4, 5])
+@pytest.mark.parametrize("has_params", [True, False])
+def test_set_equality(ndims, has_params):
+    if has_params:
+        a_param = "n"
+    else:
+        a_param = None
+
+    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
+
+    from itertools import permutations
+    for perm in list(permutations(a_dims.split(","))):
+        perm_dims = ",".join(p for p in perm)
+        set_str = f"{{ [{perm_dims}] : {a_cond} }}"
+        if has_params:
+            set_str = f"[{a_param}] ->" + set_str
+        perm_set = nisl.make_set(set_str)
+
+        assert a == perm_set
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_set_union(ndims, has_params) -> None:
-    a_dims, a_cond, b_dims, b_cond = _generate_dims_and_random_conditions(
-        ndims, has_params)
+def test_set_union(ndims, has_params):
 
     if has_params:
-        a = nisl.make_set(f"[n] -> {{ [{a_dims}] : 0 <= {a_dims} < n }}")
-        b = nisl.make_set(f"[m] -> {{ [{b_dims}] : 0 <= {b_dims} < m }}")
-        result = nisl.make_set(
-            f"""
-            [n, m] -> {{ [{a_dims}, {b_dims}] : (0 <= {a_dims} < n) or (0 <= {b_dims} < m)}}
-            """
-        )
+        a_param = "n"
+        b_param = "m"
     else:
-        a = nisl.make_set(f"{{ [{a_dims}] : {a_cond} }}")
-        b = nisl.make_set(f"{{ [{b_dims}] : {b_cond} }}")
-        result = nisl.make_set(
-            f"""
-            {{ [{a_dims}, {b_dims}] : ({a_cond}) or ({b_cond})}}
-            """
-        )
+        a_param = None
+        b_param = None
+
+    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = _generate_random_named_set(ndims, "b", b_param)
+
+    set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) or ({b_cond})}}"
+    if has_params:
+        set_str = "[n, m] -> " + set_str 
+
+    result = nisl.make_set(set_str)
 
     union = a | b
-    assert union._name_to_dim == result._name_to_dim
-    assert union._obj == result._obj
+    assert union == result
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_set_intersection(ndims, has_params) -> None:
-    a_dims, a_cond, b_dims, b_cond = _generate_dims_and_random_conditions(
-        ndims, has_params)
+def test_set_intersection(ndims, has_params):
 
     if has_params:
-        a = nisl.make_set(f"[n] -> {{ [{a_dims}] : 0 <= {a_dims} < n }}")
-        b = nisl.make_set(f"[m] -> {{ [{b_dims}] : 0 <= {b_dims} < m }}")
-        result = nisl.make_set(
-            f"""
-            [n, m] -> {{ [{a_dims}, {b_dims}] : (0 <= {a_dims} < n) and (0 <= {b_dims} < m)}}
-            """
-        )
+        a_param = "n"
+        b_param = "m"
     else:
-        a = nisl.make_set(f"{{ [{a_dims}] : {a_cond} }}")
-        b = nisl.make_set(f"{{ [{b_dims}] : {b_cond} }}")
-        result = nisl.make_set(
-            f"""
-            {{ [{a_dims}, {b_dims}] : ({a_cond}) and ({b_cond})}}
-            """
-        )
+        a_param = None
+        b_param = None
+
+    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = _generate_random_named_set(ndims, "b", b_param)
+
+    set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) and ({b_cond})}}"
+    if has_params:
+        set_str = "[n, m] -> " + set_str 
+
+    result = nisl.make_set(set_str)
 
     intersection = a & b
-    assert intersection._name_to_dim == result._name_to_dim
-    assert intersection._obj == result._obj
+    assert intersection == result
 
 
 if __name__ == "__main__":

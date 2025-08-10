@@ -44,7 +44,7 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
-from typing import Self, TypeAlias, overload
+from typing import Generic, Self, TypeAlias, TypeVar, overload
 
 from constantdict import constantdict
 
@@ -62,69 +62,33 @@ DIM_TYPES = [dim_type.param, dim_type.set]
 
 # {{{ typing
 
+class ResultNotCached:
+    pass
+
 IslObject = isl.Set 
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
-@dataclass(frozen=True)
-class NamedIslObject:
-    _obj: IslObject
-    _name_to_dim: NameToDim
+IslTypeT = TypeVar("IslTypeT", bound=IslObject)
 
-    @property
-    def space(self):
-        return self._obj.space
+# }}}
+
+
+@dataclass(frozen=True)
+class NamedIslObject(Generic[IslTypeT]):
+    _obj: IslObject 
+    _name_to_dim: NameToDim
+    # TODO: add cache
 
     @property
     def dim_names(self):
         return list(self._name_to_dim.keys())
 
-    def get_dim_from_name(self, dim_name):
-        if dim_name in self._name_to_dim:
-            return self._name_to_dim[dim_name]
-        else:
-            raise ValueError(f"{dim_name} is not a dimension")
+    def add_dim(self, name: str) -> Self:
+        ndims = self._obj.dim(dim_type.set)
+        obj = self._obj.insert_dims(dim_type.set, ndims, 1)
+        name_to_dim = dict(self._name_to_dim) | {name : (dim_type.set, ndims)}
 
-    # TODO: write test
-    def insert_dims(self, names_to_dims: NameToDim) -> Self:
-        new_obj = self._obj.copy()
-        new_name_to_dim = dict(self._name_to_dim)
-
-        for name, (dim_type, pos) in sorted(
-                names_to_dims.items(), key=lambda k: k[1][1]):
-            old_pos = new_obj.dim(dim_type)
-            new_obj = new_obj.insert_dims(dim_type, pos, 1)
-            new_name_to_dim = _update_name_to_dim(new_name_to_dim, dim_type,
-                                                  name, pos, old_pos)
-
-        return type(self)(new_obj, new_name_to_dim)
-
-    # {{{ set operations
-
-    # TODO: write test
-    def complement(self) -> Self:
-        return type(self)(self._obj.complement(), self._name_to_dim)
-
-    def __and__(self, other) -> Self:
-        return _align_and_apply_op(self, other, operator.and_)
-
-    # TODO: write test
-    def __eq__(self, other) -> bool:
-        return (self._name_to_dim == other._name_to_dim) and \
-               (self._obj == other._obj)
-
-    def __or__(self, other) -> Self:
-        return _align_and_apply_op(self, other, operator.or_)
-
-    # TODO: write test
-    def __sub__(self, other) -> Self:
-        return _align_and_apply_op(self, other, operator.sub)
-
-    def __str__(self) -> str:
-        return str(_restore_names(self._obj, self._name_to_dim))
-
-    # }}}
-
-# }}}
+        return type(self)(obj, name_to_dim)
 
 
 # {{{ utils
@@ -233,7 +197,7 @@ def _update_isl_object(isl_obj: IslObject,
     new_isl_obj = new_isl_obj.move_dims(
         dim_type, new_pos, temp_dim_type, temp_pos, 1)
 
-    return isl_obj
+    return new_isl_obj 
 
 
 def _align_space(obj: NamedIslObject,
@@ -254,15 +218,9 @@ def _align_space(obj: NamedIslObject,
             new_isl_obj = _update_isl_object(
                 new_isl_obj, dim_type, pos, old_pos)
         else:
-            # NOTE: this is a "shortcut" to appending a dimension to the end of
-            # the current dim_type, then moving it to the correct position.
-            # hence, the "old position" is the number of dimensions in the
-            # current dim_type *before* inserting the new dimension
             old_pos = new_isl_obj.dim(dim_type)
             new_isl_obj = new_isl_obj.insert_dims(dim_type, pos, 1)
 
-            # for some reason params are not automatically named when inserted
-            # like isl.dim_type.set dims are
             if dim_type == isl.dim_type.param:
                 new_isl_obj = new_isl_obj.set_dim_name(dim_type, pos, name)
 
@@ -288,11 +246,11 @@ def _align_two(obj1: NamedIslObject,
     return obj1, obj2
 
 
-NamedOpResult: TypeAlias = NamedIslObject | bool
 def _align_and_apply_op(
         obj1: NamedIslObject,
         obj2: NamedIslObject,
-        op: Callable[[IslObject, IslObject], IslObject]) -> NamedOpResult:
+        op: Callable[[IslObject, IslObject], IslObject]) -> NamedIslObject:
+
     obj1, obj2 = _align_two(obj1, obj2)
 
     result = op(obj1._obj, obj2._obj)
@@ -303,23 +261,47 @@ def _align_and_apply_op(
 
 
 @dataclass(frozen=True)
-class Set(NamedIslObject):
+class NamedSet(NamedIslObject):
     _obj: isl.Set
+
+    # TODO: write test
+    def complement(self) -> Self:
+        return type(self)(self._obj.complement(), self._name_to_dim)
+
+    def __and__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.and_)
+
+    # FIXME: does not handle sets with permuted dimensions
+    def __eq__(self, other) -> bool:
+        if set(self._name_to_dim) == set(other._name_to_dim):
+            aligned_self, aligned_other = _align_two(self, other)
+            return aligned_self._obj.plain_is_equal(aligned_other._obj)
+        return False 
+
+    def __or__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.or_)
+
+    # TODO: write test
+    def __sub__(self, other) -> Self:
+        return _align_and_apply_op(self, other, operator.sub)
+
+    def __str__(self) -> str:
+        return str(_restore_names(self._obj, self._name_to_dim))
 
 
 @overload
-def make_set(src: str, ctx: isl.Context | None = None) -> Set:
+def make_set(src: str, ctx: isl.Context | None = None) -> NamedSet:
     ...
 
 
 @overload
-def make_set(src: isl.Set) -> Set:
+def make_set(src: isl.Set) -> NamedSet:
     ...
 
 
 def make_set(src: str | isl.Set,
-                   ctx: isl.Context | None = None) -> Set:
+                   ctx: isl.Context | None = None) -> NamedSet:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
 
     obj, name_to_dim = _strip_names(obj)
-    return Set(obj, name_to_dim)
+    return NamedSet(obj, name_to_dim)
