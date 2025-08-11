@@ -151,55 +151,6 @@ def _find_joint_name_to_dim(
     return name_to_dim
 
 
-def _update_name_to_dim(name_to_dim: NameToDim, 
-                        updated_dim_type: isl.dim_type,
-                        updated_name: str, 
-                        new_pos: int, 
-                        old_pos: int) -> NameToDim:
-    """
-    Update `name_to_dim` based on movement of `updated_name` from `old_pos` to
-    `new_pos`.
-
-    The behavior of `_update_isl_object` requires us to either increment or
-    decrement other dimension positions. See `_update_isl_object` for an
-    explanation of why this is necessary.
-    """
-    new_name_to_dim = dict(name_to_dim)
-    for name, (dim_type, pos) in sorted(name_to_dim.items(), key=lambda k: k[1][1]):
-        if dim_type != updated_dim_type:
-            continue
-
-        if (new_pos > old_pos) and (pos > old_pos):
-            new_name_to_dim[name] = (dim_type, pos - 1)
-        elif (new_pos < old_pos) and (pos < old_pos):
-            new_name_to_dim[name] = (dim_type, pos + 1)
-
-    new_name_to_dim[updated_name] = (updated_dim_type, new_pos)
-
-    return new_name_to_dim
-
-
-def _update_isl_object(isl_obj: IslObject,
-                       dim_type: isl.dim_type,
-                       new_pos: int, old_pos: int) -> IslObject:
-    """
-    Shuffle a dimension to-from different dim types to it's desired position.
-    ISL does not allow dimensions to be moved within the same dim type.
-    """
-    temp_dim_type = isl.dim_type.param
-    if temp_dim_type == dim_type:
-        temp_dim_type = isl.dim_type.set
-
-    temp_pos = isl_obj.dim(temp_dim_type)
-
-    new_isl_obj = isl_obj.move_dims(
-        temp_dim_type, temp_pos, dim_type, old_pos, 1)
-    new_isl_obj = new_isl_obj.move_dims(
-        dim_type, new_pos, temp_dim_type, temp_pos, 1)
-
-    return new_isl_obj 
-
-
 def _align_space(obj: NamedIslObject,
                  ordering: NameToDim) -> NamedIslObject:
     """
@@ -208,15 +159,23 @@ def _align_space(obj: NamedIslObject,
     according to `ordering`.
     """
     new_isl_obj = obj._obj.copy()
-    temp_name_to_dim = dict(obj._name_to_dim)
+    new_name_to_dim = dict(obj._name_to_dim)
     for name, (dim_type, pos) in sorted(ordering.items(), key=lambda k: k[1][1]):
         if name in obj._name_to_dim:
-            _, old_pos = temp_name_to_dim[name]
+            _, old_pos = new_name_to_dim[name]
             if old_pos == pos: 
                     continue
 
-            new_isl_obj = _update_isl_object(
-                new_isl_obj, dim_type, pos, old_pos)
+            temp_dim_type = isl.dim_type.param
+            if temp_dim_type == dim_type:
+                temp_dim_type = isl.dim_type.set
+
+            temp_pos = new_isl_obj.dim(temp_dim_type)
+
+            new_isl_obj = new_isl_obj.move_dims(
+                temp_dim_type, temp_pos, dim_type, old_pos, 1)
+            new_isl_obj = new_isl_obj.move_dims(
+                dim_type, pos, temp_dim_type, temp_pos, 1)
         else:
             old_pos = new_isl_obj.dim(dim_type)
             new_isl_obj = new_isl_obj.insert_dims(dim_type, pos, 1)
@@ -224,8 +183,19 @@ def _align_space(obj: NamedIslObject,
             if dim_type == isl.dim_type.param:
                 new_isl_obj = new_isl_obj.set_dim_name(dim_type, pos, name)
 
-        temp_name_to_dim = _update_name_to_dim(
-            temp_name_to_dim, dim_type, name, pos, old_pos)
+        temp_name_to_dim = new_name_to_dim.copy()
+        for cur_name, (cur_dt, cur_pos) in sorted(new_name_to_dim.items(),
+                                                  key=lambda k: k[1][1]):
+            if cur_dt != dim_type:
+                continue
+
+            if (pos > old_pos) and (cur_pos > old_pos):
+                temp_name_to_dim[cur_name] = (cur_dt, cur_pos - 1)
+            elif (pos < old_pos) and (cur_pos < old_pos):
+                temp_name_to_dim[cur_name] = (cur_dt, cur_pos + 1)
+            
+        new_name_to_dim = temp_name_to_dim
+        new_name_to_dim[name] = (dim_type, pos)
 
     return type(obj)(new_isl_obj, ordering)
 
@@ -268,10 +238,38 @@ class NamedSet(NamedIslObject):
     def complement(self) -> Self:
         return type(self)(self._obj.complement(), self._name_to_dim)
 
+    # TODO: write test
+    def project_out(self, names_to_project_out: str | Sequence[str]) -> Self:
+        new_name_to_dim = dict(self._name_to_dim)
+        new_isl_obj = self._obj
+        for proj_name in names_to_project_out:
+            dt, pos = new_name_to_dim[proj_name]
+            new_name_to_dim.pop(proj_name)
+
+            temp_name_to_dim = new_name_to_dim.copy()
+            for name, (cur_dt, cur_pos) in sorted(
+                    new_name_to_dim.items(), key=lambda k: k[1][1]):
+                if cur_pos > pos:
+                    temp_name_to_dim[name] = (cur_dt, cur_pos - 1)
+
+            new_name_to_dim = temp_name_to_dim.copy()
+            
+            new_isl_obj.project_out(dt, pos, 1)
+
+        return type(self)(new_isl_obj, new_name_to_dim)
+
+    # TODO: write test
+    def eliminate(self, names: str | Sequence[str]) -> Self:
+        new_obj = self._obj
+        for name in names:
+            dt, pos = self._name_to_dim[name]
+            new_obj = new_obj.eliminate(dt, pos, 1)
+
+        return type(self)(new_obj, self._name_to_dim)
+
     def __and__(self, other) -> Self:
         return _align_and_apply_op(self, other, operator.and_)
 
-    # FIXME: does not handle sets with permuted dimensions
     def __eq__(self, other) -> bool:
         if set(self._name_to_dim) == set(other._name_to_dim):
             aligned_self, aligned_other = _align_two(self, other)

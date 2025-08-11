@@ -30,6 +30,8 @@ import pytest
 import namedisl as nisl
 from random import randint
 
+from typing import Tuple
+
 
 def _generate_random_named_set(
         ndims: int, 
