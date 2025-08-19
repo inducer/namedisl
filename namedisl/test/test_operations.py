@@ -1,4 +1,5 @@
 from __future__ import annotations
+from operator import index
 
 
 __copyright__ = """
@@ -46,7 +47,8 @@ def _generate_random_named_set(
         set_str = f"[{param}] -> {{ [{dim_str}] : {conditions} }}"
     else:
         upper_bounds = [randint(1, 100) for _ in range(ndims)]
-        lower_bounds = [randint(0, upper_bound - 1) for upper_bound in upper_bounds]
+        lower_bounds = [
+            randint(0, upper_bound - 1) for upper_bound in upper_bounds]
 
         conditions = " and ".join(
                 f"{lower_bound} <= {d} < {upper_bound}"
@@ -124,6 +126,33 @@ def test_set_intersection(ndims, has_params):
 
     intersection = a & b
     assert intersection == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_eliminate(ndims):
+    a, a_dims, _ = _generate_random_named_set(ndims, "a", None)
+
+    for name in a_dims.split(","):
+        a = a.eliminate(name) 
+
+    assert a == nisl.make_set(f"{{[{a_dims}]}}")
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_project_out(ndims):
+    a, a_dims, a_conds = _generate_random_named_set(ndims, "a", None)
+
+    # keep at least one name around so ISL doesn't complain
+    from random import randint 
+    a_dims = a_dims.split(",")
+    index_of_name_to_keep = randint(0, len(a_dims)-1) 
+    kept_name = a_dims[index_of_name_to_keep]
+    kept_cond = a_conds.split("and")[index_of_name_to_keep]
+
+    dims_to_remove = [dim for dim in a_dims if dim != kept_name]
+    a = a.project_out(dims_to_remove)
+
+    assert a == nisl.make_set(f"{{ [{kept_name}] : {kept_cond} }}")
 
 
 if __name__ == "__main__":

@@ -240,6 +240,10 @@ class NamedSet(NamedIslObject):
 
     # TODO: write test
     def project_out(self, names_to_project_out: str | Sequence[str]) -> Self:
+
+        if isinstance(names_to_project_out, str):
+            names_to_project_out = [names_to_project_out]
+
         new_name_to_dim = dict(self._name_to_dim)
         new_isl_obj = self._obj
         for proj_name in names_to_project_out:
@@ -254,12 +258,16 @@ class NamedSet(NamedIslObject):
 
             new_name_to_dim = temp_name_to_dim.copy()
             
-            new_isl_obj.project_out(dt, pos, 1)
+            new_isl_obj = new_isl_obj.project_out(dt, pos, 1)
 
         return type(self)(new_isl_obj, new_name_to_dim)
 
     # TODO: write test
     def eliminate(self, names: str | Sequence[str]) -> Self:
+
+        if isinstance(names, str):
+            names = [names]
+
         new_obj = self._obj
         for name in names:
             dt, pos = self._name_to_dim[name]
