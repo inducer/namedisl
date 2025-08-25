@@ -5,10 +5,6 @@
 .. autoclass:: Map
 
 .. autofunction:: make_set
-.. autofunction:: make_map
-
-.. autofunction:: align_spaces
-.. autofunction:: align_two
 """
 
 
@@ -117,19 +113,17 @@ def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
     return obj
 
 
-def _find_joint_name_to_dim(
-        obj: NamedIslObject, 
-        template: NamedIslObject) -> NameToDim:
+def _find_joint_name_to_dim(obj: NameToDim, template: NameToDim) -> NameToDim:
     """
     Uses `template` to determine a name-to-dimension mapping used for aligning
     the spaces between `obj` and `template`.
     """
-    name_to_dim = template._name_to_dim
+    name_to_dim = dict(template)
 
-    shared_names = set(name_to_dim.keys()) & set(obj._name_to_dim.keys())
+    shared_names = set(name_to_dim.keys()) & set(obj.keys())
     for name in sorted(shared_names):
-        dim_type_obj, _ = obj._name_to_dim[name] 
-        dim_type_template, _ = template._name_to_dim[name]
+        dim_type_obj, _ = obj[name] 
+        dim_type_template, _ = template[name]
         if dim_type_obj != dim_type_template:
             raise ValueError(
                 f"{name} belongs to a different dim_type in `obj` than in "
@@ -137,12 +131,12 @@ def _find_joint_name_to_dim(
             )
 
     dim_type_to_idx = dict.fromkeys(DIM_TYPES, -1) 
-    for dim_type, pos in template._name_to_dim.values():
+    for dim_type, pos in template.values():
         dim_type_to_idx[dim_type] = max(dim_type_to_idx[dim_type], pos + 1)
      
-    unique_names = set(obj._name_to_dim.keys()) - shared_names
+    unique_names = set(obj.keys()) - shared_names
     for name in sorted(unique_names):
-        dim_type, _ = obj._name_to_dim[name]
+        dim_type, _ = obj[name]
         pos = dim_type_to_idx[dim_type]
         name_to_dim = constantdict(dict(name_to_dim) | {name: (dim_type, pos)})
 
@@ -151,8 +145,7 @@ def _find_joint_name_to_dim(
     return name_to_dim
 
 
-def _align_space(obj: NamedIslObject,
-                 ordering: NameToDim) -> NamedIslObject:
+def _align_space(obj: NamedIslObject, ordering: NameToDim) -> NamedIslObject:
     """
     Aligns the space and name-to-dimension mapping of `obj` to match what is
     specified by `ordering`. Returns a new object whose dims are aligned
@@ -208,7 +201,7 @@ def _align_two(obj1: NamedIslObject,
     aligned to `obj1`, then `obj1` will be aligned to the result of the first
     alignment.
     """
-    ordering = _find_joint_name_to_dim(obj2, obj1)
+    ordering = _find_joint_name_to_dim(obj2._name_to_dim, obj1._name_to_dim)
 
     obj2 = _align_space(obj2, ordering)
     obj1 = _align_space(obj1, ordering)
@@ -231,14 +224,12 @@ def _align_and_apply_op(
 
 
 @dataclass(frozen=True)
-class NamedSet(NamedIslObject):
+class Set(NamedIslObject):
     _obj: isl.Set
 
-    # TODO: write test
     def complement(self) -> Self:
         return type(self)(self._obj.complement(), self._name_to_dim)
 
-    # TODO: write test
     def project_out(self, names_to_project_out: str | Sequence[str]) -> Self:
 
         if isinstance(names_to_project_out, str):
@@ -262,7 +253,6 @@ class NamedSet(NamedIslObject):
 
         return type(self)(new_isl_obj, new_name_to_dim)
 
-    # TODO: write test
     def eliminate(self, names: str | Sequence[str]) -> Self:
 
         if isinstance(names, str):
@@ -287,7 +277,6 @@ class NamedSet(NamedIslObject):
     def __or__(self, other) -> Self:
         return _align_and_apply_op(self, other, operator.or_)
 
-    # TODO: write test
     def __sub__(self, other) -> Self:
         return _align_and_apply_op(self, other, operator.sub)
 
@@ -296,18 +285,18 @@ class NamedSet(NamedIslObject):
 
 
 @overload
-def make_set(src: str, ctx: isl.Context | None = None) -> NamedSet:
+def make_set(src: str, ctx: isl.Context | None = None) -> Set:
     ...
 
 
 @overload
-def make_set(src: isl.Set) -> NamedSet:
+def make_set(src: isl.Set) -> Set:
     ...
 
 
 def make_set(src: str | isl.Set,
-                   ctx: isl.Context | None = None) -> NamedSet:
+                   ctx: isl.Context | None = None) -> Set:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
 
     obj, name_to_dim = _strip_names(obj)
-    return NamedSet(obj, name_to_dim)
+    return Set(obj, name_to_dim)

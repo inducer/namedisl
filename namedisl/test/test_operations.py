@@ -1,5 +1,4 @@
 from __future__ import annotations
-from operator import index
 
 
 __copyright__ = """
@@ -100,8 +99,7 @@ def test_set_union(ndims, has_params):
 
     result = nisl.make_set(set_str)
 
-    union = a | b
-    assert union == result
+    assert (a | b) == result
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -124,8 +122,7 @@ def test_set_intersection(ndims, has_params):
 
     result = nisl.make_set(set_str)
 
-    intersection = a & b
-    assert intersection == result
+    assert (a & b) == result
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
