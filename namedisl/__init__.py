@@ -1,10 +1,9 @@
 """
-.. autoclass:: BasicSet
 .. autoclass:: Set
-.. autoclass:: BasicMap
 .. autoclass:: Map
 
 .. autofunction:: make_set
+.. autofunction:: make_map
 """
 
 
@@ -53,7 +52,8 @@ _match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
 assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
-DIM_TYPES = [dim_type.param, dim_type.set]
+ALL_DIM_TYPES = [dim_type.param, dim_type.set, dim_type.in_]
+SET_LIKE_DIM_TYPES = [dim_type.param, dim_type.set]
 
 
 # {{{ typing
@@ -61,7 +61,7 @@ DIM_TYPES = [dim_type.param, dim_type.set]
 class ResultNotCached:
     pass
 
-IslObject = isl.Set 
+IslObject = isl.Set | isl.Map
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
 IslTypeT = TypeVar("IslTypeT", bound=IslObject)
@@ -71,7 +71,7 @@ IslTypeT = TypeVar("IslTypeT", bound=IslObject)
 
 @dataclass(frozen=True)
 class NamedIslObject(Generic[IslTypeT]):
-    _obj: IslObject 
+    _obj: IslObject
     _name_to_dim: NameToDim
     # TODO: add cache
 
@@ -91,7 +91,7 @@ class NamedIslObject(Generic[IslTypeT]):
 
 def _strip_names(obj: IslObject) -> tuple[IslObject, NameToDim]:
     name_to_dim = {}
-    for tp in isl._CHECK_DIM_TYPES:
+    for tp in ALL_DIM_TYPES:
         for i in range(obj.dim(tp)):
             name = obj.get_dim_name(tp, i)
             if name is None:
@@ -100,13 +100,13 @@ def _strip_names(obj: IslObject) -> tuple[IslObject, NameToDim]:
                 raise ValueError(f"non-unique dim name: {name}")
             name_to_dim[name] = (tp, i)
 
-            # FIXME: Enable, to avoid misunderstandings
-            # obj = obj.set_dim_id(tp, i, None)
-
     return obj, constantdict(name_to_dim)
 
 
-def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
+def _restore_names(named_obj: NamedIslObject) -> IslObject:
+    obj = named_obj._obj
+    name_to_dim = named_obj._name_to_dim
+
     for name, (dt, i) in name_to_dim.items():
         obj = obj.set_dim_name(dt, i, name)
 
@@ -130,7 +130,7 @@ def _find_joint_name_to_dim(obj: NameToDim, template: NameToDim) -> NameToDim:
                 "`template`"
             )
 
-    dim_type_to_idx = dict.fromkeys(DIM_TYPES, -1) 
+    dim_type_to_idx = dict.fromkeys(ALL_DIM_TYPES, -1) 
     for dim_type, pos in template.values():
         dim_type_to_idx[dim_type] = max(dim_type_to_idx[dim_type], pos + 1)
      
@@ -153,6 +153,7 @@ def _align_space(obj: NamedIslObject, ordering: NameToDim) -> NamedIslObject:
     """
     new_isl_obj = obj._obj.copy()
     new_name_to_dim = dict(obj._name_to_dim)
+
     for name, (dim_type, pos) in sorted(ordering.items(), key=lambda k: k[1][1]):
         if name in obj._name_to_dim:
             _, old_pos = new_name_to_dim[name]
@@ -222,11 +223,10 @@ def _align_and_apply_op(
 
 # }}}
 
+# {{{ Set-like objects
 
 @dataclass(frozen=True)
-class Set(NamedIslObject):
-    _obj: isl.Set
-
+class _SetLike(NamedIslObject):
     def complement(self) -> Self:
         return type(self)(self._obj.complement(), self._name_to_dim)
 
@@ -248,7 +248,7 @@ class Set(NamedIslObject):
                     temp_name_to_dim[name] = (cur_dt, cur_pos - 1)
 
             new_name_to_dim = temp_name_to_dim.copy()
-            
+
             new_isl_obj = new_isl_obj.project_out(dt, pos, 1)
 
         return type(self)(new_isl_obj, new_name_to_dim)
@@ -261,6 +261,7 @@ class Set(NamedIslObject):
         new_obj = self._obj
         for name in names:
             dt, pos = self._name_to_dim[name]
+
             new_obj = new_obj.eliminate(dt, pos, 1)
 
         return type(self)(new_obj, self._name_to_dim)
@@ -269,10 +270,8 @@ class Set(NamedIslObject):
         return _align_and_apply_op(self, other, operator.and_)
 
     def __eq__(self, other) -> bool:
-        if set(self._name_to_dim) == set(other._name_to_dim):
-            aligned_self, aligned_other = _align_two(self, other)
-            return aligned_self._obj.plain_is_equal(aligned_other._obj)
-        return False 
+        aligned_self, aligned_other = _align_two(self, other)
+        return aligned_self._obj.plain_is_equal(aligned_other._obj)
 
     def __or__(self, other) -> Self:
         return _align_and_apply_op(self, other, operator.or_)
@@ -281,7 +280,12 @@ class Set(NamedIslObject):
         return _align_and_apply_op(self, other, operator.sub)
 
     def __str__(self) -> str:
-        return str(_restore_names(self._obj, self._name_to_dim))
+        return str(_restore_names(self))
+
+
+@dataclass(frozen=True, eq=False)
+class Set(_SetLike):
+    _obj: isl.Set
 
 
 @overload
@@ -294,9 +298,33 @@ def make_set(src: isl.Set) -> Set:
     ...
 
 
-def make_set(src: str | isl.Set,
-                   ctx: isl.Context | None = None) -> Set:
+def make_set(src: str | isl.Set, ctx: isl.Context | None = None) -> Set:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
 
     obj, name_to_dim = _strip_names(obj)
     return Set(obj, name_to_dim)
+
+
+@dataclass(frozen=True, eq=False)
+class Map(_SetLike):
+    _obj: isl.Map
+
+
+@overload
+def make_map(src: str, ctx: isl.Context | None = None) -> Map:
+    ...
+
+
+@overload
+def make_map(src: isl.Map) -> Map:
+    ...
+
+
+def make_map(src: str | isl.Map,
+             ctx: isl.Context | None = None) -> Map:
+    obj = isl.Map(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return Map(obj, name_to_dim)
+
+# }}}

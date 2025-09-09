@@ -27,38 +27,30 @@ THE SOFTWARE.
 
 import pytest
 
+import islpy as isl
 import namedisl as nisl
-from random import randint
 
-from typing import Tuple
-
-
-def _generate_random_named_set(
-        ndims: int, 
-        dim_prefix: str,
-        param: str | None
-        ) -> Tuple[nisl.NamedSet, str, str]:
-    dims = [f"{dim_prefix}_{i}" for i in range(ndims)]
-    dim_str = ",".join(d for d in dims)
-
-    if param is not None:
-        conditions = f"0 <= {dim_str} < {param}"
-        set_str = f"[{param}] -> {{ [{dim_str}] : {conditions} }}"
-    else:
-        upper_bounds = [randint(1, 100) for _ in range(ndims)]
-        lower_bounds = [
-            randint(0, upper_bound - 1) for upper_bound in upper_bounds]
-
-        conditions = " and ".join(
-                f"{lower_bound} <= {d} < {upper_bound}"
-                for d, lower_bound, upper_bound in zip(dims, lower_bounds,
-                                                       upper_bounds))
-        set_str = f"{{ [{dim_str}] : {conditions} }}"
-
-    return nisl.make_set(set_str), dim_str, conditions 
+from utils_for_tests import generate_random_named_set
 
 
-@pytest.mark.parametrize("ndims", [2, 3, 4, 5])
+def test_set_from_str() -> None:
+    s = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
+    
+    print("Original map:", s)
+    print("Internal representation:", s._obj)
+    print(s)
+
+
+def test_set_from_set() -> None:
+    s = isl.Set("[n] -> { [i, j] : 0 <= i, j < n }")
+    named_set = nisl.make_set(s)
+
+    print("Original map:", named_set)
+    print("Internal representation:", named_set._obj)
+    print(named_set)
+
+
+@pytest.mark.parametrize("ndims",      [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])
 def test_set_equality(ndims, has_params):
     if has_params:
@@ -66,7 +58,7 @@ def test_set_equality(ndims, has_params):
     else:
         a_param = None
 
-    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
 
     from itertools import permutations
     for perm in list(permutations(a_dims.split(","))):
@@ -79,7 +71,7 @@ def test_set_equality(ndims, has_params):
         assert a == perm_set
 
 
-@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims",      [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
 def test_set_union(ndims, has_params):
 
@@ -90,8 +82,8 @@ def test_set_union(ndims, has_params):
         a_param = None
         b_param = None
 
-    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
-    b, b_dims, b_cond = _generate_random_named_set(ndims, "b", b_param)
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = generate_random_named_set(ndims, "b", b_param)
 
     set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) or ({b_cond})}}"
     if has_params:
@@ -102,7 +94,7 @@ def test_set_union(ndims, has_params):
     assert (a | b) == result
 
 
-@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims",      [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
 def test_set_intersection(ndims, has_params):
 
@@ -113,8 +105,8 @@ def test_set_intersection(ndims, has_params):
         a_param = None
         b_param = None
 
-    a, a_dims, a_cond = _generate_random_named_set(ndims, "a", a_param)
-    b, b_dims, b_cond = _generate_random_named_set(ndims, "b", b_param)
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = generate_random_named_set(ndims, "b", b_param)
 
     set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) and ({b_cond})}}"
     if has_params:
@@ -127,7 +119,7 @@ def test_set_intersection(ndims, has_params):
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 def test_eliminate(ndims):
-    a, a_dims, _ = _generate_random_named_set(ndims, "a", None)
+    a, a_dims, _ = generate_random_named_set(ndims, "a", None)
 
     for name in a_dims.split(","):
         a = a.eliminate(name) 
@@ -137,7 +129,7 @@ def test_eliminate(ndims):
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
 def test_project_out(ndims):
-    a, a_dims, a_conds = _generate_random_named_set(ndims, "a", None)
+    a, a_dims, a_conds = generate_random_named_set(ndims, "a", None)
 
     # keep at least one name around so ISL doesn't complain
     from random import randint 
