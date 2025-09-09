@@ -37,8 +37,7 @@ def test_map_from_str() -> None:
     m = nisl.make_map(
         "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
 
-    print("Original map:", m)
-    print("Internal representation:", m._obj)
+    print(m._obj)
     print(m)
 
 
@@ -47,8 +46,7 @@ def test_map_from_map() -> None:
         "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
     named_map = nisl.make_map(m)
 
-    print("Original map:", m)
-    print("Internal representation:", named_map._obj)
+    print(named_map._obj)
     print(named_map)
 
 

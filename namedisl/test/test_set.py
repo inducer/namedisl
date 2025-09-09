@@ -36,8 +36,7 @@ from utils_for_tests import generate_random_named_set
 def test_set_from_str() -> None:
     s = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
     
-    print("Original map:", s)
-    print("Internal representation:", s._obj)
+    print(s._obj)
     print(s)
 
 
@@ -45,8 +44,7 @@ def test_set_from_set() -> None:
     s = isl.Set("[n] -> { [i, j] : 0 <= i, j < n }")
     named_set = nisl.make_set(s)
 
-    print("Original map:", named_set)
-    print("Internal representation:", named_set._obj)
+    print(named_set._obj)
     print(named_set)
 
 
