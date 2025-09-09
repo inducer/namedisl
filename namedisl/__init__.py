@@ -53,7 +53,6 @@ assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
 ALL_DIM_TYPES = [dim_type.param, dim_type.set, dim_type.in_]
-SET_LIKE_DIM_TYPES = [dim_type.param, dim_type.set]
 
 
 # {{{ typing
