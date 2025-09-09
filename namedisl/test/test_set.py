@@ -118,30 +118,19 @@ def test_set_intersection(ndims, has_params):
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
-def test_eliminate(ndims):
+def test_set_eliminate(ndims):
     a, a_dims, _ = generate_random_named_set(ndims, "a", None)
-
-    for name in a_dims.split(","):
-        a = a.eliminate(name) 
+    a = a.eliminate(a_dims.split(",")) 
 
     assert a == nisl.make_set(f"{{[{a_dims}]}}")
 
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
-def test_project_out(ndims):
-    a, a_dims, a_conds = generate_random_named_set(ndims, "a", None)
+def test_set_project_out(ndims):
+    a, a_dims, _ = generate_random_named_set(ndims, "a", None)
+    a = a.project_out(a_dims.split(","))
 
-    # keep at least one name around so ISL doesn't complain
-    from random import randint 
-    a_dims = a_dims.split(",")
-    index_of_name_to_keep = randint(0, len(a_dims)-1) 
-    kept_name = a_dims[index_of_name_to_keep]
-    kept_cond = a_conds.split("and")[index_of_name_to_keep]
-
-    dims_to_remove = [dim for dim in a_dims if dim != kept_name]
-    a = a.project_out(dims_to_remove)
-
-    assert a == nisl.make_set(f"{{ [{kept_name}] : {kept_cond} }}")
+    assert a == nisl.make_set("{[]}")
 
 
 if __name__ == "__main__":

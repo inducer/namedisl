@@ -172,3 +172,37 @@ def test_map_intersection(ndims_domain, ndims_range, has_params):
     result_map = nisl.make_map(result_str)
 
     assert (x & y) == result_map
+
+
+@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+def test_map_eliminate(ndims_domain, ndims_range):
+    x, x_domain_info, x_range_info = generate_random_named_map(
+        ndims_domain, "x_in", None,
+        ndims_range, "x_out", None
+    )
+
+    _, x_in_dims, _ = x_domain_info
+    _, x_out_dims, _ = x_range_info 
+
+    dims_to_remove = (x_in_dims + "," + x_out_dims).split(",")
+    x = x.eliminate(dims_to_remove)
+
+    assert x == nisl.make_map(f"{{[{x_in_dims}] -> [{x_out_dims}]}}")
+    
+
+@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+def test_map_project_out(ndims_domain, ndims_range):
+    x, x_domain_info, x_range_info = generate_random_named_map(
+        ndims_domain, "x_in", None,
+        ndims_range, "x_out", None
+    )
+
+    _, x_in_dims, _ = x_domain_info
+    _, x_out_dims, _ = x_range_info 
+
+    dims_to_remove = (x_in_dims + "," + x_out_dims).split(",")
+    x = x.project_out(dims_to_remove)
+
+    assert x == nisl.make_map("{[] -> []}")
