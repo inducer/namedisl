@@ -30,7 +30,7 @@ import pytest
 import islpy as isl
 import namedisl as nisl
 
-from utils_for_tests import generate_random_named_map 
+from utils_for_tests import generate_random_named_map
 
 
 def test_map_from_str() -> None:
@@ -62,15 +62,15 @@ def test_map_equality(ndims_domain, ndims_range, has_params):
         r_param = None
 
     og_map, domain_info, range_info = generate_random_named_map(
-        ndims_domain, "d", d_param, 
+        ndims_domain, "d", d_param,
         ndims_range, "r", r_param)
 
     _, d_dims, d_cond = domain_info
     _, r_dims, r_cond = range_info
 
     from itertools import permutations
-    d_perms = list(permutations(d_dims.split(","))) 
-    r_perms = list(permutations(r_dims.split(","))) 
+    d_perms = list(permutations(d_dims.split(",")))
+    r_perms = list(permutations(r_dims.split(",")))
 
     for d_perm, r_perm in zip(d_perms, r_perms):
         d_perm_dims = ",".join(p for p in d_perm)
@@ -81,7 +81,7 @@ def test_map_equality(ndims_domain, ndims_range, has_params):
 
         if has_params:
             domain_str = f"[{d_param}] ->" + domain_str
-            range_str = f"[{r_param}] ->" + range_str 
+            range_str = f"[{r_param}] ->" + range_str
 
         perm_map = nisl.make_map(
             isl.Map.from_domain_and_range(
@@ -120,7 +120,7 @@ def test_map_union(ndims_domain, ndims_range, has_params):
     _, y_out_dims, y_out_cond = y_range_info
 
     result_dims = f"[{x_in_dims}, {y_in_dims}] -> [{x_out_dims}, {y_out_dims}]"
-    result_conds = f"({x_in_cond} and {x_out_cond}) or ({y_in_cond} and {y_out_cond})" 
+    result_conds = f"({x_in_cond} and {x_out_cond}) or ({y_in_cond} and {y_out_cond})"
 
     result_str = "{" + result_dims + " : " + result_conds + "}"
 
@@ -160,7 +160,7 @@ def test_map_intersection(ndims_domain, ndims_range, has_params):
     _, y_out_dims, y_out_cond = y_range_info
 
     result_dims = f"[{x_in_dims}, {y_in_dims}] -> [{x_out_dims}, {y_out_dims}]"
-    result_conds = f"({x_in_cond} and {x_out_cond}) and ({y_in_cond} and {y_out_cond})" 
+    result_conds = f"({x_in_cond} and {x_out_cond}) and ({y_in_cond} and {y_out_cond})"
 
     result_str = "{" + result_dims + " : " + result_conds + "}"
 
@@ -181,13 +181,13 @@ def test_map_eliminate(ndims_domain, ndims_range):
     )
 
     _, x_in_dims, _ = x_domain_info
-    _, x_out_dims, _ = x_range_info 
+    _, x_out_dims, _ = x_range_info
 
     dims_to_remove = (x_in_dims + "," + x_out_dims).split(",")
     x = x.eliminate(dims_to_remove)
 
     assert x == nisl.make_map(f"{{[{x_in_dims}] -> [{x_out_dims}]}}")
-    
+
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
@@ -198,7 +198,7 @@ def test_map_project_out(ndims_domain, ndims_range):
     )
 
     _, x_in_dims, _ = x_domain_info
-    _, x_out_dims, _ = x_range_info 
+    _, x_out_dims, _ = x_range_info
 
     dims_to_remove = (x_in_dims + "," + x_out_dims).split(",")
     x = x.project_out(dims_to_remove)
