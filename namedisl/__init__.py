@@ -53,20 +53,22 @@ _match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
 assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
-ALL_DIM_TYPES = [dim_type.param, dim_type.set, dim_type.in_]
-
-
-class ResultNotCached:
-    pass
+ALL_DIM_TYPES = [dim_type.param, dim_type.set, dim_type.in_, dim_type.div]
 
 
 IslSetLikeObject = isl.Set | isl.Map
-IslExpressionLikeObject = (
-        isl.PwAff | isl.PwMultiAff |
-        isl.Aff | isl.MultiAff |
-        isl.QPolynomial | isl.PwQPolynomial
+
+IslExpressionLikeObject = isl.Aff | isl.QPolynomial
+IslPwExpressionLikeObject = isl.PwAff | isl.PwQPolynomial
+IslMultiExpressionLikeObject = isl.MultiAff | isl.PwMultiAff
+
+IslAllExpressionLike = (
+    IslExpressionLikeObject |
+    IslPwExpressionLikeObject |
+    IslMultiExpressionLikeObject
 )
-IslObject = IslSetLikeObject | IslExpressionLikeObject
+
+IslObject = IslSetLikeObject | IslAllExpressionLike
 NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
 
 IslTypeT = TypeVar("IslTypeT", bound=IslObject)
@@ -78,9 +80,21 @@ class NamedIslObject(Generic[IslTypeT]):
     _name_to_dim: NameToDim
     # TODO: add cache
 
-    @property
-    def dim_names(self):
-        return list(self._name_to_dim.keys())
+    # FIXME: better name?
+    def dim_type_names(
+        self,
+        dim_type: dim_type
+    ) -> Sequence[str]:
+        return [
+            name
+            for name, (dt, _) in self._name_to_dim.items()
+            if dim_type == dt
+        ]
+
+    def dim(self, name: str) -> int:
+        dt, _ = self._name_to_dim[name]
+        return self._obj.dim(dt)
+
 
 
 NamedIslTypeT = TypeVar("NamedIslTypeT", bound=NamedIslObject[Any])
@@ -96,7 +110,7 @@ def _strip_names(obj: IslTypeT) -> tuple[IslTypeT, NameToDim]:
             # available method
             name = obj.get_space().get_dim_name(tp, i)
 
-            if name is None and not isinstance(obj, IslExpressionLikeObject):
+            if name is None and not isinstance(obj, IslAllExpressionLike):
                 raise ValueError("unnamed dimension found")
             if name in name_to_dim and name is not None:
                 raise ValueError(f"non-unique dim name: {name}")
@@ -258,16 +272,37 @@ def _align_and_apply_op(
 # }}}
 
 
-# {{{ Set-like objects
+# {{{ set-like objects
 
 @dataclass(frozen=True)
 class _SetLike(NamedIslObject):
     _obj: IslSetLikeObject
 
-    def add_dim(self, name: str) -> Self:
-        ndims = self._obj.dim(dim_type.set)
-        obj = self._obj.insert_dims(dim_type.set, ndims, 1)
-        name_to_dim = dict(self._name_to_dim) | {name : (dim_type.set, ndims)}
+    def add_dims(self, name_to_dim_type: Mapping[str, dim_type]) -> Self:
+        name_to_dim = dict(self._name_to_dim)
+        obj = self._obj
+
+        for name, dt in name_to_dim_type.items():
+            ndims = self._obj.dim(dt)
+
+            # NOTE: names in ISL are "None" when added, so give it a name
+            obj = self._obj.insert_dims(dt, ndims, 1)
+            obj = obj.set_dim_name(dt, ndims, name)
+
+            name_to_dim = name_to_dim | {name : (dt, ndims)}
+
+        return type(self)(obj, name_to_dim)
+
+    def rename_dims(self, old_name_to_new_name: Mapping[str, str]) -> Self:
+        name_to_dim = dict(self._name_to_dim)
+        obj = self._obj
+
+        for old_name, new_name in old_name_to_new_name.items():
+            dt, dim_pos = self._name_to_dim[old_name]
+            obj = self._obj.set_dim_name(dt, dim_pos, new_name)
+            name_to_dim = name_to_dim | {new_name : (dt, dim_pos)}
+
+            del name_to_dim[old_name]
 
         return type(self)(obj, name_to_dim)
 
@@ -294,7 +329,6 @@ class _SetLike(NamedIslObject):
         new_obj = self._obj
         for name in names:
             dt, pos = self._name_to_dim[name]
-
             new_obj = new_obj.eliminate(dt, pos, 1)
 
         return type(self)(new_obj, self._name_to_dim)
@@ -320,6 +354,17 @@ class _SetLike(NamedIslObject):
             new_isl_obj = new_isl_obj.project_out(dt, pos, 1)
 
         return type(self)(new_isl_obj, new_name_to_dim)
+
+    def project_out_except(self, names_to_keep: str | Sequence[str]) -> Self:
+        if isinstance(names_to_keep, str):
+            names_to_keep = [names_to_keep]
+
+        names_to_project_out = [
+            name for name in self._name_to_dim.keys()
+            if name not in names_to_keep
+        ]
+
+        return self.project_out(names_to_project_out)
 
     def __and__(self, other) -> Self:
         return _align_and_apply_op(self, other, operator.and_)
@@ -349,12 +394,20 @@ def make_set(src: str, ctx: isl.Context | None = None) -> Set:
 
 
 @overload
-def make_set(src: isl.Set) -> Set:
+def make_set(src: isl.Set | isl.BasicSet) -> Set:
     ...
 
 
-def make_set(src: str | isl.Set, ctx: isl.Context | None = None) -> Set:
-    obj = isl.Set(src, ctx) if isinstance(src, str) else src
+def make_set(
+        src: str | isl.Set | isl.BasicSet,
+        ctx: isl.Context | None = None
+    ) -> Set:
+    if isinstance(src, str):
+        obj = isl.Set(src, ctx)
+    elif isinstance(src, isl.BasicSet):
+        obj = isl.Set.from_basic_set(src)
+    else:
+        obj = src
 
     obj, name_to_dim = _strip_names(obj)
     return Set(obj, name_to_dim)
@@ -364,6 +417,15 @@ def make_set(src: str | isl.Set, ctx: isl.Context | None = None) -> Set:
 class Map(_SetLike):
     _obj: isl.Map
 
+    def domain(self) -> Set:
+        return make_set(self._obj.domain())
+
+    def range(self) -> Set:
+        return make_set(self._obj.range())
+
+    def reverse(self) -> Map:
+        return make_map(self._obj.reverse())
+
 
 @overload
 def make_map(src: str, ctx: isl.Context | None = None) -> Map:
@@ -371,13 +433,18 @@ def make_map(src: str, ctx: isl.Context | None = None) -> Map:
 
 
 @overload
-def make_map(src: isl.Map) -> Map:
+def make_map(src: isl.Map | isl.BasicMap) -> Map:
     ...
 
 
-def make_map(src: str | isl.Map,
+def make_map(src: str | isl.Map | isl.BasicMap,
              ctx: isl.Context | None = None) -> Map:
-    obj = isl.Map(src, ctx) if isinstance(src, str) else src
+    if isinstance(src, str):
+        obj = isl.Map(src, ctx)
+    elif isinstance(src, isl.BasicMap):
+        obj = isl.Map.from_basic_map(src)
+    else:
+        obj = src
 
     obj, name_to_dim = _strip_names(obj)
     return Map(obj, name_to_dim)
@@ -385,122 +452,31 @@ def make_map(src: str | isl.Map,
 # }}}
 
 
-# {{{ Expression-like objects
+# {{{ expression-like objects
 
 @dataclass(frozen=True)
 class _ExpressionLike(NamedIslObject):
-    """
-    No constructors are defined for `_ExpressionLike` objects because ISL does
-    not allow it in the first place. Insetad, `_ExpressionLike` objects can be
-    obtained through other (named) ISL objects or through special methods.
-    """
     _obj: IslExpressionLikeObject
 
+    def get_constant_val(self) -> isl.Val:
+        return self._obj.get_constant_val()
 
-@dataclass(frozen=True)
-class _MultiExpressionLike(_ExpressionLike):
-    _obj: isl.MultiAff | isl.PwMultiAff
-
-    def get_at(self, dim_name: str) -> PwAff | Aff:
-        _, dim_pos = self._name_to_dim[dim_name]
-        obj_at = self._obj.get_at(dim_pos)
-
-        if isinstance(obj_at, isl.PwAff):
-            return make_pw_aff(obj_at)
-        else:
-            return make_aff(obj_at)
-
-
-@dataclass(frozen=True)
-class _PwExpressionLike(_ExpressionLike):
-    _obj: isl.PwAff | isl.PwQPolynomial
-
-    def get_pieces(self) -> Sequence:
-        named_pieces = []
-        for (dom, expn) in self._obj.get_pieces():
-
-            named_dom = make_set(dom)
-            if isinstance(expn, isl.Aff):
-                named_expn = make_aff(expn)
-            else:
-                named_expn = make_qpolynomial(expn)
-
-            named_pieces.append((named_dom, named_expn))
-
-        return named_pieces
-
-
-@dataclass(frozen=True, eq=False)
-class PwMultiAff(_MultiExpressionLike):
-    _obj: isl.PwMultiAff
-
-
-@overload
-def make_pw_multi_aff(src: str, ctx: isl.Context | None = None) -> PwMultiAff:
-    ...
-
-
-@overload
-def make_pw_multi_aff(src: isl.PwMultiAff) -> PwMultiAff:
-    ...
-
-
-def make_pw_multi_aff(src: str | isl.PwMultiAff,
-                      ctx: isl.Context | None = None) -> PwMultiAff:
-    obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
-    obj, name_to_dim = _strip_names(obj)
-
-    return PwMultiAff(obj, name_to_dim)
-
-
-@dataclass(frozen=True, eq=False)
-class PwAff(_ExpressionLike):
-    _obj: isl.PwAff
-
-
-@overload
-def make_pw_aff(src: str, ctx: isl.Context | None = None) -> PwAff:
-    ...
-
-
-@overload
-def make_pw_aff(src: isl.PwAff) -> PwAff:
-    ...
-
-
-def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
-    obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return PwAff(obj, name_to_dim)
-
-
-@dataclass(frozen=True, eq=False)
-class MultiAff(_ExpressionLike):
-    _obj: isl.MultiAff
-
-
-@overload
-def make_multi_aff(src: str, ctx: isl.Context | None = None) -> MultiAff:
-    ...
-
-
-@overload
-def make_multi_aff(src: isl.MultiAff) -> MultiAff:
-    ...
-
-
-def make_multi_aff(src: str | isl.MultiAff,
-                   ctx: isl.Context | None = None) -> MultiAff:
-    obj = isl.MultiAff(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return MultiAff(obj, name_to_dim)
 
 
 @dataclass(frozen=True, eq=False)
 class Aff(_ExpressionLike):
     _obj: isl.Aff
+
+    def get_coefficient_val(self, name: str) -> isl.Val:
+        dt, pos = self._name_to_dim[name]
+        return self._obj.get_coefficient_val(dt, pos)
+
+    def get_denominator_val(self) -> isl.Val:
+        return self._obj.get_denominator_val()
+
+    def get_div(self, name) -> Aff:
+        _, pos = self._name_to_dim[name]
+        return make_aff(self._obj.get_div(pos))
 
 
 @overload
@@ -533,6 +509,115 @@ def make_qpolynomial(src: isl.QPolynomial) -> QPolynomial:
     obj, name_to_dim = _strip_names(src)
     return QPolynomial(obj, name_to_dim)
 
+# }}}
+
+
+# {{{ multi expressions
+
+@dataclass(frozen=True)
+class _MultiExpressionLike(NamedIslObject):
+    _obj: isl.MultiAff | isl.PwMultiAff
+
+    def get_at(self, dim_name: str) -> PwAff | Aff:
+        _, dim_pos = self._name_to_dim[dim_name]
+        obj_at = self._obj.get_at(dim_pos)
+
+        if isinstance(obj_at, isl.PwAff):
+            return make_pw_aff(obj_at)
+        else:
+            return make_aff(obj_at)
+
+
+@dataclass(frozen=True, eq=False)
+class MultiAff(_MultiExpressionLike):
+    _obj: isl.MultiAff
+
+
+@overload
+def make_multi_aff(src: str, ctx: isl.Context | None = None) -> MultiAff:
+    ...
+
+
+@overload
+def make_multi_aff(src: isl.MultiAff) -> MultiAff:
+    ...
+
+
+def make_multi_aff(src: str | isl.MultiAff,
+                   ctx: isl.Context | None = None) -> MultiAff:
+    obj = isl.MultiAff(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return MultiAff(obj, name_to_dim)
+
+
+@dataclass(frozen=True, eq=False)
+class PwMultiAff(_MultiExpressionLike):
+    _obj: isl.PwMultiAff
+
+
+@overload
+def make_pw_multi_aff(src: str, ctx: isl.Context | None = None) -> PwMultiAff:
+    ...
+
+
+@overload
+def make_pw_multi_aff(src: isl.PwMultiAff) -> PwMultiAff:
+    ...
+
+
+def make_pw_multi_aff(src: str | isl.PwMultiAff,
+                      ctx: isl.Context | None = None) -> PwMultiAff:
+    obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
+    obj, name_to_dim = _strip_names(obj)
+
+    return PwMultiAff(obj, name_to_dim)
+
+# }}}
+
+
+# {{{ piecewise expressions
+
+@dataclass(frozen=True)
+class _PwExpressionLike(NamedIslObject):
+    _obj: isl.PwAff | isl.PwQPolynomial
+
+    def get_pieces(self) -> Sequence:
+        named_pieces = []
+        for (dom, expn) in self._obj.get_pieces():
+
+            named_dom = make_set(dom)
+            if isinstance(expn, isl.Aff):
+                named_expn = make_aff(expn)
+            else:
+                named_expn = make_qpolynomial(expn)
+
+            named_pieces.append((named_dom, named_expn))
+
+        return named_pieces
+
+
+@dataclass(frozen=True, eq=False)
+class PwAff(_PwExpressionLike):
+    _obj: isl.PwAff
+
+
+@overload
+def make_pw_aff(src: str, ctx: isl.Context | None = None) -> PwAff:
+    ...
+
+
+@overload
+def make_pw_aff(src: isl.PwAff) -> PwAff:
+    ...
+
+
+def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
+    obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
+
+    obj, name_to_dim = _strip_names(obj)
+    return PwAff(obj, name_to_dim)
+
 
 @dataclass(frozen=True, eq=False)
 class PwQPolynomial(_PwExpressionLike):
@@ -556,5 +641,6 @@ def make_pw_qpolynomial(src: str | isl.PwQPolynomial,
 
     obj, name_to_dim = _strip_names(obj)
     return PwQPolynomial(obj, name_to_dim)
+
 
 # }}}

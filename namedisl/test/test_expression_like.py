@@ -72,7 +72,35 @@ def test_pw_multi_aff_get_at() -> None:
 
 # }}}
 
+
 # {{{ piece-wise expression objects
+
+def test_pw_aff_from_str() -> None:
+    pw_aff = nisl.make_pw_aff("{ [i] -> [2 * i] : 0 <= i < 10 }")
+    print(pw_aff._obj)
+    print(pw_aff)
+
+
+def test_pw_aff_from_pw_aff() -> None:
+    pw_aff = isl.PwAff("{ [i] -> [2 * i] : 0 <= i < 10 }")
+    named_pw_aff = nisl.make_pw_aff(pw_aff)
+
+    print(named_pw_aff._obj)
+    print(named_pw_aff)
+
+
+def test_pw_aff_get_pieces() -> None:
+    m = nisl.make_map("{ [i] -> [io, ii] : 0 <= ii < 32 and i = io * 32 + ii }")
+    pw_multi_aff = m.as_pw_multi_aff()
+    pw_aff = pw_multi_aff.get_at("i")
+
+    for (dom, expn) in pw_aff.get_pieces():  # type: ignore
+        print(f"Domain = {dom._obj}")
+        print(f"Named domain = {dom}")
+
+        print(f"Expression = {expn._obj}")
+        print(f"Named expression = {expn}")
+
 
 def test_pw_qpolynomial_from_str() -> None:
     pw_qpoly = nisl.make_pw_qpolynomial("{ [i] -> i^2 + 2*i + 3 }")
