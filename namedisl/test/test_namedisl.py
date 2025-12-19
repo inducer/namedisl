@@ -25,10 +25,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import islpy as isl
+
 import namedisl as nisl
 
 
-def test_basic_set() -> None:
-    bs = nisl.make_basic_set("[n] -> {[i]}: 0<=i<n}")
-    print(bs._obj)
-    print(bs)
+def test_set_from_str() -> None:
+    spec = "[n] -> { [i] : 0 <= i < n }"
+    s_isl = isl.Set(spec)
+    s = nisl.Set(spec)
+    print(s)
+
+    assert s._reconstruct_isl_object() == s_isl
+
+
+def test_set_from_set() -> None:
+    s_isl = isl.Set("[n] -> { [i] : 0 <= i < n }")
+    s = nisl.Set(s_isl)
+    print(s)
+
+    assert s._reconstruct_isl_object() == s_isl
+
+
+def test_map_from_str() -> None:
+    spec = "[n] -> { [i] -> [j] : 0 <= i < n and j = 2 * i }"
+    m = nisl.Map(spec)
+    m_isl = isl.Map(spec)
+    print(m)
+
+    assert m._reconstruct_isl_object() == m_isl
+
+
+def test_map_from_map() -> None:
+    m_isl = isl.Map("[n] -> { [i] -> [j] : 0 <= i < n and j = 2 * i }")
+    m = nisl.Map(m_isl)
+    print(m)
+
+    assert m._reconstruct_isl_object() == m_isl
