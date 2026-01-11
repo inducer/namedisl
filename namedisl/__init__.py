@@ -102,8 +102,14 @@ def _move_dims_to_set_dim(obj: IslObjectT, dt: isl.dim_type) -> IslObjectT:
 class NamedIslObject(Generic[IslObjectT], ABC):
     _obj: IslObjectT
     _name_to_dim: NameToDim
+
     _parameter_names: frozenset[str]
     _parameter_dim_start: int
+
+    # NOTE: defaulting these for all subclasses reduces the amount of
+    # specialization when aligning spaces of objects
+    _input_names: frozenset[str] = frozenset()
+    _input_dim_start: int = -1
 
     @abstractmethod
     def __init__(self, src: IslObjectT | str, ctx: isl.Context | None = None):
@@ -121,6 +127,42 @@ class NamedIslObject(Generic[IslObjectT], ABC):
     @override
     def __str__(self) -> str:
         return str(self._reconstruct_isl_object())
+
+
+# FIXME: enforcing alphabetical ordering within each contiguous chunk of
+# dimension types solves the problem
+def _find_joint_name_to_dim(
+        obj: NamedIslObject[IslObjectT],
+        other: NamedIslObject[IslObjectT]
+    ) -> tuple[NameToDim, tuple[frozenset[str], frozenset[str]]]:
+    """
+    Constructs a mapping from names to dimensions such that names within each
+    "type chunk" are sorted alphabetically. Specifically, the internal
+    :class:`isl.Set` representation of each :class:`NamedIslObject` will have
+    the form
+
+    [ (set dimensions), (parameter dimensions), (input_dimensions) ]
+
+    where the names in each dimension appear in alphabetical order.
+    """
+    obj_all_names = frozenset(obj._name_to_dim.keys())
+    obj_inp_names = obj._input_names
+    obj_param_names = obj._parameter_names
+    obj_set_names = (obj_all_names - obj_param_names) - obj_inp_names
+
+    other_all_names = frozenset(other._name_to_dim.keys())
+    other_inp_names = other._input_names
+    other_param_names = other._parameter_names
+    other_set_names = (other_all_names - other_param_names) - other_inp_names
+
+    all_inp_names = sorted(list(obj_inp_names | other_inp_names))
+    all_param_names = sorted(list(obj_param_names | other_param_names))
+    all_set_names = sorted(list(obj_set_names | other_set_names))
+    all_names = all_set_names + all_param_names + all_inp_names
+
+    name_to_dim = { name : dim for dim, name in enumerate(all_names) }
+
+    return name_to_dim, (frozenset(all_param_names), frozenset(all_inp_names))
 
 
 class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
@@ -165,9 +207,6 @@ class Set(_NamedIslSetLike):
 
 @final
 class Map(_NamedIslSetLike):
-    _input_names: frozenset[str]
-    _input_dim_start: int
-
     def __init__(self, src: isl.Map | str, ctx: isl.Context | None = None):
         obj = isl.Map(src, ctx) if isinstance(src, str) else src
 
