@@ -148,8 +148,6 @@ class NamedIslObject(Generic[IslObjectT], ABC):
         return str(self._reconstruct_isl_object())
 
 
-# FIXME: enforcing alphabetical ordering within each contiguous chunk of
-# dimension types solves the problem
 def _find_joint_name_to_dim(
         obj: NamedIslObject[IslObjectT],
         other: NamedIslObject[IslObjectT]
