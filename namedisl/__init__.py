@@ -31,11 +31,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+from dataclasses import dataclass
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from importlib import metadata
-from typing import Generic, TypeAlias, TypeVar, final
+from typing import Generic, TypeAlias, TypeVar, final, overload
 
 from constantdict import constantdict
 from typing_extensions import override
@@ -56,7 +57,7 @@ IslObjectT = TypeVar("IslObjectT", isl.Set, isl.Map)
 IslSetLike = isl.Set | isl.Map
 IslExpressionLike = isl.Aff | isl.QPolynomial
 
-IslObjectPieces: TypeAlias = tuple[IslObjectT, tuple[frozenset[str], ...]]
+SetLikePieces: TypeAlias = tuple[isl.Set, tuple[frozenset[str], ...]]
 
 NameToDim: TypeAlias = Mapping[str, int]
 
@@ -90,15 +91,42 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     return frozenset(all_dt_names)
 
 
-def _move_dims_to_set_dim(obj: IslObjectT, dt: isl.dim_type) -> IslObjectT:
-    obj = obj.move_dims(
-        isl.dim_type.set, obj.dim(isl.dim_type.set),
-        dt, 0, obj.dim(dt)
-    )
+def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
+    from islpy import dim_type
 
-    return obj
+    dt_to_names: dict[dim_type, frozenset[str]] = {}
+    for dt in dt_to_names.keys():
+        dt_to_names[dt] = _get_dim_names(obj, dt)
+        obj = obj.move_dims(
+            dim_type.set,
+            obj.dim(dim_type.set),
+            dt,
+            0,
+            obj.dim(dt)
+        )
+
+    if isinstance(obj, isl.Map):
+        set_obj = obj.range()
+    else:
+        set_obj = obj
+
+    input_names = dt_to_names[dim_type.in_]
+    param_names = dt_to_names[dim_type.param]
+
+    if input_names:
+        input_names = frozenset(input_names)
+    else:
+        input_names = frozenset()
+
+    if param_names:
+        param_names = frozenset(param_names)
+    else:
+        param_names = frozenset()
+
+    return set_obj, (input_names, param_names)
 
 
+@dataclass(frozen=True)
 class NamedIslObject(Generic[IslObjectT], ABC):
     _obj: IslObjectT
     _name_to_dim: NameToDim
@@ -110,15 +138,6 @@ class NamedIslObject(Generic[IslObjectT], ABC):
     # specialization when aligning spaces of objects
     _input_names: frozenset[str] = frozenset()
     _input_dim_start: int = -1
-
-    @abstractmethod
-    def __init__(self, src: IslObjectT | str, ctx: isl.Context | None = None):
-        ...
-
-    # FIXME: needs a type on obj relaxed enough to be specialized in subclasses
-    @abstractmethod
-    def _deconstruct_isl_object(self, obj) -> IslObjectPieces[IslObjectT]:
-        ...
 
     @abstractmethod
     def _reconstruct_isl_object(self) -> IslExpressionLike | IslSetLike:
@@ -165,37 +184,14 @@ def _find_joint_name_to_dim(
     return name_to_dim, (frozenset(all_param_names), frozenset(all_inp_names))
 
 
+@dataclass(frozen=True)
 class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     _obj: isl.Set
 
 
 @final
+@dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike):
-    def __init__(self, src: isl.Set | str, ctx: isl.Context | None = None):
-        obj = isl.Set(src, ctx) if isinstance(src, str) else src
-
-        obj, (parameter_names,) = self._deconstruct_isl_object(obj)
-        obj, name_to_dim = _strip_names(obj)
-
-        self._obj = obj
-        self._name_to_dim = name_to_dim
-        self._parameter_names = parameter_names
-
-        self._parameter_dim_start = min(
-            self._name_to_dim[name]
-            for name in self._parameter_names
-        )
-
-    @override
-    def _deconstruct_isl_object(self, obj: isl.Set) -> IslObjectPieces[isl.Set]:
-        """
-        Internal set dimensions ordered in two contiguous chunks:
-        [ (set dimensions), (parameter dimensions) ]
-        """
-        parameter_names = _get_dim_names(obj, isl.dim_type.param)
-        obj = _move_dims_to_set_dim(obj, isl.dim_type.param)
-        return obj, (frozenset(parameter_names),)
-
     @override
     def _reconstruct_isl_object(self) -> isl.Set:
         return self._obj.move_dims(
@@ -205,53 +201,32 @@ class Set(_NamedIslSetLike):
         )
 
 
+@overload
+def make_set(src: str, ctx: isl.Context | None = None) -> Set:
+    ...
+
+
+@overload
+def make_set(src: isl.Set) -> Set:
+    ...
+
+
+def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
+    obj = isl.Set(src, ctx) if isinstance(src, str) else src
+
+    set_obj, (param_names, _) = _deconstruct_set_like_object(obj)
+    set_obj, name_to_dim = _strip_names(set_obj)
+    parameter_dim_start = min(
+        name_to_dim[name]
+        for name in param_names
+    )
+
+    return Set(set_obj, name_to_dim, param_names, parameter_dim_start)
+
+
 @final
+@dataclass(frozen=True, eq=False)
 class Map(_NamedIslSetLike):
-    def __init__(self, src: isl.Map | str, ctx: isl.Context | None = None):
-        obj = isl.Map(src, ctx) if isinstance(src, str) else src
-
-        obj, (parameter_names, input_names) = self._deconstruct_isl_object(obj)
-        obj, name_to_dim = _strip_names(obj)
-
-        self._parameter_names = parameter_names
-        self._input_names = input_names
-        self._name_to_dim = name_to_dim
-        self._obj = obj
-
-        self._parameter_dim_start = min(
-            self._name_to_dim[name]
-            for name in self._parameter_names
-        )
-
-        self._input_dim_start = min(
-            self._name_to_dim[name]
-            for name in self._input_names
-        )
-
-        # NOTE: hard requirement for object reconstruction is to have each type
-        # of dimension contiguous in the underlying set. each type of dimension
-        # can be shuffled around arbitrarily within each contiguous chunk.
-        # impose chunk ordering as [ (set), (parameter), (input) ]
-        if self._input_dim_start < self._parameter_dim_start:
-            raise ValueError(
-                "Expected input dimensions to be ordered after parameter "
-                "dimensions in set representation"
-            )
-
-    @override
-    def _deconstruct_isl_object(self, obj: isl.Map) -> IslObjectPieces[isl.Set]:
-        """
-        Internal set dimensions ordered in three contiguous chunks as:
-        [ (set dimensions), (parameter dimensions), (input dimensions) ]
-        """
-        parameter_names = _get_dim_names(obj, isl.dim_type.param)
-        input_names = _get_dim_names(obj, isl.dim_type.in_)
-
-        obj = _move_dims_to_set_dim(obj, isl.dim_type.param)
-        obj = _move_dims_to_set_dim(obj, isl.dim_type.in_)
-
-        return obj.range(), (parameter_names, input_names)
-
     @override
     def _reconstruct_isl_object(self) -> isl.Map:
         """
@@ -264,17 +239,51 @@ class Map(_NamedIslSetLike):
         map = isl.Map.from_domain_and_range(domain, range)
 
         param_start = self._parameter_dim_start
-
         map = map.move_dims(
             isl.dim_type.param, 0,
             isl.dim_type.set, param_start, len(self._parameter_names)
         )
 
         inp_start = self._input_dim_start - len(self._parameter_names)
-
         map = map.move_dims(
             isl.dim_type.in_, 0,
             isl.dim_type.set, inp_start, len(self._input_names)
         )
 
         return map
+
+
+@overload
+def make_map(src: str, ctx: isl.Context | None = None) -> Map:
+    ...
+
+
+@overload
+def make_map(src: isl.Map) -> Map:
+    ...
+
+
+def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
+    obj = isl.Map(src, ctx) if isinstance(src, str) else src
+
+    set_obj, (param_names, inp_names) = _deconstruct_set_like_object(obj)
+    set_obj, name_to_dim = _strip_names(set_obj)
+
+    parameter_dim_start = min(
+        name_to_dim[name]
+        for name in name_to_dim
+    )
+
+    input_dim_start = min(
+        name_to_dim[name]
+        for name in name_to_dim
+    )
+
+    return Map(
+        set_obj,
+        name_to_dim,
+        param_names,
+        parameter_dim_start,
+        _input_names=inp_names,
+        _input_dim_start=input_dim_start
+    )
