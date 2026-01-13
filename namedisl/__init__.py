@@ -236,16 +236,16 @@ class Map(_NamedIslSetLike):
 
         map = isl.Map.from_domain_and_range(domain, range)
 
+        inp_start = self._input_dim_start
+        map = map.move_dims(
+            isl.dim_type.in_, 0,
+            isl.dim_type.set, inp_start, len(self._input_names)
+        )
+
         param_start = self._parameter_dim_start
         map = map.move_dims(
             isl.dim_type.param, 0,
             isl.dim_type.set, param_start, len(self._parameter_names)
-        )
-
-        inp_start = self._input_dim_start - len(self._parameter_names)
-        map = map.move_dims(
-            isl.dim_type.in_, 0,
-            isl.dim_type.set, inp_start, len(self._input_names)
         )
 
         return map
