@@ -31,10 +31,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from dataclasses import dataclass
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from dataclasses import dataclass
 from importlib import metadata
 from typing import Generic, TypeAlias, TypeVar, final, overload
 
@@ -108,7 +108,7 @@ def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
     dt_to_names: dict[dim_type, frozenset[str]] = dict.fromkeys(
         [isl.dim_type.in_, isl.dim_type.param], frozenset()
     )
-    for dt in dt_to_names.keys():
+    for dt in dt_to_names:
         dt_to_names[dt] = _get_dim_names(obj, dt)
         if dt_to_names[dt]:
             obj = obj.move_dims(
@@ -121,10 +121,7 @@ def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
 
     dt_to_names = {dt: names for dt, names in dt_to_names.items() if names}
 
-    if isinstance(obj, isl.Map):
-        set_obj = obj.range()
-    else:
-        set_obj = obj
+    set_obj = obj.range() if isinstance(obj, isl.Map) else obj
 
     return set_obj, constantdict(dt_to_names)
 
