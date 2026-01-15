@@ -230,9 +230,9 @@ def _find_joint_name_to_dim(
 
     # enforces contiguous ordering of [ (set), (input), (param) ] in set
     # representation
-    all_names  = sorted(list(all_set_names))
-    all_names += sorted(list(all_inp_names))
-    all_names += sorted(list(all_param_names))
+    all_names  = sorted(all_set_names)
+    all_names += sorted(all_inp_names)
+    all_names += sorted(all_param_names)
 
     name_to_dim: NameToDim = {}
     for pos, name in enumerate(all_names):
@@ -248,12 +248,6 @@ def _align_obj(
     ) -> _NamedIslSetLike:
     new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
-
-    # three cases for alignment
-    # - if name does not currently exist, then add a dimension
-    # - if name exists:
-    #   - if new dim and old dim match, then do nothing
-    #   - if new dim and old dim do not match, then swap and update old dim
 
     for name, dim in sorted(ordering.items(), key=lambda x: x[1]):
         if name in running_name_to_dim:
@@ -303,7 +297,6 @@ def _align_two(named_obj1: _NamedIslSetLike,
     named_obj2 = _align_obj(named_obj2, name_to_dim, dimtype_to_names)
 
     return named_obj1, named_obj2
-
 
 
 @final
