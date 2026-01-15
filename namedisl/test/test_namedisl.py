@@ -62,3 +62,18 @@ def test_map_from_map() -> None:
     print(m)
 
     assert m._reconstruct_isl_object() == m_isl
+
+
+def test_align_two() -> None:
+    m1 = nisl.make_map(
+        "{ [l, m, n, o] -> [i, j, k] : 0 <= i, j, k, l, m, n, o < 10 }")
+    m2 = nisl.make_map(
+        "{ [a, b, c] -> [x, y, z] : 0 <= a, b, c, x, y, z < 5 }")
+
+    print(m1)
+    print(m2)
+
+    m1, m2 = nisl._align_two(m1, m2)
+
+    print(m1)
+    print(m2)

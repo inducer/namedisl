@@ -119,8 +119,6 @@ def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
                 obj.dim(dt)
             )
 
-    dt_to_names = {dt: names for dt, names in dt_to_names.items() if names}
-
     set_obj = obj.range() if isinstance(obj, isl.Map) else obj
 
     return set_obj, constantdict(dt_to_names)
@@ -136,7 +134,11 @@ class NamedIslObject(Generic[IslObjectT], ABC):
 
     @property
     def _has_inputs(self) -> bool:
-        return isl.dim_type.in_ in self._dimtype_to_names
+        return (
+            isl.dim_type.in_ in self._dimtype_to_names
+            and
+            len(self._dimtype_to_names[isl.dim_type.in_]) > 0
+        )
 
     @property
     def _input_names(self) -> frozenset[str]:
@@ -155,7 +157,11 @@ class NamedIslObject(Generic[IslObjectT], ABC):
 
     @property
     def _has_params(self) -> bool:
-        return isl.dim_type.param in self._dimtype_to_names
+        return (
+            isl.dim_type.param in self._dimtype_to_names
+            and
+            len(self._dimtype_to_names[isl.dim_type.param]) > 0
+        )
 
     @property
     def _parameter_names(self) -> frozenset[str]:
@@ -189,6 +195,115 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         [ (set names), (input names), (parameter names) ]
     """
     _obj: isl.Set
+
+
+# FIXME: think through whether or not alphabetical ordering will require more
+# work on average than using one of the objects as a template in alignment
+def _find_joint_name_to_dim(
+        obj1: _NamedIslSetLike,
+        obj2: _NamedIslSetLike
+    ) -> tuple[NameToDim, DimTypeToNames]:
+    """
+    Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
+    :arg:`obj2` within each dimension-type chunk. This ordering is used in
+    alignment before performing operations between two set-like objects.
+    """
+    obj1_inp_names = obj1._input_names
+    obj1_param_names = obj1._parameter_names
+    obj1_set_names = (
+        frozenset(obj1._name_to_dim.keys()) - (obj1_inp_names | obj1_param_names)
+    )
+
+    obj2_inp_names = obj2._input_names
+    obj2_param_names = obj2._parameter_names
+    obj2_set_names = (
+        frozenset(obj2._name_to_dim.keys()) - (obj2_inp_names | obj2_param_names)
+    )
+
+    all_inp_names = obj1_inp_names | obj2_inp_names
+    all_param_names = obj1_param_names | obj2_param_names
+    all_set_names = obj1_set_names | obj2_set_names
+
+    dt_to_names: DimTypeToNames = {}
+    dt_to_names[isl.dim_type.param] = all_param_names
+    dt_to_names[isl.dim_type.in_] = all_inp_names
+
+    # enforces contiguous ordering of [ (set), (input), (param) ] in set
+    # representation
+    all_names  = sorted(list(all_set_names))
+    all_names += sorted(list(all_inp_names))
+    all_names += sorted(list(all_param_names))
+
+    name_to_dim: NameToDim = {}
+    for pos, name in enumerate(all_names):
+        name_to_dim[name] = pos
+
+    return constantdict(name_to_dim), constantdict(dt_to_names)
+
+
+def _align_obj(
+        named_obj: _NamedIslSetLike,
+        ordering: NameToDim,
+        dimtype_to_names: DimTypeToNames
+    ) -> _NamedIslSetLike:
+    new_isl_obj = named_obj._obj
+    running_name_to_dim = dict(named_obj._name_to_dim)
+
+    # three cases for alignment
+    # - if name does not currently exist, then add a dimension
+    # - if name exists:
+    #   - if new dim and old dim match, then do nothing
+    #   - if new dim and old dim do not match, then swap and update old dim
+
+    for name, dim in sorted(ordering.items(), key=lambda x: x[1]):
+        if name in running_name_to_dim:
+            old_dim = running_name_to_dim[name]
+
+            if old_dim == dim:
+                continue
+
+            # temporarily move to parameter dimension since destination and
+            # source dim types cannot match in ISL
+            new_isl_obj = new_isl_obj.move_dims(
+                isl.dim_type.param, 0,
+                isl.dim_type.set, dim, 1
+            )
+
+            new_isl_obj = new_isl_obj.move_dims(
+                isl.dim_type.set, dim,
+                isl.dim_type.param, 0, 1
+            )
+
+        else:
+            old_dim = new_isl_obj.dim(isl.dim_type.set)
+            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, dim, 1)
+
+        # track side effects of inserting/swapping dimensions
+        temp_name_to_dim = running_name_to_dim.copy()
+        for cur_name, cur_dim in sorted(
+                running_name_to_dim.items(), key=lambda x: x[1]):
+            if (dim > old_dim) and (cur_dim > old_dim):
+                temp_name_to_dim[cur_name] = cur_dim - 1
+            elif (dim < old_dim) and (cur_dim < old_dim):
+                temp_name_to_dim[cur_name] = cur_dim + 1
+
+        running_name_to_dim = temp_name_to_dim
+        running_name_to_dim[name] = dim
+
+    return type(named_obj)(new_isl_obj, ordering, dimtype_to_names)
+
+
+def _align_two(named_obj1: _NamedIslSetLike,
+               named_obj2: _NamedIslSetLike) -> tuple[_NamedIslSetLike, ...]:
+
+    name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1,
+                                                            named_obj2)
+
+    named_obj1 = _align_obj(named_obj1, name_to_dim, dimtype_to_names)
+    named_obj2 = _align_obj(named_obj2, name_to_dim, dimtype_to_names)
+
+    return named_obj1, named_obj2
+
 
 
 @final
