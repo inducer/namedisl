@@ -31,9 +31,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import operator
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
 from typing import Generic, TypeAlias, TypeVar, final, overload
@@ -50,12 +51,12 @@ assert _match
 VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
 
-IslExpressionLikeT = TypeVar("IslExpressionLikeT", isl.Aff, isl.QPolynomial)
-IslSetLikeT = TypeVar("IslSetLikeT", isl.Set, isl.Map)
-IslObjectT = TypeVar("IslObjectT", isl.Set, isl.Map)
-
 IslSetLike = isl.Set | isl.Map
 IslExpressionLike = isl.Aff | isl.QPolynomial
+
+IslExpressionLikeT = TypeVar("IslExpressionLikeT", isl.Aff, isl.QPolynomial)
+IslSetLikeT = TypeVar("IslSetLikeT", isl.Set, isl.Map)
+IslObjectT = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
 
 NameToDim: TypeAlias = Mapping[str, int]
 
@@ -70,7 +71,11 @@ SetLikePieces: TypeAlias = tuple[isl.Set, DimTypeToNames]
 def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     name_to_dim: dict[str, int] = {}
     for i in range(obj.dim(isl.dim_type.set)):
-        name = obj.get_dim_name(isl.dim_type.set, i)
+
+        if isinstance(obj, isl.QPolynomial):
+            name = obj.space.get_dim_name(isl.dim_type.set, i)
+        else:
+            name = obj.get_dim_name(isl.dim_type.set, i)
 
         if name is None:
             raise ValueError("unnamed dimension found")
@@ -92,7 +97,11 @@ def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
 def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     all_dt_names: list[str] = []
     for dim in range(obj.dim(dt)):
-        name = obj.get_dim_name(dt, dim)
+
+        if isinstance(obj, isl.QPolynomial):
+            name = obj.space.get_dim_name(dt, dim)
+        else:
+            name = obj.get_dim_name(dt, dim)
 
         if name is None:
             raise ValueError("unnamed dimension found")
@@ -124,7 +133,151 @@ def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
     return set_obj, constantdict(dt_to_names)
 
 
-@dataclass(frozen=True)
+def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
+    """
+    Determines contiguous chunks of dimensions within a sequence of dimensions.
+    Returns a mapping of the first dimension in the chunk to the length of the
+    chunk.
+    """
+    if not dims:
+        return {}
+
+    chunks: dict[int, int] = {}
+
+    start = dims[0]
+    count = 1
+
+    from itertools import pairwise
+    for prev, curr in pairwise(dims):
+        if curr == prev + 1:
+            count += 1
+        else:
+            chunks[start] = count
+            start = curr
+            count = 1
+
+    return constantdict(chunks)
+
+
+# FIXME: think through whether or not alphabetical ordering will require more
+# work on average than using one of the objects as a template in alignment
+def _find_joint_name_to_dim(
+        obj1: NamedIslObject[IslObjectT],
+        obj2: NamedIslObject[IslObjectT]
+    ) -> tuple[NameToDim, DimTypeToNames]:
+    """
+    Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
+    :arg:`obj2` within each dimension-type chunk. This ordering is used in
+    alignment before performing operations between two set-like objects.
+    """
+    obj1_inp_names = obj1._input_names
+    obj1_param_names = obj1._parameter_names
+    obj1_set_names = (
+        frozenset(obj1._name_to_dim.keys()) - (obj1_inp_names | obj1_param_names)
+    )
+
+    obj2_inp_names = obj2._input_names
+    obj2_param_names = obj2._parameter_names
+    obj2_set_names = (
+        frozenset(obj2._name_to_dim.keys()) - (obj2_inp_names | obj2_param_names)
+    )
+
+    all_inp_names = obj1_inp_names | obj2_inp_names
+    all_param_names = obj1_param_names | obj2_param_names
+    all_set_names = obj1_set_names | obj2_set_names
+
+    dt_to_names: DimTypeToNames = {}
+    dt_to_names[isl.dim_type.param] = all_param_names
+    dt_to_names[isl.dim_type.in_] = all_inp_names
+
+    # enforces contiguous ordering of [ (set), (input), (param) ] in set
+    # representation
+    all_names  = sorted(all_set_names)
+    all_names += sorted(all_inp_names)
+    all_names += sorted(all_param_names)
+
+    name_to_dim: NameToDim = {}
+    for pos, name in enumerate(all_names):
+        name_to_dim[name] = pos
+
+    return constantdict(name_to_dim), constantdict(dt_to_names)
+
+
+def _align_obj(
+        named_obj: NamedIslObject[IslObjectT],
+        ordering: NameToDim,
+        dimtype_to_names: DimTypeToNames
+    ) -> NamedIslObject[IslObjectT]:
+    new_isl_obj = named_obj._obj
+    running_name_to_dim = dict(named_obj._name_to_dim)
+
+    for name, dim in sorted(ordering.items(), key=lambda x: x[1]):
+        if name in running_name_to_dim:
+            old_dim = running_name_to_dim[name]
+
+            if old_dim == dim:
+                continue
+
+            # temporarily move to parameter dimension since destination and
+            # source dim types cannot match in ISL
+            new_isl_obj = new_isl_obj.move_dims(
+                isl.dim_type.param, 0,
+                isl.dim_type.set, dim, 1
+            )
+
+            new_isl_obj = new_isl_obj.move_dims(
+                isl.dim_type.set, dim,
+                isl.dim_type.param, 0, 1
+            )
+
+        else:
+            old_dim = new_isl_obj.dim(isl.dim_type.set)
+            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, dim, 1)
+
+        # track side effects of inserting/swapping dimensions
+        temp_name_to_dim = running_name_to_dim.copy()
+        for cur_name, cur_dim in sorted(
+                running_name_to_dim.items(), key=lambda x: x[1]):
+            if (dim > old_dim) and (cur_dim > old_dim):
+                temp_name_to_dim[cur_name] = cur_dim - 1
+            elif (dim < old_dim) and (cur_dim < old_dim):
+                temp_name_to_dim[cur_name] = cur_dim + 1
+
+        running_name_to_dim = temp_name_to_dim
+        running_name_to_dim[name] = dim
+
+    return type(named_obj)(new_isl_obj, ordering, dimtype_to_names)
+
+
+def _align_two(
+        named_obj1: NamedIslObject[IslObjectT],
+        named_obj2: NamedIslObject[IslObjectT]
+    ) -> tuple[NamedIslObject[IslObjectT], ...]:
+
+    name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1,
+                                                            named_obj2)
+
+    named_obj1 = _align_obj(named_obj1, name_to_dim, dimtype_to_names)
+    named_obj2 = _align_obj(named_obj2, name_to_dim, dimtype_to_names)
+
+    return named_obj1, named_obj2
+
+
+def _align_and_apply_binary_op(
+        lhs: NamedIslObject[IslObjectT],
+        rhs: NamedIslObject[IslObjectT],
+        op:  Callable[[IslObjectT, IslObjectT], IslObjectT]
+    ) -> NamedIslObject[IslObjectT]:
+
+    lhs, rhs = _align_two(lhs, rhs)
+    result = op(lhs._obj, lhs._obj)
+
+    # NOTE: since lhs and rhs were aligned, they both agree on what name-to-dim
+    # and dimtype-to-name is, can just take information from lhs
+    return type(lhs)(result, lhs._name_to_dim, lhs._dimtype_to_names)
+
+
+@dataclass(frozen=True, eq=False)
 class NamedIslObject(Generic[IslObjectT], ABC):
     _obj: IslObjectT
     _name_to_dim: NameToDim
@@ -178,6 +331,18 @@ class NamedIslObject(Generic[IslObjectT], ABC):
             )
         return None
 
+    def __and__(
+        self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+        return _align_and_apply_binary_op(self, other, operator.and_)
+
+    def __or__(
+            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+        return _align_and_apply_binary_op(self, other, operator.or_)
+
+    def __sub__(
+            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+        return _align_and_apply_binary_op(self, other, operator.sub)
+
     @abstractmethod
     def _reconstruct_isl_object(self) -> IslExpressionLike | IslSetLike:
         ...
@@ -187,7 +352,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
         return str(self._reconstruct_isl_object())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     """
     Represents set-like objects with parameter dimensions as a non-parameterized
@@ -196,107 +361,106 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     """
     _obj: isl.Set
 
+    def complement(self: _NamedIslSetLike) -> _NamedIslSetLike:
+        return type(self)(self._obj.complement(),
+                          self._name_to_dim,
+                          self._dimtype_to_names)
 
-# FIXME: think through whether or not alphabetical ordering will require more
-# work on average than using one of the objects as a template in alignment
-def _find_joint_name_to_dim(
-        obj1: _NamedIslSetLike,
-        obj2: _NamedIslSetLike
-    ) -> tuple[NameToDim, DimTypeToNames]:
-    """
-    Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
-    :arg:`obj2` within each dimension-type chunk. This ordering is used in
-    alignment before performing operations between two set-like objects.
-    """
-    obj1_inp_names = obj1._input_names
-    obj1_param_names = obj1._parameter_names
-    obj1_set_names = (
-        frozenset(obj1._name_to_dim.keys()) - (obj1_inp_names | obj1_param_names)
-    )
+    def eliminate(self, names_to_eliminate: str | Sequence[str]) -> _NamedIslSetLike:
+        if isinstance(names_to_eliminate, str):
+            names_to_eliminate = [names_to_eliminate]
 
-    obj2_inp_names = obj2._input_names
-    obj2_param_names = obj2._parameter_names
-    obj2_set_names = (
-        frozenset(obj2._name_to_dim.keys()) - (obj2_inp_names | obj2_param_names)
-    )
+        dims_to_eliminate = sorted(
+            self._name_to_dim[name]
+            for name in names_to_eliminate
+        )
 
-    all_inp_names = obj1_inp_names | obj2_inp_names
-    all_param_names = obj1_param_names | obj2_param_names
-    all_set_names = obj1_set_names | obj2_set_names
+        contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_eliminate)
 
-    dt_to_names: DimTypeToNames = {}
-    dt_to_names[isl.dim_type.param] = all_param_names
-    dt_to_names[isl.dim_type.in_] = all_inp_names
+        new_isl_obj = self._obj
+        for start in sorted(contiguous_dim_chunks):
+            new_isl_obj = new_isl_obj.eliminate(
+                isl.dim_type.set, start, contiguous_dim_chunks[start]
+            )
 
-    # enforces contiguous ordering of [ (set), (input), (param) ] in set
-    # representation
-    all_names  = sorted(all_set_names)
-    all_names += sorted(all_inp_names)
-    all_names += sorted(all_param_names)
+        return type(self)(
+            new_isl_obj,
+            self._name_to_dim,  # NOTE: no dimensions are removed by elimination
+            self._dimtype_to_names
+        )
 
-    name_to_dim: NameToDim = {}
-    for pos, name in enumerate(all_names):
-        name_to_dim[name] = pos
+    def project_out(self: _NamedIslSetLike,
+                    names_to_project_out: str | Sequence[str]) -> _NamedIslSetLike:
 
-    return constantdict(name_to_dim), constantdict(dt_to_names)
+        if isinstance(names_to_project_out, str):
+            names_to_project_out = [names_to_project_out]
 
+        names_to_remove = set(names_to_project_out)
 
-def _align_obj(
-        named_obj: _NamedIslSetLike,
-        ordering: NameToDim,
-        dimtype_to_names: DimTypeToNames
-    ) -> _NamedIslSetLike:
-    new_isl_obj = named_obj._obj
-    running_name_to_dim = dict(named_obj._name_to_dim)
+        dims_to_remove = sorted(
+            self._name_to_dim[name]
+            for name in names_to_remove
+        )
 
-    for name, dim in sorted(ordering.items(), key=lambda x: x[1]):
-        if name in running_name_to_dim:
-            old_dim = running_name_to_dim[name]
+        new_isl_obj = self._obj
+        contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_remove)
+        for start in sorted(contiguous_dim_chunks, reverse=True):
+            new_isl_obj = new_isl_obj.project_out(
+                isl.dim_type.set, start, contiguous_dim_chunks[start]
+            )
 
-            if old_dim == dim:
+        new_name_to_dim: NameToDim = {}
+        for name, dim in self._name_to_dim.items():
+            if name in names_to_remove:
                 continue
 
-            # temporarily move to parameter dimension since destination and
-            # source dim types cannot match in ISL
-            new_isl_obj = new_isl_obj.move_dims(
-                isl.dim_type.param, 0,
-                isl.dim_type.set, dim, 1
-            )
+            shift = 0
+            for removed_dim in dims_to_remove:
+                if removed_dim < dim:
+                    shift += 1
+                else:
+                    break
 
-            new_isl_obj = new_isl_obj.move_dims(
-                isl.dim_type.set, dim,
-                isl.dim_type.param, 0, 1
-            )
+            new_name_to_dim[name] = dim - shift
 
-        else:
-            old_dim = new_isl_obj.dim(isl.dim_type.set)
-            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, dim, 1)
+        new_type_to_names = constantdict({
+            dt: self._dimtype_to_names[dt] - frozenset(names_to_remove)
+            for dt in self._dimtype_to_names
+        })
 
-        # track side effects of inserting/swapping dimensions
-        temp_name_to_dim = running_name_to_dim.copy()
-        for cur_name, cur_dim in sorted(
-                running_name_to_dim.items(), key=lambda x: x[1]):
-            if (dim > old_dim) and (cur_dim > old_dim):
-                temp_name_to_dim[cur_name] = cur_dim - 1
-            elif (dim < old_dim) and (cur_dim < old_dim):
-                temp_name_to_dim[cur_name] = cur_dim + 1
+        return type(self)(
+            new_isl_obj,
+            constantdict(new_name_to_dim),
+            new_type_to_names
+        )
 
-        running_name_to_dim = temp_name_to_dim
-        running_name_to_dim[name] = dim
+    def project_out_except(
+        self: _NamedIslSetLike,
+        names_to_keep: str | Sequence[str]
+    ) -> _NamedIslSetLike:
 
-    return type(named_obj)(new_isl_obj, ordering, dimtype_to_names)
+        if isinstance(names_to_keep, str):
+            names_to_keep = [names_to_keep]
 
+        names_to_project_out = [
+            name for name in self._name_to_dim
+            if name not in names_to_keep
+        ]
 
-def _align_two(named_obj1: _NamedIslSetLike,
-               named_obj2: _NamedIslSetLike) -> tuple[_NamedIslSetLike, ...]:
+        return self.project_out(names_to_project_out)
 
-    name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1,
-                                                            named_obj2)
+    # {{{ TODO: funtions that return ExpressionLike objects
 
-    named_obj1 = _align_obj(named_obj1, name_to_dim, dimtype_to_names)
-    named_obj2 = _align_obj(named_obj2, name_to_dim, dimtype_to_names)
+    def dim_max(self, name: str):
+        ...
 
-    return named_obj1, named_obj2
+    def dim_min(self, name: str):
+        ...
+
+    def as_pw_multi_aff(self):
+        ...
+
+    # }}}
 
 
 @final
@@ -319,6 +483,19 @@ class Set(_NamedIslSetLike):
 
         return self._obj
 
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Set):
+            raise NotImplementedError
+
+        aligned_self, aligned_other = _align_two(self, other)
+
+        # FIXME: type checker complains because it's not clear whether the
+        # underlying object after alignment is an isl.Set
+        assert isinstance(aligned_other._obj, isl.Set)
+        assert isinstance(aligned_self._obj, isl.Set)
+        return aligned_self._obj.plain_is_equal(aligned_other._obj)
+
 
 @overload
 def make_set(src: str, ctx: isl.Context | None = None) -> Set:
@@ -336,6 +513,7 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
     set_obj, dimtype_to_names = _deconstruct_set_like_object(obj)
     set_obj, name_to_dim = _strip_names(set_obj)
 
+    assert isinstance(set_obj, isl.Set)
     return Set(set_obj, name_to_dim, dimtype_to_names)
 
 
@@ -353,6 +531,7 @@ class Map(_NamedIslSetLike):
                              "of the starting position of input dimensions")
 
         obj = _restore_names(self._obj, self._name_to_dim)
+        assert isinstance(obj, isl.Set)
 
         obj_domain = isl.Set("{ [] }")
         obj_range = obj
@@ -380,6 +559,19 @@ class Map(_NamedIslSetLike):
 
         return map_obj
 
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Map):
+            raise NotImplementedError
+
+        aligned_self, aligned_other = _align_two(self, other)
+
+        # FIXME: type checker complains because it's not clear whether the
+        # underlying object after alignment is an isl.Set
+        assert isinstance(aligned_self._obj, isl.Set)
+        assert isinstance(aligned_other._obj, isl.Set)
+        return aligned_self._obj.plain_is_equal(aligned_other._obj)
+
 
 @overload
 def make_map(src: str, ctx: isl.Context | None = None) -> Map:
@@ -397,4 +589,5 @@ def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
     set_obj, dimtype_to_names = _deconstruct_set_like_object(obj)
     set_obj, name_to_dim = _strip_names(set_obj)
 
+    assert isinstance(set_obj, isl.Set)
     return Map(set_obj, name_to_dim, dimtype_to_names)
