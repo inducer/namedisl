@@ -54,9 +54,9 @@ VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 IslSetLike = isl.Set | isl.Map
 IslExpressionLike = isl.Aff | isl.QPolynomial
 
-IslExpressionLikeT = TypeVar("IslExpressionLikeT", isl.Aff, isl.QPolynomial)
-IslSetLikeT = TypeVar("IslSetLikeT", isl.Set, isl.Map)
-IslObjectT = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
+IslExpressionLikeTc = TypeVar("IslExpressionLikeT", isl.Aff, isl.QPolynomial)
+IslSetLikeTc = TypeVar("IslSetLikeT", isl.Set, isl.Map)
+IslObjectTc = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
 
 NameToDim: TypeAlias = Mapping[str, int]
 
@@ -68,7 +68,7 @@ DimTypeToNames: TypeAlias = Mapping[isl.dim_type, frozenset[str]]
 SetLikePieces: TypeAlias = tuple[isl.Set, DimTypeToNames]
 
 
-def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
+def _strip_names(obj: IslObjectTc) -> tuple[IslObjectTc, NameToDim]:
     name_to_dim: dict[str, int] = {}
     for i in range(obj.dim(isl.dim_type.set)):
 
@@ -88,13 +88,13 @@ def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     return obj, constantdict(name_to_dim)
 
 
-def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
+def _restore_names(obj: IslObjectTc, name_to_dim: NameToDim) -> IslObjectTc:
     for name, dim in name_to_dim.items():
         obj = obj.set_dim_name(isl.dim_type.set, dim, name)
     return obj
 
 
-def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
+def _get_dim_names(obj: IslObjectTc, dt: isl.dim_type) -> frozenset[str]:
     all_dt_names: list[str] = []
     for dim in range(obj.dim(dt)):
 
@@ -111,7 +111,7 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     return frozenset(all_dt_names)
 
 
-def _deconstruct_set_like_object(obj: IslSetLikeT) -> SetLikePieces:
+def _deconstruct_set_like_object(obj: IslSetLikeTc) -> SetLikePieces:
     from islpy import dim_type
 
     dt_to_names: dict[dim_type, frozenset[str]] = dict.fromkeys(
@@ -164,8 +164,8 @@ def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
 # FIXME: think through whether or not alphabetical ordering will require more
 # work on average than using one of the objects as a template in alignment
 def _find_joint_name_to_dim(
-        obj1: NamedIslObject[IslObjectT],
-        obj2: NamedIslObject[IslObjectT]
+        obj1: NamedIslObject[IslObjectTc],
+        obj2: NamedIslObject[IslObjectTc]
     ) -> tuple[NameToDim, DimTypeToNames]:
     """
     Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
@@ -194,22 +194,24 @@ def _find_joint_name_to_dim(
 
     # enforces contiguous ordering of [ (set), (input), (param) ] in set
     # representation
-    all_names  = sorted(all_set_names)
-    all_names += sorted(all_inp_names)
-    all_names += sorted(all_param_names)
+    all_names = [
+        *sorted(all_set_names),
+        *sorted(all_inp_names),
+        *sorted(all_param_names),
+    ]
 
-    name_to_dim: NameToDim = {}
-    for pos, name in enumerate(all_names):
-        name_to_dim[name] = pos
+    name_to_dim: NameToDim = constantdict({
+        name: pos for pos, name in enumerate(all_names)
+    })
 
-    return constantdict(name_to_dim), constantdict(dt_to_names)
+    return name_to_dim, constantdict(dt_to_names)
 
 
 def _align_obj(
-        named_obj: NamedIslObject[IslObjectT],
+        named_obj: NamedIslObject[IslObjectTc],
         ordering: NameToDim,
         dimtype_to_names: DimTypeToNames
-    ) -> NamedIslObject[IslObjectT]:
+    ) -> NamedIslObject[IslObjectTc]:
     new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
 
@@ -249,9 +251,9 @@ def _align_obj(
 
 
 def _align_two(
-        named_obj1: NamedIslObject[IslObjectT],
-        named_obj2: NamedIslObject[IslObjectT]
-    ) -> tuple[NamedIslObject[IslObjectT], ...]:
+        named_obj1: NamedIslObject[IslObjectTc],
+        named_obj2: NamedIslObject[IslObjectTc]
+    ) -> tuple[NamedIslObject[IslObjectTc], ...]:
 
     name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1,
                                                             named_obj2)
@@ -263,10 +265,10 @@ def _align_two(
 
 
 def _align_and_apply_binary_op(
-        lhs: NamedIslObject[IslObjectT],
-        rhs: NamedIslObject[IslObjectT],
-        op:  Callable[[IslObjectT, IslObjectT], IslObjectT]
-    ) -> NamedIslObject[IslObjectT]:
+        lhs: NamedIslObject[IslObjectTc],
+        rhs: NamedIslObject[IslObjectTc],
+        op:  Callable[[IslObjectTc, IslObjectTc], IslObjectTc]
+    ) -> NamedIslObject[IslObjectTc]:
 
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
@@ -277,8 +279,8 @@ def _align_and_apply_binary_op(
 
 
 @dataclass(frozen=True, eq=False)
-class NamedIslObject(Generic[IslObjectT], ABC):
-    _obj: IslObjectT
+class NamedIslObject(Generic[IslObjectTc], ABC):
+    _obj: IslObjectTc
     _name_to_dim: NameToDim
 
     # used to reconstruct ISL object
@@ -331,15 +333,15 @@ class NamedIslObject(Generic[IslObjectT], ABC):
         return None
 
     def __and__(
-        self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+        self, other: NamedIslObject[IslObjectTc]) -> NamedIslObject[IslObjectTc]:
         return _align_and_apply_binary_op(self, other, operator.and_)
 
     def __or__(
-            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+            self, other: NamedIslObject[IslObjectTc]) -> NamedIslObject[IslObjectTc]:
         return _align_and_apply_binary_op(self, other, operator.or_)
 
     def __sub__(
-            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
+            self, other: NamedIslObject[IslObjectTc]) -> NamedIslObject[IslObjectTc]:
         return _align_and_apply_binary_op(self, other, operator.sub)
 
     @abstractmethod
@@ -358,8 +360,6 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     set. Names are organized as contiguous chunks of dimension types, i.e.
         [ (set names), (input names), (parameter names) ]
     """
-    _obj: isl.Set
-
     def complement(self: _NamedIslSetLike) -> _NamedIslSetLike:
         return type(self)(self._obj.complement(),
                           self._name_to_dim,
