@@ -126,12 +126,3 @@ def test_set_project_out(ndims: int):
     a = a.project_out(a_dims.split(","))
 
     assert a == nisl.make_set("{[]}")
-
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        exec(sys.argv[0])
-    else:
-        from pytest import main
-        main([__file__])
