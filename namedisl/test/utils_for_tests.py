@@ -74,8 +74,11 @@ def generate_random_named_map(
     d = generate_random_named_set(ndims_domain, domain_prefix, domain_param)
     r = generate_random_named_set(ndims_range, range_prefix, range_param)
 
+    dom = d[0]._reconstruct_isl_object()
+    ran = r[0]._reconstruct_isl_object()
+
     return (
-        nisl.make_map(isl.Map.from_domain_and_range(d[0]._obj, r[0]._obj)),
+        nisl.make_map(isl.Map.from_domain_and_range(dom, ran)),
         d,
         r
     )

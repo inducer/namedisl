@@ -53,7 +53,7 @@ def test_map_from_map() -> None:
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
 @pytest.mark.parametrize("ndims_range", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_map_equality(ndims_domain, ndims_range, has_params):
+def test_map_equality(ndims_domain: int, ndims_range: int, has_params: bool):
     if has_params:
         d_param = "n"
         r_param = "m"
@@ -95,7 +95,7 @@ def test_map_equality(ndims_domain, ndims_range, has_params):
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
 @pytest.mark.parametrize("ndims_range", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_map_union(ndims_domain, ndims_range, has_params):
+def test_map_union(ndims_domain: int, ndims_range: int, has_params: bool):
     if has_params:
         d_param = "n"
         r_param = "m"
@@ -135,7 +135,7 @@ def test_map_union(ndims_domain, ndims_range, has_params):
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
 @pytest.mark.parametrize("ndims_range", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_map_intersection(ndims_domain, ndims_range, has_params):
+def test_map_intersection(ndims_domain: int, ndims_range: int, has_params: bool):
     if has_params:
         d_param = "n"
         r_param = "m"
@@ -174,7 +174,7 @@ def test_map_intersection(ndims_domain, ndims_range, has_params):
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-def test_map_eliminate(ndims_domain, ndims_range):
+def test_map_eliminate(ndims_domain: int, ndims_range: int):
     x, x_domain_info, x_range_info = generate_random_named_map(
         ndims_domain, "x_in", None,
         ndims_range, "x_out", None
@@ -191,7 +191,7 @@ def test_map_eliminate(ndims_domain, ndims_range):
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-def test_map_project_out(ndims_domain, ndims_range):
+def test_map_project_out(ndims_domain: int, ndims_range: int):
     x, x_domain_info, x_range_info = generate_random_named_map(
         ndims_domain, "x_in", None,
         ndims_range, "x_out", None

@@ -156,6 +156,8 @@ def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
             start = curr
             count = 1
 
+    chunks[start] = count
+
     return constantdict(chunks)
 
 
@@ -211,40 +213,37 @@ def _align_obj(
     new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
 
-    for name, dim in sorted(ordering.items(), key=lambda x: x[1]):
+    for name, target_dim in sorted(ordering.items(), key=lambda x: x[1]):
         if name in running_name_to_dim:
             old_dim = running_name_to_dim[name]
 
-            if old_dim == dim:
+            if old_dim == target_dim:
                 continue
 
             # temporarily move to parameter dimension since destination and
             # source dim types cannot match in ISL
             new_isl_obj = new_isl_obj.move_dims(
                 isl.dim_type.param, 0,
-                isl.dim_type.set, dim, 1
+                isl.dim_type.set, old_dim, 1
             )
 
             new_isl_obj = new_isl_obj.move_dims(
-                isl.dim_type.set, dim,
+                isl.dim_type.set, target_dim,
                 isl.dim_type.param, 0, 1
             )
 
         else:
             old_dim = new_isl_obj.dim(isl.dim_type.set)
-            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, dim, 1)
+            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, target_dim, 1)
 
         # track side effects of inserting/swapping dimensions
-        temp_name_to_dim = running_name_to_dim.copy()
-        for cur_name, cur_dim in sorted(
-                running_name_to_dim.items(), key=lambda x: x[1]):
-            if (dim > old_dim) and (cur_dim > old_dim):
-                temp_name_to_dim[cur_name] = cur_dim - 1
-            elif (dim < old_dim) and (cur_dim < old_dim):
-                temp_name_to_dim[cur_name] = cur_dim + 1
+        for n, d in list(running_name_to_dim.items()):
+            if (target_dim > old_dim) and (d > old_dim):
+                running_name_to_dim[n] = d - 1
+            elif (target_dim < old_dim) and (d < old_dim):
+                running_name_to_dim[n] = d + 1
 
-        running_name_to_dim = temp_name_to_dim
-        running_name_to_dim[name] = dim
+        running_name_to_dim[name] = target_dim
 
     return type(named_obj)(new_isl_obj, ordering, dimtype_to_names)
 
@@ -270,7 +269,7 @@ def _align_and_apply_binary_op(
     ) -> NamedIslObject[IslObjectT]:
 
     lhs, rhs = _align_two(lhs, rhs)
-    result = op(lhs._obj, lhs._obj)
+    result = op(lhs._obj, rhs._obj)
 
     # NOTE: since lhs and rhs were aligned, they both agree on what name-to-dim
     # and dimtype-to-name is, can just take information from lhs

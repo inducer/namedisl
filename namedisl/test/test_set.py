@@ -50,7 +50,7 @@ def test_set_from_set() -> None:
 
 @pytest.mark.parametrize("ndims", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_set_equality(ndims, has_params):
+def test_set_equality(ndims: int, has_params: bool):
     a_param = "n" if has_params else None
 
     a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
@@ -68,7 +68,7 @@ def test_set_equality(ndims, has_params):
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_set_union(ndims, has_params):
+def test_set_union(ndims: int, has_params: bool):
 
     if has_params:
         a_param = "n"
@@ -91,7 +91,7 @@ def test_set_union(ndims, has_params):
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
-def test_set_intersection(ndims, has_params):
+def test_set_intersection(ndims: int, has_params: bool):
 
     if has_params:
         a_param = "n"
@@ -113,7 +113,7 @@ def test_set_intersection(ndims, has_params):
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
-def test_set_eliminate(ndims):
+def test_set_eliminate(ndims: int):
     a, a_dims, _ = generate_random_named_set(ndims, "a", None)
     a = a.eliminate(a_dims.split(","))
 
@@ -121,7 +121,7 @@ def test_set_eliminate(ndims):
 
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
-def test_set_project_out(ndims):
+def test_set_project_out(ndims: int):
     a, a_dims, _ = generate_random_named_set(ndims, "a", None)
     a = a.project_out(a_dims.split(","))
 
