@@ -204,3 +204,63 @@ def test_map_project_out(ndims_domain: int, ndims_range: int):
     x = x.project_out(dims_to_remove)
 
     assert x == nisl.make_map("{[] -> []}")
+
+
+def test_map_as_pw_multi_aff():
+    spec = "{ [i] -> [io, ii] : i = 32 * io + ii and 0 <= ii < 32 }"
+    m = nisl.make_map(spec)
+    m_isl = isl.Map(spec)
+
+    assert m.as_pw_multi_aff()._obj == m_isl.as_pw_multi_aff()
+
+
+@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+def test_map_dim_max(ndims_domain: int, ndims_range: int):
+    m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
+        ndims_domain, "x_in", None,
+        ndims_range, "x_out", None
+    )
+
+    in_upper_bound_pw_maffs = [
+        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+        for cond in in_conds.split("and")
+    ]
+
+    for i, name in enumerate(in_names.split(",")):
+        # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
+        assert m.dim_max(name)._obj == (in_upper_bound_pw_maffs[i] - 1)
+
+    out_upper_bound_pw_maffs = [
+        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+        for cond in out_conds.split("and")
+    ]
+
+    for i, name in enumerate(out_names.split(",")):
+        # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
+        assert m.dim_max(name)._obj == (out_upper_bound_pw_maffs[i] - 1)
+
+
+@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+def test_map_dim_min(ndims_domain: int, ndims_range: int):
+    m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
+        ndims_domain, "x_in", None,
+        ndims_range, "x_out", None
+    )
+
+    in_lower_bound_pw_maffs = [
+        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+        for cond in in_conds.split("and")
+    ]
+
+    for i, name in enumerate(in_names.split(",")):
+        assert m.dim_min(name)._obj == in_lower_bound_pw_maffs[i]
+
+    out_lower_bound_pw_maffs = [
+        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+        for cond in out_conds.split("and")
+    ]
+
+    for i, name in enumerate(out_names.split(",")):
+        assert m.dim_min(name)._obj == out_lower_bound_pw_maffs[i]

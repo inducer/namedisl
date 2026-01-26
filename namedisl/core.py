@@ -25,7 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import operator
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
@@ -39,11 +38,28 @@ from typing_extensions import override
 import islpy as isl
 
 
-IslSetLike = isl.Set | isl.Map
-IslExpressionLike = isl.Aff | isl.QPolynomial
+IslSetLike = isl.BasicSet | isl.BasicMap | isl.Set | isl.Map
+IslBaseExpressionLike = isl.Aff | isl.QPolynomial
+IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
+IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
+IslExpressionLike = IslBaseExpressionLike | IslPwExpressionLike | IslMultiExpressionLike
 
-IslExpressionLikeT = TypeVar("IslExpressionLikeT", isl.Aff, isl.QPolynomial)
-IslSetLikeT = TypeVar("IslSetLikeT", isl.Set, isl.Map)
+IslExpressionLikeT = TypeVar(
+    "IslExpressionLikeT",
+    isl.Aff,
+    isl.MultiAff,
+    isl.PwAff,
+    isl.PwMultiAff,
+    isl.QPolynomial,
+    isl.PwQPolynomial
+)
+IslSetLikeT = TypeVar(
+    "IslSetLikeT",
+    isl.BasicSet,
+    isl.BasicMap,
+    isl.Set,
+    isl.Map
+)
 IslObjectT = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
 
 NameToDim: TypeAlias = Mapping[str, int]
@@ -53,7 +69,7 @@ NameToDim: TypeAlias = Mapping[str, int]
 # alignment
 DimTypeToNames: TypeAlias = Mapping[isl.dim_type, frozenset[str]]
 
-SetLikePieces: TypeAlias = tuple[isl.Set, DimTypeToNames]
+IslObjectPieces: TypeAlias = tuple[IslSetLike | IslExpressionLike, DimTypeToNames]
 
 
 __version__ = metadata.version("namedisl")
@@ -75,7 +91,7 @@ def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     name_to_dim: dict[str, int] = {}
     for i in range(obj.dim(isl.dim_type.set)):
 
-        if isinstance(obj, isl.QPolynomial):
+        if isinstance(obj, isl.QPolynomial | isl.PwQPolynomial):
             name = obj.space.get_dim_name(isl.dim_type.set, i)
         else:
             name = obj.get_dim_name(isl.dim_type.set, i)
@@ -114,26 +130,41 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     return frozenset(all_dt_names)
 
 
-def _deconstruct_object(obj: IslSetLikeT) -> SetLikePieces:
+def _deconstruct_object(obj: IslObjectT) -> IslObjectPieces:
     from islpy import dim_type
 
-    dt_to_names: dict[dim_type, frozenset[str]] = dict.fromkeys(
-        [isl.dim_type.in_, isl.dim_type.param], frozenset()
-    )
-    for dt in dt_to_names:
-        dt_to_names[dt] = _get_dim_names(obj, dt)
-        if dt_to_names[dt]:
-            obj = obj.move_dims(
-                dim_type.set,
-                obj.dim(dim_type.set),
-                dt,
-                0,
-                obj.dim(dt)
-            )
+    dt_to_names: dict[dim_type, frozenset[str]] = {}
 
-    set_obj = obj.range() if isinstance(obj, isl.Map) else obj
+    if isinstance(obj, IslSetLike):
+        setlike_obj = obj
+        dt_to_names = dict.fromkeys(
+            [isl.dim_type.in_, isl.dim_type.param], frozenset()
+        )
+        for dt in dt_to_names:
+            dt_to_names[dt] = _get_dim_names(setlike_obj, dt)
+            if dt_to_names[dt]:
+                setlike_obj = setlike_obj.move_dims(
+                    dim_type.set,
+                    setlike_obj.dim(dim_type.set),
+                    dt,
+                    0,
+                    setlike_obj.dim(dt)
+                )
 
-    return set_obj, constantdict(dt_to_names)
+        setlike_obj = (
+            setlike_obj.range()
+            if isinstance(setlike_obj, isl.Map)
+            else setlike_obj
+        )
+
+        return setlike_obj, constantdict(dt_to_names)
+
+    elif isinstance(obj, IslExpressionLike):
+        expr_obj = obj
+
+        dt_to_names = dict.fromkeys([isl.dim_type.param], frozenset())
+
+        return expr_obj, constantdict(dt_to_names)
 
 
 def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
@@ -334,18 +365,6 @@ class NamedIslObject(Generic[IslObjectT], ABC):
                 for name in self._dimtype_to_names[isl.dim_type.param]
             )
         return None
-
-    def __and__(
-        self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
-        return _align_and_apply_binary_op(self, other, operator.and_)
-
-    def __or__(
-            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
-        return _align_and_apply_binary_op(self, other, operator.or_)
-
-    def __sub__(
-            self, other: NamedIslObject[IslObjectT]) -> NamedIslObject[IslObjectT]:
-        return _align_and_apply_binary_op(self, other, operator.sub)
 
     @abstractmethod
     def _reconstruct_isl_object(self) -> IslExpressionLike | IslSetLike:

@@ -24,6 +24,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
+import operator
 from abc import ABC
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final, overload
@@ -34,14 +36,17 @@ from typing_extensions import override
 import islpy as isl
 
 from .core import (
+    IslSetLike,
     NamedIslObject,
     NameToDim,
+    _align_and_apply_binary_op,
     _align_two,
     _deconstruct_object,
     _find_contiguous_dim_chunks,
     _restore_names,
     _strip_names,
 )
+from .expression_like import PwAff, PwMultiAff, make_pw_multi_aff, make_pwaff
 
 
 if TYPE_CHECKING:
@@ -55,6 +60,50 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     set. Names are organized as contiguous chunks of dimension types, i.e.
         [ (set names), (input names), (parameter names) ]
     """
+
+    @override
+    def _reconstruct_isl_object(self) -> IslSetLike:
+        """
+        Relies on the dimension type ordering in
+        :func:`_deconstruct_set_like_object`.
+        """
+
+        obj = _restore_names(self._obj, self._name_to_dim)
+        assert isinstance(obj, isl.Set)
+
+        if self._has_params:
+            if self._parameter_dim_start is None:
+                raise ValueError(
+                    "Object has parameter dimensions, but a starting index for "
+                    "parameter names is not given. Reconstruction is not "
+                    "possible")
+
+            param_start = self._parameter_dim_start
+            obj = obj.move_dims(
+                isl.dim_type.param, 0,
+                isl.dim_type.set, param_start, len(self._parameter_names)
+            )
+
+        if self._has_inputs:
+            if self._input_dim_start is None:
+                raise ValueError(
+                    "Object has input dimensions, but a starting index for "
+                    "input names is not given. Reconstruction is not "
+                    "possible")
+
+            obj_domain = isl.Set("{ [] }")
+            obj_range = obj
+
+            obj = isl.Map.from_domain_and_range(obj_domain, obj_range)
+
+            inp_start = self._input_dim_start
+            obj = obj.move_dims(
+                isl.dim_type.in_, 0,
+                isl.dim_type.set, inp_start, len(self._input_names)
+            )
+
+        return obj
+
     def complement(self: _NamedIslSetLike) -> _NamedIslSetLike:
         return replace(
             self,
@@ -148,58 +197,83 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 
         return self.project_out(names_to_project_out)
 
-    # {{{ TODO: functions that return ExpressionLike objects
+    def dim_max(self, name: str) -> PwAff:
+        return make_pwaff(self._obj.dim_max(self._name_to_dim[name]))
 
-    def dim_max(self, name: str):
-        ...
+    def dim_min(self, name: str) -> PwAff:
+        return make_pwaff(self._obj.dim_min(self._name_to_dim[name]))
 
-    def dim_min(self, name: str):
-        ...
+    def as_pw_multi_aff(self) -> PwMultiAff:
+        return make_pw_multi_aff(self._reconstruct_isl_object().as_pw_multi_aff())
 
-    def as_pw_multi_aff(self):
-        ...
+    # FIXME: basedpyright is not happy with these function signatures
+    def __and__(
+        self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+        return _align_and_apply_binary_op(self, other, operator.and_)
 
-    # }}}
+    def __or__(
+            self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+        return _align_and_apply_binary_op(self, other, operator.or_)
 
-
-@final
-@dataclass(frozen=True, eq=False)
-class Set(_NamedIslSetLike):
-    @override
-    def _reconstruct_isl_object(self) -> isl.Set:
-        # FIXME: typechecker complains that self._obj is not an isl.Set even
-        # though _NamedIslObject is instantiated with isl.Set.
-        # using reveal_type(self._obj) below shows self._obj is
-        # isl.Set | isl.Map?
-        assert isinstance(self._obj, isl.Set)
-
-        if self._has_params:
-            if self._parameter_dim_start is None:
-                raise ValueError(
-                    "Object has parameter dimensions, but a starting index for "
-                    "parameter names is not given. Reconstruction is not "
-                    "possible")
-
-            return self._obj.move_dims(
-                isl.dim_type.param, 0,
-                isl.dim_type.set, self._parameter_dim_start,
-                    len(self._parameter_names)
-            )
-
-        return self._obj
+    def __sub__(
+            self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+        return _align_and_apply_binary_op(self, other, operator.sub)
 
     @override
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Set):
+        if not isinstance(other, type(self)):
             raise NotImplementedError
 
         aligned_self, aligned_other = _align_two(self, other)
 
         # FIXME: type checker complains because it's not clear whether the
         # underlying object after alignment is an isl.Set
-        assert isinstance(aligned_other._obj, isl.Set)
         assert isinstance(aligned_self._obj, isl.Set)
+        assert isinstance(aligned_other._obj, isl.Set)
         return aligned_self._obj.plain_is_equal(aligned_other._obj)
+
+
+@final
+@dataclass(frozen=True, eq=False)
+class BasicSet(_NamedIslSetLike):
+
+    @override
+    def _reconstruct_isl_object(self) -> isl.BasicSet:
+        obj = super()._reconstruct_isl_object()
+
+        if not isinstance(obj, isl.Set) or obj.n_basic_set() != 1:
+            raise ValueError(
+                "Cannot reconstruct an isl.BasicSet from anything other than "
+                "an isl.Set containing only a single isl.BasicSet.")
+
+        return obj.get_basic_sets()[0]
+
+
+@overload
+def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet:
+    ...
+
+
+@overload
+def make_basic_set(src: isl.BasicSet) -> BasicSet:
+    ...
+
+
+def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
+    obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
+
+    set_obj, dimtype_to_names = _deconstruct_object(obj)
+
+    assert isinstance(set_obj, isl.Set)
+    set_obj, name_to_dim = _strip_names(set_obj)
+
+    return BasicSet(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+
+
+@final
+@dataclass(frozen=True, eq=False)
+class Set(_NamedIslSetLike):
+    ...
 
 
 @overload
@@ -216,66 +290,54 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
 
     set_obj, dimtype_to_names = _deconstruct_object(obj)
-    set_obj, name_to_dim = _strip_names(set_obj)
 
     assert isinstance(set_obj, isl.Set)
+    set_obj, name_to_dim = _strip_names(set_obj)
+
     return Set(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 
 @final
 @dataclass(frozen=True, eq=False)
+class BasicMap(_NamedIslSetLike):
+
+    @override
+    def _reconstruct_isl_object(self) -> isl.BasicMap:
+        obj = super()._reconstruct_isl_object()
+
+        if not isinstance(obj, isl.Map) or obj.n_basic_map() != 1:
+            raise ValueError(
+                "Cannot reconstruct an isl.BasicMap from anything other than "
+                "an isl.Map containing only a single isl.BasicMap.")
+
+        return obj.get_basic_maps()[0]
+
+
+@overload
+def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap:
+    ...
+
+
+@overload
+def make_basic_map(src: isl.BasicMap) -> BasicMap:
+    ...
+
+
+def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> BasicMap:
+    obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
+
+    set_obj, dimtype_to_names = _deconstruct_object(obj)
+
+    assert isinstance(set_obj, isl.Set)
+    set_obj, name_to_dim = _strip_names(set_obj)
+
+    return BasicMap(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+
+
+@final
+@dataclass(frozen=True, eq=False)
 class Map(_NamedIslSetLike):
-    @override
-    def _reconstruct_isl_object(self) -> isl.Map:
-        """
-        Relies on the dimension type ordering in
-        :func:`_deconstruct_set_like_object`.
-        """
-        if self._input_dim_start is None:
-            raise ValueError("Cannot reconstruct a map object without knowledge "
-                             "of the starting position of input dimensions")
-
-        obj = _restore_names(self._obj, self._name_to_dim)
-        assert isinstance(obj, isl.Set)
-
-        obj_domain = isl.Set("{ [] }")
-        obj_range = obj
-
-        map_obj = isl.Map.from_domain_and_range(obj_domain, obj_range)
-
-        if self._has_params:
-            if self._parameter_dim_start is None:
-                raise ValueError(
-                    "Object has parameter dimensions, but a starting index for "
-                    "parameter names is not given. Reconstruction is not "
-                    "possible")
-
-            param_start = self._parameter_dim_start
-            map_obj = map_obj.move_dims(
-                isl.dim_type.param, 0,
-                isl.dim_type.set, param_start, len(self._parameter_names)
-            )
-
-        inp_start = self._input_dim_start
-        map_obj = map_obj.move_dims(
-            isl.dim_type.in_, 0,
-            isl.dim_type.set, inp_start, len(self._input_names)
-        )
-
-        return map_obj
-
-    @override
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Map):
-            raise NotImplementedError
-
-        aligned_self, aligned_other = _align_two(self, other)
-
-        # FIXME: type checker complains because it's not clear whether the
-        # underlying object after alignment is an isl.Set
-        assert isinstance(aligned_self._obj, isl.Set)
-        assert isinstance(aligned_other._obj, isl.Set)
-        return aligned_self._obj.plain_is_equal(aligned_other._obj)
+    ...
 
 
 @overload
@@ -292,7 +354,8 @@ def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
     obj = isl.Map(src, ctx) if isinstance(src, str) else src
 
     set_obj, dimtype_to_names = _deconstruct_object(obj)
-    set_obj, name_to_dim = _strip_names(set_obj)
 
     assert isinstance(set_obj, isl.Set)
+    set_obj, name_to_dim = _strip_names(set_obj)
+
     return Map(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args

@@ -126,3 +126,29 @@ def test_set_project_out(ndims: int):
     a = a.project_out(a_dims.split(","))
 
     assert a == nisl.make_set("{[]}")
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_set_dim_max(ndims: int):
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", None)
+
+    cond_pw_affs = [
+        isl.PwAff(f"{{ [{cond.split('<')[2].strip(' ')}] }}")
+        for cond in a_cond.split("and")
+    ]
+
+    for i, name in enumerate(a_dims.split(",")):
+        assert a.dim_max(name)._obj == (cond_pw_affs[i] - 1)
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_set_dim_min(ndims: int):
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", None)
+
+    cond_pw_affs = [
+        isl.PwAff(f"{{ [{cond.split('<')[0].strip(' ')}] }}")
+        for cond in a_cond.split("and")
+    ]
+
+    for i, name in enumerate(a_dims.split(",")):
+        assert a.dim_min(name)._obj == cond_pw_affs[i]
