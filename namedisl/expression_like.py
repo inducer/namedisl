@@ -148,7 +148,7 @@ def make_qpolynomial(
     qp_obj, dimtype_to_names = _deconstruct_object(obj)
     qp_obj, name_to_dim = _strip_names(qp_obj)
 
-    return QPolynomial(qp_obj, name_to_dim, dimtype_to_names)
+    return QPolynomial(qp_obj, name_to_dim, dimtype_to_names) # pylint: disable=too-many-function-args
 
 
 @final
@@ -202,7 +202,7 @@ def make_pw_qpolynomial(
     pw_qp_obj, dimtype_to_names = _deconstruct_object(obj)
     pw_qp_obj, name_to_dim = _strip_names(pw_qp_obj)
 
-    return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names)
+    return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names) # pylint: disable=too-many-function-args
 
 # }}}
 
@@ -282,6 +282,6 @@ def make_multi_aff(
     maff_obj, dimtype_to_names = _deconstruct_object(obj)
     maff_obj, name_to_dim = _strip_names(maff_obj)
 
-    return MultiAff(maff_obj, name_to_dim, dimtype_to_names)
+    return MultiAff(maff_obj, name_to_dim, dimtype_to_names) # pylint: disable=too-many-function-args
 
 # }}}
