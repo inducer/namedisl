@@ -25,7 +25,51 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from .set_like import Map, Set, make_map, make_set
+from .expression_like import (
+    Aff,
+    MultiAff,
+    PwAff,
+    PwMultiAff,
+    PwQPolynomial,
+    QPolynomial,
+    make_aff,
+    make_multi_aff,
+    make_pw_aff,
+    make_pw_multi_aff,
+    make_pw_qpolynomial,
+    make_qpolynomial,
+)
+from .set_like import (
+    BasicMap,
+    BasicSet,
+    Map,
+    Set,
+    make_basic_map,
+    make_basic_set,
+    make_map,
+    make_set,
+)
 
 
-__all__ = ["Map", "Set", "make_map", "make_set"]
+__all__ = [
+    "Aff",
+    "BasicMap",
+    "BasicSet",
+    "Map",
+    "MultiAff",
+    "PwAff",
+    "PwMultiAff",
+    "PwQPolynomial",
+    "QPolynomial",
+    "Set",
+    "make_aff",
+    "make_basic_map",
+    "make_basic_set",
+    "make_map",
+    "make_multi_aff",
+    "make_pw_aff",
+    "make_pw_multi_aff",
+    "make_pw_qpolynomial",
+    "make_qpolynomial",
+    "make_set"
+]

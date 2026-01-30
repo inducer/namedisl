@@ -36,17 +36,15 @@ from typing_extensions import override
 import islpy as isl
 
 from .core import (
-    IslSetLike,
     NamedIslObject,
     NameToDim,
     _align_and_apply_binary_op,
     _align_two,
     _deconstruct_object,
     _find_contiguous_dim_chunks,
-    _restore_names,
     _strip_names,
 )
-from .expression_like import PwAff, PwMultiAff, make_pw_multi_aff, make_pwaff
+from .expression_like import PwAff, PwMultiAff, make_pw_aff, make_pw_multi_aff
 
 
 if TYPE_CHECKING:
@@ -60,49 +58,6 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     set. Names are organized as contiguous chunks of dimension types, i.e.
         [ (set names), (input names), (parameter names) ]
     """
-
-    @override
-    def _reconstruct_isl_object(self) -> IslSetLike:
-        """
-        Relies on the dimension type ordering in
-        :func:`_deconstruct_set_like_object`.
-        """
-
-        obj = _restore_names(self._obj, self._name_to_dim)
-        assert isinstance(obj, isl.Set)
-
-        if self._has_params:
-            if self._parameter_dim_start is None:
-                raise ValueError(
-                    "Object has parameter dimensions, but a starting index for "
-                    "parameter names is not given. Reconstruction is not "
-                    "possible")
-
-            param_start = self._parameter_dim_start
-            obj = obj.move_dims(
-                isl.dim_type.param, 0,
-                isl.dim_type.set, param_start, len(self._parameter_names)
-            )
-
-        if self._has_inputs:
-            if self._input_dim_start is None:
-                raise ValueError(
-                    "Object has input dimensions, but a starting index for "
-                    "input names is not given. Reconstruction is not "
-                    "possible")
-
-            obj_domain = isl.Set("{ [] }")
-            obj_range = obj
-
-            obj = isl.Map.from_domain_and_range(obj_domain, obj_range)
-
-            inp_start = self._input_dim_start
-            obj = obj.move_dims(
-                isl.dim_type.in_, 0,
-                isl.dim_type.set, inp_start, len(self._input_names)
-            )
-
-        return obj
 
     def complement(self: _NamedIslSetLike) -> _NamedIslSetLike:
         return replace(
@@ -198,10 +153,10 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         return self.project_out(names_to_project_out)
 
     def dim_max(self, name: str) -> PwAff:
-        return make_pwaff(self._obj.dim_max(self._name_to_dim[name]))
+        return make_pw_aff(self._obj.dim_max(self._name_to_dim[name]))
 
     def dim_min(self, name: str) -> PwAff:
-        return make_pwaff(self._obj.dim_min(self._name_to_dim[name]))
+        return make_pw_aff(self._obj.dim_min(self._name_to_dim[name]))
 
     def as_pw_multi_aff(self) -> PwMultiAff:
         return make_pw_multi_aff(self._reconstruct_isl_object().as_pw_multi_aff())
@@ -222,7 +177,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     @override
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            raise NotImplementedError
+            raise ValueError("Objects are not of the same type")
 
         aligned_self, aligned_other = _align_two(self, other)
 

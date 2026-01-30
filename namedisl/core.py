@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
@@ -43,13 +43,13 @@ IslBaseExpressionLike = isl.Aff | isl.QPolynomial
 IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
 IslExpressionLike = IslBaseExpressionLike | IslPwExpressionLike | IslMultiExpressionLike
+IslObject = IslSetLike | IslExpressionLike | IslMultiExpressionLike
 
 IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     isl.Aff,
     isl.MultiAff,
     isl.PwAff,
-    isl.PwMultiAff,
     isl.QPolynomial,
     isl.PwQPolynomial
 )
@@ -58,7 +58,12 @@ IslSetLikeT = TypeVar(
     isl.BasicSet,
     isl.BasicMap,
     isl.Set,
-    isl.Map
+    isl.Map,
+)
+IslMultiExpressionLikeT = TypeVar(
+    "IslMultiExpressionLikeT",
+    isl.PwMultiAff,
+    isl.MultiAff
 )
 IslObjectT = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
 
@@ -89,12 +94,16 @@ __all__ = [
 
 def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     name_to_dim: dict[str, int] = {}
-    for i in range(obj.dim(isl.dim_type.set)):
 
+    dt_to_strip = (
+        isl.dim_type.set if isinstance(obj, IslSetLike) else isl.dim_type.in_
+    )
+
+    for i in range(obj.dim(dt_to_strip)):
         if isinstance(obj, isl.QPolynomial | isl.PwQPolynomial):
-            name = obj.space.get_dim_name(isl.dim_type.set, i)
+            name = obj.space.get_dim_name(dt_to_strip, i)
         else:
-            name = obj.get_dim_name(isl.dim_type.set, i)
+            name = obj.get_dim_name(dt_to_strip, i)
 
         if name is None:
             raise ValueError("unnamed dimension found")
@@ -108,8 +117,42 @@ def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
 
 
 def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
+    if isinstance(obj, isl.PwAff):
+        pwaff_obj = obj.move_dims(
+            isl.dim_type.param,
+            0,
+            isl.dim_type.in_,
+            0,
+            obj.dim(isl.dim_type.in_)
+        )
+
+        for name, dim in name_to_dim.items():
+            pwaff_obj = pwaff_obj.set_dim_name(
+                isl.dim_type.param,
+                dim,
+                name
+            )
+
+        pwaff_obj = pwaff_obj.get_pw_aff_list().get_at(0)
+
+        pwaff_obj = pwaff_obj.move_dims(
+            isl.dim_type.in_,
+            0,
+            isl.dim_type.param,
+            0,
+            pwaff_obj.dim(isl.dim_type.param)
+        )
+
+        return pwaff_obj
+
+    if isinstance(obj, IslSetLike):
+        dt_to_restore = isl.dim_type.set
+    else:
+        dt_to_restore = isl.dim_type.in_
+
     for name, dim in name_to_dim.items():
-        obj = obj.set_dim_name(isl.dim_type.set, dim, name)
+        obj = obj.set_dim_name(dt_to_restore, dim, name)
+
     return obj
 
 
@@ -117,7 +160,7 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     all_dt_names: list[str] = []
     for dim in range(obj.dim(dt)):
 
-        if isinstance(obj, isl.QPolynomial):
+        if isinstance(obj, isl.QPolynomial | isl.PwQPolynomial):
             name = obj.space.get_dim_name(dt, dim)
         else:
             name = obj.get_dim_name(dt, dim)
@@ -131,21 +174,25 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
 
 
 def _deconstruct_object(obj: IslObjectT) -> IslObjectPieces:
-    from islpy import dim_type
+    dt_to_names: dict[isl.dim_type, frozenset[str]] = {}
 
-    dt_to_names: dict[dim_type, frozenset[str]] = {}
-
-    if isinstance(obj, IslSetLike):
+    if isinstance(obj, IslSetLike | IslMultiExpressionLike):
         setlike_obj = obj
         dt_to_names = dict.fromkeys(
             [isl.dim_type.in_, isl.dim_type.param], frozenset()
         )
+
+        # NOTE: isl.PwMultiAff.move_dims does not exist, represent as map
+        # internally
+        if isinstance(setlike_obj, IslMultiExpressionLike):
+            setlike_obj = setlike_obj.as_map()
+
         for dt in dt_to_names:
             dt_to_names[dt] = _get_dim_names(setlike_obj, dt)
             if dt_to_names[dt]:
                 setlike_obj = setlike_obj.move_dims(
-                    dim_type.set,
-                    setlike_obj.dim(dim_type.set),
+                    isl.dim_type.set,
+                    setlike_obj.dim(isl.dim_type.set),
                     dt,
                     0,
                     setlike_obj.dim(dt)
@@ -153,16 +200,32 @@ def _deconstruct_object(obj: IslObjectT) -> IslObjectPieces:
 
         setlike_obj = (
             setlike_obj.range()
-            if isinstance(setlike_obj, isl.Map)
+            if isinstance(setlike_obj, isl.Map | isl.BasicMap)
+            else setlike_obj
+        )
+
+        setlike_obj = (
+            isl.Set.from_basic_set(setlike_obj)
+            if isinstance(setlike_obj, isl.BasicSet)
             else setlike_obj
         )
 
         return setlike_obj, constantdict(dt_to_names)
 
-    elif isinstance(obj, IslExpressionLike):
+    else:
         expr_obj = obj
 
         dt_to_names = dict.fromkeys([isl.dim_type.param], frozenset())
+        dt_to_names[isl.dim_type.param] = _get_dim_names(expr_obj,
+                                                         isl.dim_type.param)
+
+        expr_obj = expr_obj.move_dims(
+            isl.dim_type.in_,
+            expr_obj.dim(isl.dim_type.in_),
+            isl.dim_type.param,
+            0,
+            expr_obj.dim(isl.dim_type.param)
+        )
 
         return expr_obj, constantdict(dt_to_names)
 
@@ -249,6 +312,12 @@ def _align_obj(
     new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
 
+    target_dt = (
+        isl.dim_type.set
+        if isinstance(new_isl_obj, IslSetLike)
+        else isl.dim_type.in_
+    )
+
     for name, target_dim in sorted(ordering.items(), key=lambda x: x[1]):
         if name in running_name_to_dim:
             old_dim = running_name_to_dim[name]
@@ -260,11 +329,11 @@ def _align_obj(
             # source dim types cannot match in ISL
             new_isl_obj = new_isl_obj.move_dims(
                 isl.dim_type.param, 0,
-                isl.dim_type.set, old_dim, 1
+                target_dt, old_dim, 1
             )
 
             new_isl_obj = new_isl_obj.move_dims(
-                isl.dim_type.set, target_dim,
+                target_dt, target_dim,
                 isl.dim_type.param, 0, 1
             )
 
@@ -366,9 +435,49 @@ class NamedIslObject(Generic[IslObjectT], ABC):
             )
         return None
 
-    @abstractmethod
-    def _reconstruct_isl_object(self) -> IslExpressionLike | IslSetLike:
-        ...
+    def _reconstruct_isl_object(self) -> IslObject:
+        """
+        Relies on the dimension type ordering in
+        :func:`_deconstruct_set_like_object`.
+        """
+        obj = _restore_names(self._obj, self._name_to_dim)
+
+        internal_dim = (
+            isl.dim_type.set if isinstance(obj, isl.Set) else isl.dim_type.in_
+        )
+
+        if self._has_params:
+            if self._parameter_dim_start is None:
+                raise ValueError(
+                    "Object has parameter dimensions, but a starting index for "
+                    "parameter names is not given. Reconstruction is not "
+                    "possible")
+
+            param_start = self._parameter_dim_start
+            obj = obj.move_dims(
+                isl.dim_type.param, 0,
+                internal_dim, param_start, len(self._parameter_names)
+            )
+
+        if self._has_inputs:
+            if self._input_dim_start is None:
+                raise ValueError(
+                    "Object has input dimensions, but a starting index for "
+                    "input names is not given. Reconstruction is not "
+                    "possible")
+
+            obj_domain = isl.Set("{ [] }")
+            obj_range = obj
+
+            obj = isl.Map.from_domain_and_range(obj_domain, obj_range)
+
+            inp_start = self._input_dim_start
+            obj = obj.move_dims(
+                isl.dim_type.in_, 0,
+                internal_dim, inp_start, len(self._input_names)
+            )
+
+        return obj
 
     @override
     def __str__(self) -> str:

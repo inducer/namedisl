@@ -30,8 +30,137 @@ import pytest
 import islpy as isl
 
 import namedisl as nisl
-from .utils_for_tests import generate_random_named_map
+from .utils_for_tests import generate_random_named_map, generate_random_named_set
 
+
+# {{{ sets
+
+def test_set_from_str() -> None:
+    s = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
+
+    print(s._obj)
+    print(s)
+
+
+def test_set_from_set() -> None:
+    s = isl.Set("[n] -> { [i, j] : 0 <= i, j < n }")
+    named_set = nisl.make_set(s)
+
+    print(named_set._obj)
+    print(named_set)
+
+
+@pytest.mark.parametrize("ndims", [2, 3, 4, 5])
+@pytest.mark.parametrize("has_params", [True, False])
+def test_set_equality(ndims: int, has_params: bool):
+    a_param = "n" if has_params else None
+
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
+
+    from itertools import permutations
+    for perm in list(permutations(a_dims.split(","))):
+        perm_dims = ",".join(p for p in perm)
+        set_str = f"{{ [{perm_dims}] : {a_cond} }}"
+        if has_params:
+            set_str = f"[{a_param}] ->" + set_str
+        perm_set = nisl.make_set(set_str)
+
+        assert a == perm_set
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+@pytest.mark.parametrize("has_params", [True, False])
+def test_set_union(ndims: int, has_params: bool):
+
+    if has_params:
+        a_param = "n"
+        b_param = "m"
+    else:
+        a_param = None
+        b_param = None
+
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = generate_random_named_set(ndims, "b", b_param)
+
+    set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) or ({b_cond})}}"
+    if has_params:
+        set_str = "[n, m] -> " + set_str
+
+    result = nisl.make_set(set_str)
+
+    assert (a | b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+@pytest.mark.parametrize("has_params", [True, False])
+def test_set_intersection(ndims: int, has_params: bool):
+
+    if has_params:
+        a_param = "n"
+        b_param = "m"
+    else:
+        a_param = None
+        b_param = None
+
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
+    b, b_dims, b_cond = generate_random_named_set(ndims, "b", b_param)
+
+    set_str = f"{{ [{a_dims}, {b_dims}] : ({a_cond}) and ({b_cond})}}"
+    if has_params:
+        set_str = "[n, m] -> " + set_str
+
+    result = nisl.make_set(set_str)
+
+    assert (a & b) == result
+
+
+@pytest.mark.parametrize("ndims", [1, 2, 4, 8])
+def test_set_eliminate(ndims: int):
+    a, a_dims, _ = generate_random_named_set(ndims, "a", None)
+    a = a.eliminate(a_dims.split(","))
+
+    assert a == nisl.make_set(f"{{[{a_dims}]}}")
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_set_project_out(ndims: int):
+    a, a_dims, _ = generate_random_named_set(ndims, "a", None)
+    a = a.project_out(a_dims.split(","))
+
+    assert a == nisl.make_set("{[]}")
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_set_dim_max(ndims: int):
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", None)
+
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
+    cond_pw_affs = [
+        isl.PwAff(f"{{ [] -> [{cond.split('<')[2].strip(' ')}] }}")
+        for cond in a_cond.split("and")
+    ]
+
+    for i, name in enumerate(a_dims.split(",")):
+        assert a.dim_max(name)._reconstruct_isl_object() == (cond_pw_affs[i] - 1)
+
+
+@pytest.mark.parametrize("ndims", [2, 4, 8])
+def test_set_dim_min(ndims: int):
+    a, a_dims, a_cond = generate_random_named_set(ndims, "a", None)
+
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
+    cond_pw_affs = [
+        isl.PwAff(f"{{ [] -> [{cond.split('<')[0].strip(' ')}] }}")
+        for cond in a_cond.split("and")
+    ]
+
+    for i, name in enumerate(a_dims.split(",")):
+        assert a.dim_min(name)._reconstruct_isl_object() == cond_pw_affs[i]
+
+# }}}
+
+
+# {{{ maps
 
 def test_map_from_str() -> None:
     m = nisl.make_map(
@@ -211,7 +340,7 @@ def test_map_as_pw_multi_aff():
     m = nisl.make_map(spec)
     m_isl = isl.Map(spec)
 
-    assert m.as_pw_multi_aff()._obj == m_isl.as_pw_multi_aff()
+    assert m.as_pw_multi_aff()._reconstruct_isl_object() == m_isl.as_pw_multi_aff()
 
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
@@ -222,8 +351,9 @@ def test_map_dim_max(ndims_domain: int, ndims_range: int):
         ndims_range, "x_out", None
     )
 
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
     in_upper_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+        isl.PwAff(f"{{ [] -> [{int(cond.split('<')[2].strip(' '))}] }}")
         for cond in in_conds.split("and")
     ]
 
@@ -231,8 +361,9 @@ def test_map_dim_max(ndims_domain: int, ndims_range: int):
         # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
         assert m.dim_max(name)._obj == (in_upper_bound_pw_maffs[i] - 1)
 
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
     out_upper_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+        isl.PwAff(f"{{ [] -> [{int(cond.split('<')[2].strip(' '))}] }}")
         for cond in out_conds.split("and")
     ]
 
@@ -249,18 +380,43 @@ def test_map_dim_min(ndims_domain: int, ndims_range: int):
         ndims_range, "x_out", None
     )
 
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
     in_lower_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+        isl.PwAff(f"{{ [] -> [{int(cond.split('<')[0].strip(' '))}] }}")
         for cond in in_conds.split("and")
     ]
 
     for i, name in enumerate(in_names.split(",")):
         assert m.dim_min(name)._obj == in_lower_bound_pw_maffs[i]
 
+    # unnamed, so use isl.PwAff instead of nisl.make_pw_aff
     out_lower_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+        isl.PwAff(f"{{ [] -> [{int(cond.split('<')[0].strip(' '))}] }}")
         for cond in out_conds.split("and")
     ]
 
     for i, name in enumerate(out_names.split(",")):
         assert m.dim_min(name)._obj == out_lower_bound_pw_maffs[i]
+
+# }}}
+
+
+# {{{ basic{map, set}
+
+def test_basic_map_from_str() -> None:
+    m = nisl.make_basic_map(
+        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+
+    print(m._obj)
+    print(m)
+
+
+def test_basic_map_from_map() -> None:
+    m = isl.BasicMap(
+        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+    named_map = nisl.make_basic_map(m)
+
+    print(named_map._obj)
+    print(named_map)
+
+# }}}
