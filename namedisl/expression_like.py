@@ -27,14 +27,14 @@ THE SOFTWARE.
 
 import operator
 from dataclasses import dataclass, replace
-from typing import final, overload, override
+from typing import final, overload
 
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 import islpy as isl
 
 from .core import (
-    IslExpressionLike,
+    IslExpressionLikeT,
     NamedIslObject,
     _align_and_apply_binary_op,
     _deconstruct_object,
@@ -45,7 +45,7 @@ from .core import (
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 @dataclass(frozen=True, eq=False)
-class _NamedExpressionLike(NamedIslObject[IslExpressionLike]):
+class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
     # FIXME: Self is used here is because _NamedExpressionLike is generic,
     # leading to complaints from basedpyright
     def __add__(self, other: Self | int) -> Self:
@@ -90,15 +90,14 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLike]):
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedPwExpressionLike(_NamedExpressionLike):
+class _NamedPwExpressionLike(_NamedExpressionLike[IslExpressionLikeT]):
     ...
 
 
 @final
 @dataclass(frozen=True, eq=False)
-class Aff(_NamedExpressionLike):
+class Aff(_NamedExpressionLike[isl.Aff]):
     _obj: isl.Aff
-
 
 @overload
 def make_aff(src: str, ctx: isl.Context | None = None) -> Aff:
@@ -121,7 +120,7 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 
 @final
 @dataclass(frozen=True, eq=False)
-class QPolynomial(_NamedExpressionLike):
+class QPolynomial(_NamedExpressionLike[isl.QPolynomial]):
     _obj: isl.QPolynomial
 
 

@@ -30,7 +30,7 @@ from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
-from typing import Generic, TypeAlias, TypeVar
+from typing import Generic, TypeAlias, TypeVar, overload
 
 from constantdict import constantdict
 from typing_extensions import override
@@ -47,25 +47,19 @@ IslObject = IslSetLike | IslExpressionLike | IslMultiExpressionLike
 
 IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
-    isl.Aff,
-    isl.MultiAff,
-    isl.PwAff,
-    isl.QPolynomial,
-    isl.PwQPolynomial
+    bound=IslExpressionLike,
 )
 IslSetLikeT = TypeVar(
     "IslSetLikeT",
-    isl.BasicSet,
-    isl.BasicMap,
-    isl.Set,
-    isl.Map,
+    bound=IslSetLike
 )
 IslMultiExpressionLikeT = TypeVar(
     "IslMultiExpressionLikeT",
-    isl.PwMultiAff,
-    isl.MultiAff
+    bound=IslMultiExpressionLike
 )
-IslObjectT = TypeVar("IslObjectT", IslSetLike, IslExpressionLike)
+IslObjectT = TypeVar("IslObjectT", bound=IslSetLike | IslExpressionLike)
+
+NamedIslObjectT = TypeVar("NamedIslObjectT", bound="NamedIslObject[IslObject]")
 
 NameToDim: TypeAlias = Mapping[str, int]
 
@@ -74,7 +68,7 @@ NameToDim: TypeAlias = Mapping[str, int]
 # alignment
 DimTypeToNames: TypeAlias = Mapping[isl.dim_type, frozenset[str]]
 
-IslObjectPieces: TypeAlias = tuple[IslSetLike | IslExpressionLike, DimTypeToNames]
+IslObjectPieces: TypeAlias = tuple[IslObjectT, DimTypeToNames]
 
 
 __version__ = metadata.version("namedisl")
@@ -173,7 +167,23 @@ def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
     return frozenset(all_dt_names)
 
 
-def _deconstruct_object(obj: IslObjectT) -> IslObjectPieces:
+@overload
+def _deconstruct_object(obj: isl.Map) -> tuple[isl.Set, DimTypeToNames]:
+    ...
+
+
+@overload
+# PwMultiAff doesn't have move_dims, so we're being a bit crooked here.
+def _deconstruct_object(obj: isl.PwMultiAff) -> tuple[isl.Set, DimTypeToNames]:
+    ...
+
+
+@overload
+def _deconstruct_object(obj: IslObjectT) -> tuple[IslObjectT, DimTypeToNames]:
+    ...
+
+
+def _deconstruct_object(obj: IslObjectT) -> tuple[IslObject, DimTypeToNames]:
     dt_to_names: dict[isl.dim_type, frozenset[str]] = {}
 
     if isinstance(obj, IslSetLike | IslMultiExpressionLike):
@@ -305,10 +315,10 @@ def _find_joint_name_to_dim(
 
 
 def _align_obj(
-        named_obj: NamedIslObject[IslObjectT],
+        named_obj: NamedIslObjectT,
         ordering: NameToDim,
         dimtype_to_names: DimTypeToNames
-    ) -> NamedIslObject[IslObjectT]:
+    ) -> NamedIslObjectT:
     new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
 
@@ -354,9 +364,9 @@ def _align_obj(
 
 
 def _align_two(
-        named_obj1: NamedIslObject[IslObjectT],
-        named_obj2: NamedIslObject[IslObjectT]
-    ) -> tuple[NamedIslObject[IslObjectT], ...]:
+        named_obj1: NamedIslObjectT,
+        named_obj2: NamedIslObjectT
+    ) -> tuple[NamedIslObjectT, ...]:
 
     name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1,
                                                             named_obj2)
@@ -368,10 +378,10 @@ def _align_two(
 
 
 def _align_and_apply_binary_op(
-        lhs: NamedIslObject[IslObjectT],
-        rhs: NamedIslObject[IslObjectT],
+        lhs: NamedIslObjectT,
+        rhs: NamedIslObjectT,
         op:  Callable[[IslObjectT, IslObjectT], IslObjectT]
-    ) -> NamedIslObject[IslObjectT]:
+    ) -> NamedIslObjectT:
 
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
@@ -435,7 +445,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
             )
         return None
 
-    def _reconstruct_isl_object(self) -> IslObject:
+    def _reconstruct_isl_object(self) -> IslObjectT:
         """
         Relies on the dimension type ordering in
         :func:`_deconstruct_set_like_object`.
