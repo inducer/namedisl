@@ -99,6 +99,7 @@ class _NamedPwExpressionLike(_NamedExpressionLike[IslExpressionLikeT]):
 class Aff(_NamedExpressionLike[isl.Aff]):
     _obj: isl.Aff
 
+
 @overload
 def make_aff(src: str, ctx: isl.Context | None = None) -> Aff:
     ...
