@@ -38,11 +38,12 @@ from typing_extensions import override
 import islpy as isl
 
 
-IslSetLike = isl.BasicSet | isl.BasicMap | isl.Set | isl.Map
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
 IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
+
 IslExpressionLike = IslBaseExpressionLike | IslPwExpressionLike | IslMultiExpressionLike
+IslSetLike = isl.BasicSet | isl.BasicMap | isl.Set | isl.Map
 IslObject = IslSetLike | IslExpressionLike | IslMultiExpressionLike
 
 IslExpressionLikeT = TypeVar(
@@ -57,7 +58,11 @@ IslMultiExpressionLikeT = TypeVar(
     "IslMultiExpressionLikeT",
     bound=IslMultiExpressionLike
 )
-IslObjectT = TypeVar("IslObjectT", bound=IslSetLike | IslExpressionLike)
+IslPwExpressionLikeT = TypeVar(
+    "IslPwExpressionLikeT",
+    bound=IslPwExpressionLike
+)
+IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 
 NamedIslObjectT = TypeVar("NamedIslObjectT", bound="NamedIslObject[IslObject]")
 
@@ -110,47 +115,67 @@ def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     return obj, constantdict(name_to_dim)
 
 
+@overload
+def _restore_names(obj: isl.PwAff, name_to_dim: NameToDim) -> isl.PwAff:
+    ...
+
+
+@overload
+def _restore_names(obj: IslSetLikeT, name_to_dim: NameToDim) -> IslSetLikeT:
+    ...
+
+
+@overload
+def _restore_names(obj: IslPwExpressionLikeT, name_to_dim: NameToDim) -> IslPwExpressionLikeT:
+    ...
+
+
 def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
-    if isinstance(obj, isl.PwAff):
-        pwaff_obj = obj.move_dims(
+    restored_obj = obj.copy()
+    if isinstance(restored_obj, isl.PwAff):
+        # input dimensions cannot be renamed for isl.PwAff, so we first move
+        # input dims to the parameter space, rename then move back
+        restored_obj = restored_obj.move_dims(
             isl.dim_type.param,
             0,
             isl.dim_type.in_,
             0,
-            obj.dim(isl.dim_type.in_)
+            restored_obj.dim(isl.dim_type.in_)
         )
 
         for name, dim in name_to_dim.items():
-            pwaff_obj = pwaff_obj.set_dim_name(
+            restored_obj = restored_obj.set_dim_name(
                 isl.dim_type.param,
                 dim,
                 name
             )
 
-        pwaff_obj = pwaff_obj.get_pw_aff_list().get_at(0)
-
-        pwaff_obj = pwaff_obj.move_dims(
+        restored_obj = restored_obj.get_pw_aff_list().get_at(0)
+        restored_obj = restored_obj.move_dims(
             isl.dim_type.in_,
             0,
             isl.dim_type.param,
             0,
-            pwaff_obj.dim(isl.dim_type.param)
+            restored_obj.dim(isl.dim_type.param)
         )
 
-        return pwaff_obj
+        return restored_obj
 
-    if isinstance(obj, IslSetLike):
+    if isinstance(restored_obj, IslSetLike):
         dt_to_restore = isl.dim_type.set
     else:
         dt_to_restore = isl.dim_type.in_
 
     for name, dim in name_to_dim.items():
-        obj = obj.set_dim_name(dt_to_restore, dim, name)
+        restored_obj = restored_obj.set_dim_name(dt_to_restore, dim, name)
 
-    return obj
+    if isinstance(restored_obj, isl.UnionPwAff | isl.UnionPwMultiAff):
+        raise NotImplementedError
+
+    return restored_obj
 
 
-def _get_dim_names(obj: IslObjectT, dt: isl.dim_type) -> frozenset[str]:
+def _get_dim_names(obj: IslObject, dt: isl.dim_type) -> frozenset[str]:
     all_dt_names: list[str] = []
     for dim in range(obj.dim(dt)):
 
@@ -187,57 +212,55 @@ def _deconstruct_object(obj: IslObjectT) -> tuple[IslObject, DimTypeToNames]:
     dt_to_names: dict[isl.dim_type, frozenset[str]] = {}
 
     if isinstance(obj, IslSetLike | IslMultiExpressionLike):
-        setlike_obj = obj
+        decon_obj = obj
         dt_to_names = dict.fromkeys(
             [isl.dim_type.in_, isl.dim_type.param], frozenset()
         )
 
         # NOTE: isl.PwMultiAff.move_dims does not exist, represent as map
         # internally
-        if isinstance(setlike_obj, IslMultiExpressionLike):
-            setlike_obj = setlike_obj.as_map()
+        if isinstance(decon_obj, IslMultiExpressionLike):
+            decon_obj = decon_obj.as_map()
 
         for dt in dt_to_names:
-            dt_to_names[dt] = _get_dim_names(setlike_obj, dt)
+            dt_to_names[dt] = _get_dim_names(decon_obj, dt)
             if dt_to_names[dt]:
-                setlike_obj = setlike_obj.move_dims(
+                decon_obj = decon_obj.move_dims(
                     isl.dim_type.set,
-                    setlike_obj.dim(isl.dim_type.set),
+                    decon_obj.dim(isl.dim_type.set),
                     dt,
                     0,
-                    setlike_obj.dim(dt)
+                    decon_obj.dim(dt)
                 )
 
-        setlike_obj = (
-            setlike_obj.range()
-            if isinstance(setlike_obj, isl.Map | isl.BasicMap)
-            else setlike_obj
+        decon_obj = (
+            decon_obj.range()
+            if isinstance(decon_obj, isl.Map | isl.BasicMap)
+            else decon_obj
         )
 
-        setlike_obj = (
-            isl.Set.from_basic_set(setlike_obj)
-            if isinstance(setlike_obj, isl.BasicSet)
-            else setlike_obj
+        decon_obj = (
+            isl.Set.from_basic_set(decon_obj)
+            if isinstance(decon_obj, isl.BasicSet)
+            else decon_obj
         )
-
-        return setlike_obj, constantdict(dt_to_names)
 
     else:
-        expr_obj = obj
+        decon_obj = obj
 
         dt_to_names = dict.fromkeys([isl.dim_type.param], frozenset())
-        dt_to_names[isl.dim_type.param] = _get_dim_names(expr_obj,
+        dt_to_names[isl.dim_type.param] = _get_dim_names(decon_obj,
                                                          isl.dim_type.param)
 
-        expr_obj = expr_obj.move_dims(
+        decon_obj = decon_obj.move_dims(
             isl.dim_type.in_,
-            expr_obj.dim(isl.dim_type.in_),
+            decon_obj.dim(isl.dim_type.in_),
             isl.dim_type.param,
             0,
-            expr_obj.dim(isl.dim_type.param)
+            decon_obj.dim(isl.dim_type.param)
         )
 
-        return expr_obj, constantdict(dt_to_names)
+    return decon_obj, constantdict(dt_to_names)
 
 
 def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
