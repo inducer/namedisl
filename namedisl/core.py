@@ -423,6 +423,10 @@ class NamedIslObject(Generic[IslObjectT], ABC):
     _dimtype_to_names: DimTypeToNames
 
     @property
+    def names(self) -> frozenset[str]:
+        return frozenset(self._name_to_dim.keys())
+
+    @property
     def _has_inputs(self) -> bool:
         return (
             isl.dim_type.in_ in self._dimtype_to_names
