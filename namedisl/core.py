@@ -302,14 +302,14 @@ def _find_joint_name_to_dim(
     :arg:`obj2` within each dimension-type chunk. This ordering is used in
     alignment before performing operations between two set-like objects.
     """
-    obj1_inp_names = obj1._input_names
-    obj1_param_names = obj1._parameter_names
+    obj1_inp_names = obj1.input_names
+    obj1_param_names = obj1.parameter_names
     obj1_set_names = (
         frozenset(obj1._name_to_dim.keys()) - (obj1_inp_names | obj1_param_names)
     )
 
-    obj2_inp_names = obj2._input_names
-    obj2_param_names = obj2._parameter_names
+    obj2_inp_names = obj2.input_names
+    obj2_param_names = obj2.parameter_names
     obj2_set_names = (
         frozenset(obj2._name_to_dim.keys()) - (obj2_inp_names | obj2_param_names)
     )
@@ -435,7 +435,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
         )
 
     @property
-    def _input_names(self) -> frozenset[str]:
+    def input_names(self) -> frozenset[str]:
         if self._has_inputs:
             return self._dimtype_to_names[isl.dim_type.in_]
         return frozenset()
@@ -458,7 +458,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
         )
 
     @property
-    def _parameter_names(self) -> frozenset[str]:
+    def parameter_names(self) -> frozenset[str]:
         if self._has_params:
             return self._dimtype_to_names[isl.dim_type.param]
         return frozenset()
@@ -493,7 +493,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
             param_start = self._parameter_dim_start
             obj = obj.move_dims(
                 isl.dim_type.param, 0,
-                internal_dim, param_start, len(self._parameter_names)
+                internal_dim, param_start, len(self.parameter_names)
             )
 
         if self._has_inputs:
@@ -511,7 +511,7 @@ class NamedIslObject(Generic[IslObjectT], ABC):
             inp_start = self._input_dim_start
             obj = obj.move_dims(
                 isl.dim_type.in_, 0,
-                internal_dim, inp_start, len(self._input_names)
+                internal_dim, inp_start, len(self.input_names)
             )
 
         return obj
