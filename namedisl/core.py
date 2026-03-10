@@ -414,10 +414,10 @@ def _align_two(
 
 
 def _align_and_apply_binary_op(
-        lhs: NamedIslObjectT,
-        rhs: NamedIslObjectT,
+        lhs: NamedIslObject[IslObjectT],
+        rhs: NamedIslObject[IslObjectT],
         op:  Callable[[IslObjectT, IslObjectT], IslObjectT]
-    ) -> NamedIslObjectT:
+    ) -> NamedIslObject[IslObjectT]:
 
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
