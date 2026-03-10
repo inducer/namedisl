@@ -482,7 +482,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         return (
             isl.dim_type.in_ in self._dimtype_to_names
             and
-            len(self._dimtype_to_names[isl.dim_type.in_]) > 0
+            bool(self._dimtype_to_names[isl.dim_type.in_])
         )
 
     @property
@@ -505,7 +505,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         return (
             isl.dim_type.param in self._dimtype_to_names
             and
-            len(self._dimtype_to_names[isl.dim_type.param]) > 0
+            bool(self._dimtype_to_names[isl.dim_type.param])
         )
 
     @property
