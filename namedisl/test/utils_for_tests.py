@@ -25,6 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from collections.abc import Sequence
 from random import randint
 
 import islpy as isl
@@ -36,13 +37,19 @@ NamedSetReturnT = tuple[nisl.Set, str, str]
 NamedMapReturnT = tuple[nisl.Map, NamedSetReturnT, NamedSetReturnT]
 
 
+def get_name_sequence(n: int, dim_prefix: str) -> tuple[Sequence[str], str]:
+    dims = [f"{dim_prefix}_{i}" for i in range(n)]
+    dim_str = ",".join(d for d in dims)
+
+    return dims, dim_str
+
+
 def generate_random_named_set(
         ndims: int,
         dim_prefix: str,
         param: str | None
     ) -> NamedSetReturnT:
-    dims = [f"{dim_prefix}_{i}" for i in range(ndims)]
-    dim_str = ",".join(d for d in dims)
+    dims, dim_str = get_name_sequence(ndims, dim_prefix)
 
     if param is not None:
         conditions = f"0 <= {dim_str} < {param}"

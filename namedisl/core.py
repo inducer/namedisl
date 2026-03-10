@@ -26,16 +26,24 @@ THE SOFTWARE.
 """
 
 import re
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
 from typing import Generic, TypeAlias, TypeVar, overload
 
 from constantdict import constantdict
-from typing_extensions import override
+from typing_extensions import Self, override
 
 import islpy as isl
+ISL_DIM_TYPES = [
+    isl.dim_type.out,
+    isl.dim_type.in_,
+    isl.dim_type.set,
+    isl.dim_type.param
+]
+
+from namedisl.tags import _TaggedName
 
 
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
@@ -421,6 +429,44 @@ class NamedIslObject(Generic[IslObjectT], ABC):
 
     # used to reconstruct ISL object
     _dimtype_to_names: DimTypeToNames
+
+    def add_names(self, tagged_names_to_add: Sequence[_TaggedName]) -> Self:
+
+        if isinstance(self._obj, isl.PwMultiAff):
+            raise NotImplementedError
+
+        new_obj = self._obj
+        new_name_to_dim = dict(self._name_to_dim)
+        new_dt_to_names: Mapping[isl.dim_type, frozenset[str]] = dict.fromkeys(
+            ISL_DIM_TYPES, frozenset()
+        )
+
+        for tagged_name in tagged_names_to_add:
+            name = tagged_name.name
+            dt = tagged_name._isl_dim_type
+
+            new_dt_to_names[dt] |= frozenset({name})
+
+        # get rid of unused keys
+        new_dt_to_names = {
+            dt : new_dt_to_names[dt]
+            for dt in new_dt_to_names if new_dt_to_names[dt]
+        }
+
+        for dt in new_dt_to_names:
+            if dt == isl.dim_type.out or dt == isl.dim_type.set:
+                start = 0
+            elif dt == isl.dim_type.in_:
+                start = self._input_dim_start
+            else:
+                start = self._parameter_dim_start
+
+            new_obj = new_obj.insert_dims(dt, start, len(new_dt_to_names[dt]))
+
+        return type(self)(
+            new_obj,
+            constantdict(new_name_to_dim),
+            constantdict(new_dt_to_names))
 
     @property
     def names(self) -> frozenset[str]:

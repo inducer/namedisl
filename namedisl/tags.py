@@ -25,34 +25,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+from dataclasses import dataclass
+from pytools.tag import Tag
 
-from .utils_for_tests import generate_random_named_set, get_name_sequence
+from islpy import dim_type
 
 
-@pytest.mark.parametrize("ndims", [2, 3, 4, 5])
-@pytest.mark.parametrize("has_params", [True, False])
-def test_names(ndims: int, has_params: bool):
-    s_param = "n" if has_params else None
-    s, s_dims, _ = generate_random_named_set(ndims, "s", s_param)
-    names = frozenset(s_dims.split(","))
+@dataclass(frozen=True)
+class _TaggedName(Tag):
+    name: str
+    _isl_dim_type: dim_type
 
-    if s_param:
-        names = names | frozenset({s_param})
 
-    assert s.names == names
+@dataclass(frozen=True)
+class InputName(_TaggedName):
+    _isl_dim_type: dim_type = dim_type.in_
 
-@pytest.mark.parametrize("ndims", [2, 3, 4, 5])
-@pytest.mark.parametrize("n_names_to_add", [2, 3, 4, 5])
-def test_add_names(
-        ndims: int,
-        n_names_to_add: int
-    ):
 
-    s, s_dims, _ = generate_random_named_set(ndims, "s", None)
-    new_set_names, _ = get_name_sequence(n_names_to_add, "set")
+@dataclass(frozen=True)
+class OutputName(_TaggedName):
+    _isl_dim_type: dim_type = dim_type.out
 
-    from namedisl.tags import SetName
-    s = s.add_names([SetName(name) for name in new_set_names])
 
-    print(s)
+@dataclass(frozen=True)
+class ParameterName(_TaggedName):
+    _isl_dim_type: dim_type = dim_type.param
+
+
+@dataclass(frozen=True)
+class SetName(_TaggedName):
+    _isl_dim_type: dim_type = dim_type.set

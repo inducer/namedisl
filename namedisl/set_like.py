@@ -191,6 +191,13 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 @final
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike):
+    @override
+    def add_input_names(self, names_to_add: Sequence[str]) -> BasicSet:
+        raise NotImplementedError
+
+    @override
+    def add_output_names(self, names_to_add: Sequence[str]) -> BasicSet:
+        raise NotImplementedError
 
     @override
     def _reconstruct_isl_object(self) -> isl.BasicSet:
