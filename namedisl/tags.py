@@ -26,6 +26,7 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
+
 from pytools.tag import Tag
 
 from islpy import dim_type

@@ -25,12 +25,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Sequence
 from random import randint
+from typing import TYPE_CHECKING
 
 import islpy as isl
 
 import namedisl as nisl
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 NamedSetReturnT = tuple[nisl.Set, str, str]

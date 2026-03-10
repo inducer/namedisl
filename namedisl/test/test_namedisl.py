@@ -42,6 +42,7 @@ def test_names(ndims: int, has_params: bool):
 
     assert s.names == names
 
+
 @pytest.mark.parametrize("ndims", [2, 3, 4, 5])
 @pytest.mark.parametrize("n_names_to_add", [2, 3, 4, 5])
 def test_add_names(
@@ -49,7 +50,7 @@ def test_add_names(
         n_names_to_add: int
     ):
 
-    s, s_dims, _ = generate_random_named_set(ndims, "s", None)
+    s, _s_dims, _ = generate_random_named_set(ndims, "s", None)
     new_set_names, _ = get_name_sequence(n_names_to_add, "set")
 
     from namedisl.tags import SetName

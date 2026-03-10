@@ -26,16 +26,18 @@ THE SOFTWARE.
 """
 
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
-from typing import Generic, TypeAlias, TypeVar, overload
+from typing import TYPE_CHECKING, Generic, TypeAlias, TypeVar, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
 
 import islpy as isl
+
+
 ISL_DIM_TYPES = [
     isl.dim_type.out,
     isl.dim_type.in_,
@@ -43,7 +45,9 @@ ISL_DIM_TYPES = [
     isl.dim_type.param
 ]
 
-from namedisl.tags import _TaggedName
+
+if TYPE_CHECKING:
+    from namedisl.tags import _TaggedName
 
 
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
@@ -134,7 +138,10 @@ def _restore_names(obj: IslSetLikeT, name_to_dim: NameToDim) -> IslSetLikeT:
 
 
 @overload
-def _restore_names(obj: IslPwExpressionLikeT, name_to_dim: NameToDim) -> IslPwExpressionLikeT:
+def _restore_names(
+            obj: IslPwExpressionLikeT,
+            name_to_dim: NameToDim
+        ) -> IslPwExpressionLikeT:
     ...
 
 
@@ -159,15 +166,13 @@ def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
             )
 
         restored_obj = restored_obj.get_pw_aff_list().get_at(0)
-        restored_obj = restored_obj.move_dims(
+        return restored_obj.move_dims(
             isl.dim_type.in_,
             0,
             isl.dim_type.param,
             0,
             restored_obj.dim(isl.dim_type.param)
         )
-
-        return restored_obj
 
     if isinstance(restored_obj, IslSetLike):
         dt_to_restore = isl.dim_type.set
@@ -423,7 +428,7 @@ def _align_and_apply_binary_op(
 
 
 @dataclass(frozen=True, eq=False)
-class NamedIslObject(Generic[IslObjectT], ABC):
+class NamedIslObject(ABC, Generic[IslObjectT]):
     _obj: IslObjectT
     _name_to_dim: NameToDim
 
@@ -449,12 +454,12 @@ class NamedIslObject(Generic[IslObjectT], ABC):
 
         # get rid of unused keys
         new_dt_to_names = {
-            dt : new_dt_to_names[dt]
+            dt: new_dt_to_names[dt]
             for dt in new_dt_to_names if new_dt_to_names[dt]
         }
 
         for dt in new_dt_to_names:
-            if dt == isl.dim_type.out or dt == isl.dim_type.set:
+            if dt in (isl.dim_type.out, isl.dim_type.set):
                 start = 0
             elif dt == isl.dim_type.in_:
                 start = self._input_dim_start

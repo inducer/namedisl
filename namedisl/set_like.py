@@ -177,7 +177,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     @override
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            raise ValueError("Objects are not of the same type")
+            raise TypeError("Objects are not of the same type")
 
         aligned_self, aligned_other = _align_two(self, other)
 

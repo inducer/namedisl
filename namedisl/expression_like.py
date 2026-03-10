@@ -219,7 +219,6 @@ class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
     deconstruction steps backwards (set -> map -> multi-expression). As such,
     reconstruction is special-cased for each subclass.
     """
-    ...
 
 
 @final
