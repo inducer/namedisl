@@ -47,6 +47,7 @@ from .set_like import (
     make_basic_map,
     make_basic_set,
     make_map,
+    make_map_from_domain_and_range,
     make_set,
 )
 
@@ -66,6 +67,7 @@ __all__ = [
     "make_basic_map",
     "make_basic_set",
     "make_map",
+    "make_map_from_domain_and_range",
     "make_multi_aff",
     "make_pw_aff",
     "make_pw_multi_aff",

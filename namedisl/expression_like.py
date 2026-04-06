@@ -38,6 +38,7 @@ from .core import (
     NamedIslObject,
     _align_and_apply_binary_op,
     _deconstruct_object,
+    _normalize_dimtype_to_names,
     _strip_names,
 )
 
@@ -115,6 +116,7 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 
     aff_obj, dimtype_to_names = _deconstruct_object(obj)
     aff_obj, name_to_dim = _strip_names(aff_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(aff_obj, dimtype_to_names)
 
     return Aff(aff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
@@ -147,6 +149,7 @@ def make_qpolynomial(
 
     qp_obj, dimtype_to_names = _deconstruct_object(obj)
     qp_obj, name_to_dim = _strip_names(qp_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(qp_obj, dimtype_to_names)
 
     return QPolynomial(qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
@@ -172,6 +175,7 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 
     pwaff_obj, dimtype_to_names = _deconstruct_object(obj)
     pwaff_obj, name_to_dim = _strip_names(pwaff_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(pwaff_obj, dimtype_to_names)
 
     return PwAff(pwaff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
@@ -201,6 +205,7 @@ def make_pw_qpolynomial(
 
     pw_qp_obj, dimtype_to_names = _deconstruct_object(obj)
     pw_qp_obj, name_to_dim = _strip_names(pw_qp_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(pw_qp_obj, dimtype_to_names)
 
     return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
@@ -224,6 +229,9 @@ class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
 @final
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike):
+    def get_at(self, dim: int) -> PwAff:
+        return make_pw_aff(self._reconstruct_isl_object().get_at(dim))
+
     @override
     def _reconstruct_isl_object(self) -> isl.PwMultiAff:
         # deconstruction: isl.PwMultiAff -> isl.Map -> isl.Set
@@ -250,6 +258,7 @@ def make_pw_multi_aff(
 
     pw_maff_obj, dimtype_to_names = _deconstruct_object(obj)
     pw_maff_obj, name_to_dim = _strip_names(pw_maff_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(pw_maff_obj, dimtype_to_names)
 
     return PwMultiAff(pw_maff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
@@ -257,6 +266,9 @@ def make_pw_multi_aff(
 @final
 @dataclass(frozen=True, eq=False)
 class MultiAff(NamedIslObject[isl.Set]):
+    def get_at(self, dim: int) -> Aff:
+        return make_aff(self._reconstruct_isl_object().get_at(dim))
+
     @override
     def _reconstruct_isl_object(self) -> isl.MultiAff:
         # deconstruction: isl.MultiAff -> isl.Map -> isl.Set
@@ -280,6 +292,7 @@ def make_multi_aff(
 
     maff_obj, dimtype_to_names = _deconstruct_object(obj)
     maff_obj, name_to_dim = _strip_names(maff_obj)
+    dimtype_to_names = _normalize_dimtype_to_names(maff_obj, dimtype_to_names)
 
     return MultiAff(maff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 

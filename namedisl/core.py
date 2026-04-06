@@ -98,6 +98,7 @@ __all__ = [
     "_align_two",
     "_deconstruct_object",
     "_find_contiguous_dim_chunks",
+    "_normalize_dimtype_to_names",
     "_restore_names",
     "_strip_names",
 ]
@@ -105,26 +106,114 @@ __all__ = [
 
 def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
     name_to_dim: dict[str, int] = {}
+    first_occurrence_dim_by_base_name: dict[str, int] = {}
+    seen_occurrences_by_base_name: dict[str, int] = {}
 
     dt_to_strip = (
         isl.dim_type.set if isinstance(obj, IslSetLike) else isl.dim_type.in_
     )
 
-    for i in range(obj.dim(dt_to_strip)):
-        if isinstance(obj, isl.QPolynomial | isl.PwQPolynomial):
-            name = obj.space.get_dim_name(dt_to_strip, i)
+    stripped_obj = obj.copy()
+    raw_names: list[str] = []
+
+    for i in range(stripped_obj.dim(dt_to_strip)):
+        if isinstance(stripped_obj, isl.QPolynomial | isl.PwQPolynomial):
+            name = stripped_obj.space.get_dim_name(dt_to_strip, i)
         else:
-            name = obj.get_dim_name(dt_to_strip, i)
+            name = stripped_obj.get_dim_name(dt_to_strip, i)
 
         if name is None:
             raise ValueError("unnamed dimension found")
 
-        if name in name_to_dim:
-            raise ValueError(f"non-unique dim name: {name}")
+        raw_names.append(name)
 
-        name_to_dim[name] = i
+    logical_name_counts: dict[str, int] = {}
+    for name in raw_names:
+        logical_name = name.rstrip("'")
+        logical_name_counts[logical_name] = logical_name_counts.get(logical_name, 0) + 1
 
-    return obj, constantdict(name_to_dim)
+    for i, raw_name in enumerate(raw_names):
+        logical_name = raw_name.rstrip("'")
+        occurrence_index = seen_occurrences_by_base_name.get(logical_name, 0)
+        canonical_name = logical_name + "'" * occurrence_index
+
+        if raw_name != canonical_name:
+            stripped_obj = stripped_obj.set_dim_name(
+                dt_to_strip,
+                i,
+                canonical_name
+            )
+
+        if occurrence_index > 0:
+            first_dim = first_occurrence_dim_by_base_name[logical_name]
+            stripped_obj = stripped_obj.equate(
+                dt_to_strip,
+                first_dim,
+                dt_to_strip,
+                i
+            )
+
+        if occurrence_index == 0:
+            first_occurrence_dim_by_base_name[logical_name] = i
+
+        seen_occurrences_by_base_name[logical_name] = occurrence_index + 1
+        name_to_dim[canonical_name] = i
+
+    return stripped_obj, constantdict(name_to_dim)
+
+
+def _get_obj_dim_name(obj: IslObject, dt: isl.dim_type, dim: int) -> str:
+    if isinstance(obj, isl.QPolynomial | isl.PwQPolynomial):
+        name = obj.space.get_dim_name(dt, dim)
+    else:
+        name = obj.get_dim_name(dt, dim)
+
+    if name is None:
+        raise ValueError("unnamed dimension found")
+
+    return name
+
+
+def _normalize_dimtype_to_names(
+        obj: IslObject,
+        dimtype_to_names: DimTypeToNames
+    ) -> DimTypeToNames:
+    if isinstance(obj, IslSetLike | IslMultiExpressionLike):
+        dim_type = isl.dim_type.set
+        total_dims = obj.dim(dim_type)
+        n_in = len(dimtype_to_names.get(isl.dim_type.in_, frozenset()))
+        n_param = len(dimtype_to_names.get(isl.dim_type.param, frozenset()))
+
+        new_dimtype_to_names: dict[isl.dim_type, frozenset[str]] = {}
+
+        if n_in:
+            start = total_dims - n_param - n_in
+            new_dimtype_to_names[isl.dim_type.in_] = frozenset(
+                _get_obj_dim_name(obj, dim_type, dim)
+                for dim in range(start, start + n_in)
+            )
+
+        if n_param:
+            start = total_dims - n_param
+            new_dimtype_to_names[isl.dim_type.param] = frozenset(
+                _get_obj_dim_name(obj, dim_type, dim)
+                for dim in range(start, start + n_param)
+            )
+
+        return constantdict(new_dimtype_to_names)
+
+    total_dims = obj.dim(isl.dim_type.in_)
+    n_param = len(dimtype_to_names.get(isl.dim_type.param, frozenset()))
+    if not n_param:
+        return dimtype_to_names
+
+    start = total_dims - n_param
+    return constantdict({
+        isl.dim_type.param: frozenset(
+            _get_obj_dim_name(obj, isl.dim_type.in_, dim)
+            for dim in range(start, start + n_param)
+        )
+    })
 
 
 @overload
@@ -384,8 +473,8 @@ def _align_obj(
             )
 
         else:
-            old_dim = new_isl_obj.dim(isl.dim_type.set)
-            new_isl_obj = new_isl_obj.insert_dims(isl.dim_type.set, target_dim, 1)
+            old_dim = new_isl_obj.dim(target_dt)
+            new_isl_obj = new_isl_obj.insert_dims(target_dt, target_dim, 1)
 
         # track side effects of inserting/swapping dimensions
         for n, d in list(running_name_to_dim.items()):
@@ -395,6 +484,8 @@ def _align_obj(
                 running_name_to_dim[n] = d + 1
 
         running_name_to_dim[name] = target_dim
+
+    new_isl_obj = _restore_names(new_isl_obj, ordering)
 
     return type(named_obj)(new_isl_obj, ordering, dimtype_to_names)
 
@@ -476,6 +567,15 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
     @property
     def names(self) -> frozenset[str]:
         return frozenset(self._name_to_dim.keys())
+
+    def get_space(self) -> isl.Space:
+        return self._reconstruct_isl_object().get_space()
+
+    def dim(self, dim_type: isl.dim_type) -> int:
+        return self._reconstruct_isl_object().dim(dim_type)
+
+    def get_dim_name(self, dim_type: isl.dim_type, dim: int) -> str | None:
+        return self._reconstruct_isl_object().get_dim_name(dim_type, dim)
 
     @property
     def _has_inputs(self) -> bool:
@@ -566,6 +666,9 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
             )
 
         return obj
+
+    def __getattr__(self, name: str):
+        return getattr(self._reconstruct_isl_object(), name)
 
     @override
     def __str__(self) -> str:

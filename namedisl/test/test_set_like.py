@@ -30,6 +30,9 @@ import pytest
 import islpy as isl
 
 import namedisl as nisl
+from namedisl.core import _align_two
+from loopy.symbolic import pwaff_from_expr
+from pymbolic import var
 from .utils_for_tests import generate_random_named_map, generate_random_named_set
 
 
@@ -112,6 +115,24 @@ def test_set_intersection(ndims: int, has_params: bool):
     result = nisl.make_set(set_str)
 
     assert (a & b) == result
+
+
+def test_basic_set_intersection_promotes_to_set() -> None:
+    basic = nisl.make_basic_set(
+        "{ [ii_s, ji_s, k_s] : 0 <= ii_s <= 4 and 0 <= ji_s <= 4 and k_s = 0 }"
+    )
+    footprint = nisl.make_set(
+        "{ [ii_s, ji_s, k_s] : "
+        "(0 <= ii_s <= 4 and ji_s = 2 and k_s = 0) or "
+        "(ii_s = 2 and 0 <= ji_s <= 4 and k_s = 0) }"
+    )
+
+    result = basic & footprint
+
+    assert isinstance(result, nisl.Set)
+    reconstructed = result._reconstruct_isl_object()
+    assert isinstance(reconstructed, isl.Set)
+    assert reconstructed.n_basic_set() > 1
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -299,6 +320,164 @@ def test_map_intersection(ndims_domain: int, ndims_range: int, has_params: bool)
     result_map = nisl.make_map(result_str)
 
     assert (x & y) == result_map
+
+
+def test_map_alignment_syncs_internal_output_positions_and_names() -> None:
+    lhs = nisl.make_map("{ [i] -> [x] }")
+    rhs = nisl.make_map("{ [i] -> [y, x] }")
+
+    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
+
+    lhs_names = [
+        aligned_lhs._obj.get_dim_name(isl.dim_type.set, dim)
+        for dim in range(aligned_lhs._obj.dim(isl.dim_type.set))
+    ]
+    rhs_names = [
+        aligned_rhs._obj.get_dim_name(isl.dim_type.set, dim)
+        for dim in range(aligned_rhs._obj.dim(isl.dim_type.set))
+    ]
+
+    assert lhs_names == ["x", "y", "i"]
+    assert rhs_names == ["x", "y", "i"]
+
+
+def test_map_alignment_syncs_internal_input_and_parameter_positions_and_names() -> None:
+    lhs = nisl.make_map("[n] -> { [i] -> [x] }")
+    rhs = nisl.make_map("[m, n] -> { [j, i] -> [x] }")
+
+    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
+
+    lhs_names = [
+        aligned_lhs._obj.get_dim_name(isl.dim_type.set, dim)
+        for dim in range(aligned_lhs._obj.dim(isl.dim_type.set))
+    ]
+    rhs_names = [
+        aligned_rhs._obj.get_dim_name(isl.dim_type.set, dim)
+        for dim in range(aligned_rhs._obj.dim(isl.dim_type.set))
+    ]
+
+    assert lhs_names == ["x", "i", "j", "m", "n"]
+    assert rhs_names == ["x", "i", "j", "m", "n"]
+
+
+def test_map_apply_range_for_compute_a_tile_usage_map() -> None:
+    bm = 32
+    bk = 16
+
+    compute_map = nisl.make_map(f"""{{
+        [is, ks] -> [ii_s, io, ki_s, ko] :
+            is = io * {bm} + ii_s and
+            ks = ko * {bk} + ki_s
+    }}""")
+
+    usage_domain = nisl.make_set(
+        "{ [i, j, k, io, jo, ko, ii, ji, ki, ii_s, ji_s, ki_s] }"
+    )
+    global_usage_map = nisl.make_map_from_domain_and_range(
+        usage_domain,
+        nisl.make_set("{ [is, ks] }")
+    )
+
+    local_usage_mpwaff = isl.MultiPwAff.zero(global_usage_map.get_space())
+    for idx, expr in enumerate([var("i"), var("k")]):
+        local_space = local_usage_mpwaff.get_at(idx).get_space().domain()
+        local_usage_mpwaff = local_usage_mpwaff.set_pw_aff(
+            idx,
+            pwaff_from_expr(local_space, expr)
+        )
+
+    local_usage_map = nisl.make_map(local_usage_mpwaff.as_map())
+    local_usage_map = local_usage_map.intersect_domain(
+        nisl.make_basic_set(
+            "{ [i, j, k, io, jo, ko, ii, ji, ki, ii_s, ji_s, ki_s] }"
+        )
+    )
+
+    global_usage_map = global_usage_map | local_usage_map
+    composed = global_usage_map.apply_range(compute_map)
+
+    assert frozenset(
+        name.rstrip("'") for name in composed.input_names
+    ) == frozenset(
+        {"i", "ii", "ii_s", "io", "j", "ji", "ji_s", "jo",
+         "k", "ki", "ki_s", "ko"}
+    )
+    assert composed.range() == nisl.make_set("{ [ii_s, io, ki_s, ko] }")
+
+
+def test_map_apply_domain_accepts_logically_equal_ticked_interface_names() -> None:
+    lhs = nisl.make_map("{ [x] -> [y] }").apply_range(
+        nisl.make_map("{ [y] -> [x] }")
+    )
+    rhs = nisl.make_map("{ [p] -> [x] }")
+
+    result = lhs.apply_domain(rhs)
+
+    assert result.range() == nisl.make_set("{ [x] }")
+
+
+def test_map_domain_canonicalizes_single_remaining_ticked_name() -> None:
+    m = nisl.make_map("{ [x] -> [y] }").apply_range(
+        nisl.make_map("{ [y] -> [x] }")
+    )
+
+    domain = m.domain()
+
+    assert domain == nisl.make_set("{ [x] }")
+    assert domain.names == frozenset({"x"})
+
+
+def test_map_empty_from_space_preserves_names_and_is_empty() -> None:
+    space = isl.Space.create_from_names(
+        isl.DEFAULT_CONTEXT,
+        params=["n"],
+        in_=["i", "j"],
+        out=["x", "y"]
+    )
+
+    m = nisl.Map.empty(space)
+
+    assert m._reconstruct_isl_object().is_empty()
+    assert m.input_names == frozenset({"i", "j"})
+    assert m.range() == nisl.make_set("[n] -> { [x, y] : false }")
+
+
+def test_basic_map_empty_from_space_preserves_names_and_is_empty() -> None:
+    space = isl.Space.create_from_names(
+        isl.DEFAULT_CONTEXT,
+        in_=["i"],
+        out=["x"]
+    )
+
+    m = nisl.BasicMap.empty(space)
+
+    assert m._reconstruct_isl_object().is_empty()
+    assert m.input_names == frozenset({"i"})
+    assert m.range() == nisl.make_basic_set("{ [x] : 1 = 0 }")
+
+
+def test_map_empty_matches_existing_named_space() -> None:
+    template = nisl.make_map("[n] -> { [i, k] -> [ii_s, io, ki_s, ko] }")
+
+    empty_map = nisl.Map.empty(template.get_space())
+
+    assert empty_map._reconstruct_isl_object().is_empty()
+    assert empty_map.input_names == template.input_names
+    assert empty_map.range()._reconstruct_isl_object().is_empty()
+    assert empty_map.range().names == template.range().names
+
+
+def test_empty_map_is_identity_for_union() -> None:
+    space = isl.Space.create_from_names(
+        isl.DEFAULT_CONTEXT,
+        in_=["i"],
+        out=["x"]
+    )
+    empty_map = nisl.Map.empty(space)
+    nonempty_map = nisl.make_map("{ [i] -> [x] }")
+
+    assert (empty_map | nonempty_map) == nonempty_map
+    assert (nonempty_map | empty_map) == nonempty_map
 
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
