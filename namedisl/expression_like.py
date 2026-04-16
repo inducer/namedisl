@@ -37,9 +37,7 @@ from .core import (
     IslExpressionLikeT,
     NamedIslObject,
     _align_and_apply_binary_op,
-    _deconstruct_object,
-    _normalize_dimtype_to_names,
-    _strip_names,
+    _make_named_object_pieces,
 )
 
 
@@ -83,7 +81,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
         return _align_and_apply_binary_op(self, other, operator.mul)
 
     def is_zero(self) -> bool:
-        return self._reconstruct_isl_object().is_zero()
+        return bool(self._obj.is_zero())  # pyright: ignore[reportAttributeAccessIssue, reportUnknownArgumentType, reportUnknownMemberType]
 
     @override
     def __eq__(self, other: object) -> bool:
@@ -100,6 +98,12 @@ class _NamedPwExpressionLike(_NamedExpressionLike[IslExpressionLikeT]):
 class Aff(_NamedExpressionLike[isl.Aff]):
     _obj: isl.Aff
 
+    @override
+    def _reconstruct_isl_object(self) -> isl.Aff:
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.Aff)
+        return obj
+
 
 @overload
 def make_aff(src: str, ctx: isl.Context | None = None) -> Aff:
@@ -113,11 +117,8 @@ def make_aff(src: isl.Aff) -> Aff:
 
 def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
     obj = isl.Aff(src, ctx) if isinstance(src, str) else src
-
-    aff_obj, dimtype_to_names = _deconstruct_object(obj)
-    aff_obj, name_to_dim = _strip_names(aff_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(aff_obj, dimtype_to_names)
-
+    aff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(aff_obj, isl.Aff)
     return Aff(aff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 
@@ -125,6 +126,12 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedExpressionLike[isl.QPolynomial]):
     _obj: isl.QPolynomial
+
+    @override
+    def _reconstruct_isl_object(self) -> isl.QPolynomial:
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.QPolynomial)
+        return obj
 
 
 @overload
@@ -147,17 +154,21 @@ def make_qpolynomial(
         else src
     )
 
-    qp_obj, dimtype_to_names = _deconstruct_object(obj)
-    qp_obj, name_to_dim = _strip_names(qp_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(qp_obj, dimtype_to_names)
-
+    qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(qp_obj, isl.QPolynomial)
     return QPolynomial(qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 
 @final
 @dataclass(frozen=True, eq=False)
-class PwAff(_NamedPwExpressionLike):
+class PwAff(_NamedPwExpressionLike[isl.PwAff]):
     _obj: isl.PwAff
+
+    @override
+    def _reconstruct_isl_object(self) -> isl.PwAff:
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.PwAff)
+        return obj
 
 
 @overload
@@ -172,18 +183,21 @@ def make_pw_aff(src: isl.PwAff) -> PwAff:
 
 def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
     obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
-
-    pwaff_obj, dimtype_to_names = _deconstruct_object(obj)
-    pwaff_obj, name_to_dim = _strip_names(pwaff_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(pwaff_obj, dimtype_to_names)
-
+    pwaff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(pwaff_obj, isl.PwAff)
     return PwAff(pwaff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 
 @final
 @dataclass(frozen=True, eq=False)
-class PwQPolynomial(_NamedPwExpressionLike):
+class PwQPolynomial(_NamedPwExpressionLike[isl.PwQPolynomial]):
     _obj: isl.PwQPolynomial
+
+    @override
+    def _reconstruct_isl_object(self) -> isl.PwQPolynomial:
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.PwQPolynomial)
+        return obj
 
 
 @overload
@@ -202,11 +216,8 @@ def make_pw_qpolynomial(
         ctx: isl.Context | None = None
     ) -> PwQPolynomial:
     obj = isl.PwQPolynomial(src, ctx) if isinstance(src, str) else src
-
-    pw_qp_obj, dimtype_to_names = _deconstruct_object(obj)
-    pw_qp_obj, name_to_dim = _strip_names(pw_qp_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(pw_qp_obj, dimtype_to_names)
-
+    pw_qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(pw_qp_obj, isl.PwQPolynomial)
     return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 # }}}
@@ -229,14 +240,20 @@ class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
 @final
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike):
-    def get_at(self, dim: int) -> PwAff:
-        return make_pw_aff(self._reconstruct_isl_object().get_at(dim))
+    def get_at(self, name: str) -> PwAff:
+        if name not in self._names_for_dim_type(isl.dim_type.set):
+            raise ValueError(f"unknown output name: {name}")
+        return make_pw_aff(
+            self._reconstruct_isl_object().get_at(self._name_to_dim[name])
+        )
 
     @override
     def _reconstruct_isl_object(self) -> isl.PwMultiAff:
         # deconstruction: isl.PwMultiAff -> isl.Map -> isl.Set
         # reconstruction: isl.Set -> isl.Map -> isl.PwMultiAff
-        return super()._reconstruct_isl_object().as_pw_multi_aff()
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.Set | isl.Map)
+        return obj.as_pw_multi_aff()
 
 
 @overload
@@ -255,25 +272,26 @@ def make_pw_multi_aff(
     ) -> PwMultiAff:
 
     obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
-
-    pw_maff_obj, dimtype_to_names = _deconstruct_object(obj)
-    pw_maff_obj, name_to_dim = _strip_names(pw_maff_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(pw_maff_obj, dimtype_to_names)
-
+    pw_maff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(pw_maff_obj, isl.Set)
     return PwMultiAff(pw_maff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 
 @final
 @dataclass(frozen=True, eq=False)
-class MultiAff(NamedIslObject[isl.Set]):
-    def get_at(self, dim: int) -> Aff:
-        return make_aff(self._reconstruct_isl_object().get_at(dim))
+class MultiAff(_NamedMultiExpressionLike):
+    def get_at(self, name: str) -> Aff:
+        if name not in self._names_for_dim_type(isl.dim_type.set):
+            raise ValueError(f"unknown output name: {name}")
+        return make_aff(self._reconstruct_isl_object().get_at(self._name_to_dim[name]))
 
     @override
     def _reconstruct_isl_object(self) -> isl.MultiAff:
         # deconstruction: isl.MultiAff -> isl.Map -> isl.Set
         # reconstruction: isl.Set -> isl.Map -> isl.PwMultiAff -> isl.MultiAff
-        return super()._reconstruct_isl_object().as_pw_multi_aff().as_multi_aff()
+        obj = super()._reconstruct_isl_object()
+        assert isinstance(obj, isl.Set | isl.Map)
+        return obj.as_pw_multi_aff().as_multi_aff()
 
 
 @overload
@@ -289,11 +307,8 @@ def make_multi_aff(src: isl.MultiAff) -> MultiAff:
 def make_multi_aff(
         src: str | isl.MultiAff, ctx: isl.Context | None = None) -> MultiAff:
     obj = isl.MultiAff(src, ctx) if isinstance(src, str) else src
-
-    maff_obj, dimtype_to_names = _deconstruct_object(obj)
-    maff_obj, name_to_dim = _strip_names(maff_obj)
-    dimtype_to_names = _normalize_dimtype_to_names(maff_obj, dimtype_to_names)
-
+    maff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
+    assert isinstance(maff_obj, isl.Set)
     return MultiAff(maff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
 
 # }}}

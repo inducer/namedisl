@@ -139,6 +139,20 @@ def test_pwaff_binary_ops():
 # }}}
 
 
+def test_multi_aff_get_at_uses_name() -> None:
+    map_ = nisl.make_map("{ [i] -> [x = i, y = 2i] }")
+    maff = nisl.make_multi_aff(
+        map_._reconstruct_isl_object().as_pw_multi_aff().as_multi_aff()
+    )
+    assert maff.get_at("x")._reconstruct_isl_object() == isl.Aff("{ [i] -> [(i)] }")
+
+
+def test_pw_multi_aff_get_at_uses_name() -> None:
+    map_ = nisl.make_map("{ [i] -> [x = i, y = 2i] }")
+    pmaff = nisl.make_pw_multi_aff(map_.as_pw_multi_aff())
+    assert pmaff.get_at("y")._reconstruct_isl_object() == isl.PwAff("{ [i] -> [(2i)] }")
+
+
 # {{{ qpolynomials
 
 def test_qpolynomial_from_str():
