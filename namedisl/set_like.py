@@ -57,7 +57,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         [ (set names), (input names), (parameter names) ]
     """
 
-    def complement(self: _NamedIslSetLike) -> _NamedIslSetLike:
+    def complement(self: Self) -> Self:
         return replace(
             self,
             _obj=self._obj.complement(),
@@ -65,7 +65,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             _dimtype_to_names=self._dimtype_to_names
         )
 
-    def eliminate(self, names_to_eliminate: str | Collection[str]) -> _NamedIslSetLike:
+    def eliminate(self: Self, names_to_eliminate: str | Collection[str]) -> Self:
         if isinstance(names_to_eliminate, str):
             names_to_eliminate = [names_to_eliminate]
 
@@ -146,6 +146,22 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             _dimtype_to_names=self._dimtype_to_names
         )
 
+    @overload
+    def gist(self: BasicMap, context: _NamedIslSetLike) -> BasicMap | Map:
+        ...
+
+    @overload
+    def gist(self: Map, context: _NamedIslSetLike) -> Map:
+        ...
+
+    @overload
+    def gist(self: BasicSet, context: _NamedIslSetLike) -> BasicSet | Set:
+        ...
+
+    @overload
+    def gist(self: Set, context: _NamedIslSetLike) -> Set:
+        ...
+
     def gist(self, context: _NamedIslSetLike) -> _NamedIslSetLike:
         self_aligned, context_aligned = _align_two(self, context)
         result = self_aligned._obj.gist(context_aligned._obj)
@@ -165,8 +181,8 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             self_aligned._dimtype_to_names
         )
 
-    def project_out(self: _NamedIslSetLike,
-                    names_to_project_out: str | Collection[str]) -> _NamedIslSetLike:
+    def project_out(self: Self,
+                    names_to_project_out: str | Collection[str]) -> Self:
 
         if isinstance(names_to_project_out, str):
             names_to_project_out = [names_to_project_out]
@@ -212,9 +228,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         )
 
     def project_out_except(
-        self: _NamedIslSetLike,
+        self: Self,
         names_to_keep: str | Collection[str],
-    ) -> _NamedIslSetLike:
+    ) -> Self:
 
         if isinstance(names_to_keep, str):
             names_to_keep = [names_to_keep] if names_to_keep else []
@@ -243,14 +259,61 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             dim_type = isl.dim_type.set
         return super().dim(dim_type)
 
-    # FIXME: basedpyright is not happy with these function signatures
+    @overload
+    def __and__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
+        ...
+
+    @overload
+    def __and__(self: Map, other: BasicMap | Map) -> Map:
+        ...
+
+    @overload
+    def __and__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
+        ...
+
+    @overload
+    def __and__(self: Set, other: BasicSet | Set) -> Set:
+        ...
+
     def __and__(
         self, other: _NamedIslSetLike) -> _NamedIslSetLike:
         return _apply_set_like_binary_op(self, other, operator.and_)
 
+    @overload
+    def __or__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
+        ...
+
+    @overload
+    def __or__(self: Map, other: BasicMap | Map) -> Map:
+        ...
+
+    @overload
+    def __or__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
+        ...
+
+    @overload
+    def __or__(self: Set, other: BasicSet | Set) -> Set:
+        ...
+
     def __or__(
             self, other: _NamedIslSetLike) -> _NamedIslSetLike:
         return _apply_set_like_binary_op(self, other, operator.or_)
+
+    @overload
+    def __sub__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
+        ...
+
+    @overload
+    def __sub__(self: Map, other: BasicMap | Map) -> Map:
+        ...
+
+    @overload
+    def __sub__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
+        ...
+
+    @overload
+    def __sub__(self: Set, other: BasicSet | Set) -> Set:
+        ...
 
     def __sub__(
             self, other: _NamedIslSetLike) -> _NamedIslSetLike:
@@ -300,6 +363,9 @@ class BasicSet(_NamedIslSetLike):
 
         return obj.get_basic_sets()[0]
 
+    def get_basic_sets(self) -> Sequence[BasicSet]:
+        return [self]
+
 
 @overload
 def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet:
@@ -336,6 +402,42 @@ class Set(_NamedIslSetLike):
 
         bsets = isl_obj.get_basic_sets()
         return [make_basic_set(bset) for bset in bsets]
+
+
+@overload
+def _apply_set_like_binary_op(
+        lhs: BasicMap,
+        rhs: BasicMap | Map,
+        op: Callable[[isl.Set, isl.Set], isl.Set]
+    ) -> BasicMap | Map:
+    ...
+
+
+@overload
+def _apply_set_like_binary_op(
+        lhs: Map,
+        rhs: BasicMap | Map,
+        op: Callable[[isl.Set, isl.Set], isl.Set]
+    ) -> Map:
+    ...
+
+
+@overload
+def _apply_set_like_binary_op(
+        lhs: BasicSet,
+        rhs: BasicSet | Set,
+        op: Callable[[isl.Set, isl.Set], isl.Set]
+    ) -> BasicSet | Set:
+    ...
+
+
+@overload
+def _apply_set_like_binary_op(
+        lhs: Set,
+        rhs: BasicSet | Set,
+        op: Callable[[isl.Set, isl.Set], isl.Set]
+    ) -> Set:
+    ...
 
 
 def _apply_set_like_binary_op(
@@ -563,17 +665,6 @@ class BasicMap(_NamedIslMapLike):
         assert isinstance(obj, isl.BasicMap)
         return obj
 
-    @staticmethod
-    @override
-    def _wrap_map_result(result: isl.BasicMap | isl.Map) -> BasicMap | Map:
-        if isinstance(result, isl.BasicMap):
-            return make_basic_map(result)
-        return make_map(result)
-
-    @override
-    def reverse(self) -> BasicMap | Map:
-        return self._wrap_map_result(self._map_obj().reverse())
-
     @override
     def domain(self) -> BasicSet:
         return make_basic_set(self._map_obj().domain())
@@ -607,14 +698,6 @@ class BasicMap(_NamedIslMapLike):
             )
             return cast("BasicMap | Map", self & filter_map)
         return super().intersect_range(range_)
-
-    @override
-    def apply_range(self, other: BasicMap | Map) -> BasicMap | Map:
-        return super().apply_range(other)
-
-    @override
-    def apply_domain(self, other: BasicMap | Map) -> BasicMap | Map:
-        return super().apply_domain(other)
 
     @override
     def _reconstruct_isl_object(self) -> isl.BasicMap:
