@@ -28,7 +28,7 @@ THE SOFTWARE.
 import operator
 from abc import ABC
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, cast, final, overload
+from typing import TYPE_CHECKING, final, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -440,6 +440,15 @@ def _apply_set_like_binary_op(
     ...
 
 
+@overload
+def _apply_set_like_binary_op(
+        lhs: _NamedIslSetLike,
+        rhs: _NamedIslSetLike,
+        op: Callable[[isl.Set, isl.Set], isl.Set]
+    ) -> _NamedIslSetLike:
+    ...
+
+
 def _apply_set_like_binary_op(
         lhs: _NamedIslSetLike,
         rhs: _NamedIslSetLike,
@@ -575,18 +584,30 @@ class _NamedIslMapLike(_NamedIslSetLike):
     def intersect_domain(self, domain: BasicSet | Set) -> BasicMap | Map:
         domain_obj = domain._reconstruct_isl_object()
         assert isinstance(domain_obj, isl.BasicSet | isl.Set)
-        return cast("BasicMap | Map", self & self._map_with_universe(
+        result = _apply_set_like_binary_op(
+            self,
+            self._map_with_universe(
             isl.dim_type.in_,
             domain_obj,
-        ))
+            ),
+            operator.and_,
+        )
+        assert isinstance(result, BasicMap | Map)
+        return result
 
     def intersect_range(self, range_: BasicSet | Set) -> BasicMap | Map:
         range_obj = range_._reconstruct_isl_object()
         assert isinstance(range_obj, isl.BasicSet | isl.Set)
-        return cast("BasicMap | Map", self & self._map_with_universe(
+        result = _apply_set_like_binary_op(
+            self,
+            self._map_with_universe(
             isl.dim_type.out,
             range_obj,
-        ))
+            ),
+            operator.and_,
+        )
+        assert isinstance(result, BasicMap | Map)
+        return result
 
     def apply_range(self, other: BasicMap | Map) -> BasicMap | Map:
         ordered_names = self._validate_composable(
@@ -594,12 +615,12 @@ class _NamedIslMapLike(_NamedIslSetLike):
             other,
             isl.dim_type.in_
         )
-        other = cast("BasicMap | Map", other._reorder_interface(
-            isl.dim_type.in_, ordered_names))
+        reordered_other = other._reorder_interface(isl.dim_type.in_, ordered_names)
+        assert isinstance(reordered_other, BasicMap | Map)
         self._reject_surviving_name_collisions(
-            self.input_names & other._output_names()
+            self.input_names & reordered_other._output_names()
         )
-        result = self._map_obj().apply_range(other._map_obj())
+        result = self._map_obj().apply_range(reordered_other._map_obj())
         return self._wrap_map_result(result)
 
     def apply_domain(self, other: BasicMap | Map) -> BasicMap | Map:
@@ -608,12 +629,12 @@ class _NamedIslMapLike(_NamedIslSetLike):
             other,
             isl.dim_type.out
         )
-        other = cast("BasicMap | Map", other._reorder_interface(
-            isl.dim_type.out, ordered_names))
+        reordered_other = other._reorder_interface(isl.dim_type.out, ordered_names)
+        assert isinstance(reordered_other, BasicMap | Map)
         self._reject_surviving_name_collisions(
-            other.input_names & self._output_names()
+            reordered_other.input_names & self._output_names()
         )
-        result = other._map_obj().apply_range(self._map_obj())
+        result = reordered_other._map_obj().apply_range(self._map_obj())
         return self._wrap_map_result(result)
 
     def reverse(self) -> BasicMap | Map:
@@ -683,7 +704,9 @@ class BasicMap(_NamedIslMapLike):
                     isl.BasicSet.universe(range_space)
                 )
             )
-            return cast("BasicMap | Map", self & filter_map)
+            result = self & filter_map
+            assert isinstance(result, BasicMap | Map)
+            return result
         return super().intersect_domain(domain)
 
     @override
@@ -696,7 +719,9 @@ class BasicMap(_NamedIslMapLike):
                     range_._reconstruct_isl_object()
                 )
             )
-            return cast("BasicMap | Map", self & filter_map)
+            result = self & filter_map
+            assert isinstance(result, BasicMap | Map)
+            return result
         return super().intersect_range(range_)
 
     @override

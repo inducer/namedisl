@@ -550,6 +550,40 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
             isl.dim_type.param: self._ordered_names_for_dim_type(isl.dim_type.param),
         }
 
+    def _empty_grouped_names(self) -> dict[isl.dim_type, list[str]]:
+        return {
+            isl.dim_type.set: [],
+            isl.dim_type.in_: [],
+            isl.dim_type.param: [],
+        }
+
+    def _metadata_from_chunk_names(
+            self,
+            chunk_names: Mapping[isl.dim_type, Collection[str]],
+            *,
+            has_inputs: bool
+        ) -> tuple[NameToDim, DimTypeToNames]:
+        ordered_names = [
+            *chunk_names[isl.dim_type.set],
+            *chunk_names[isl.dim_type.in_],
+            *chunk_names[isl.dim_type.param],
+        ]
+        new_name_to_dim: NameToDim = constantdict({
+            name: dim for dim, name in enumerate(ordered_names)
+        })
+
+        new_dimtype_to_names: dict[isl.dim_type, frozenset[str]] = {}
+        if has_inputs and chunk_names[isl.dim_type.in_]:
+            new_dimtype_to_names[isl.dim_type.in_] = frozenset(
+                chunk_names[isl.dim_type.in_]
+            )
+        if chunk_names[isl.dim_type.param]:
+            new_dimtype_to_names[isl.dim_type.param] = frozenset(
+                chunk_names[isl.dim_type.param]
+            )
+
+        return new_name_to_dim, constantdict(new_dimtype_to_names)
+
     def _add_names_by_dim_type(
             self,
             names_to_add: Collection[str],
@@ -577,11 +611,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         if not names_to_add:
             return self
 
-        grouped_names: dict[isl.dim_type, list[str]] = {
-            isl.dim_type.set: [],
-            isl.dim_type.in_: [],
-            isl.dim_type.param: [],
-        }
+        grouped_names = self._empty_grouped_names()
         grouped_names[dim_type] = list(names_to_add)
 
         return self._add_grouped_names(grouped_names)
@@ -633,39 +663,19 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
             )
             chunk_names[dim_type] = [*names_to_add, *chunk_names[dim_type]]
 
-        ordered_names = [
-            *chunk_names[isl.dim_type.set],
-            *chunk_names[isl.dim_type.in_],
-            *chunk_names[isl.dim_type.param],
-        ]
-        new_name_to_dim: NameToDim = constantdict({
-            name: dim for dim, name in enumerate(ordered_names)
-        })
-        new_dimtype_to_names: dict[isl.dim_type, frozenset[str]] = {}
-        if (
-                isinstance(new_obj, IslSetLike | IslMultiExpressionLike)
-                and chunk_names[isl.dim_type.in_]
-            ):
-            new_dimtype_to_names[isl.dim_type.in_] = frozenset(
-                chunk_names[isl.dim_type.in_]
-            )
-        if chunk_names[isl.dim_type.param]:
-            new_dimtype_to_names[isl.dim_type.param] = frozenset(
-                chunk_names[isl.dim_type.param]
-            )
+        new_name_to_dim, new_dimtype_to_names = self._metadata_from_chunk_names(
+            chunk_names,
+            has_inputs=isinstance(new_obj, IslSetLike | IslMultiExpressionLike),
+        )
 
         return type(self)(
             cast("IslObjectT", _restore_names(new_obj, new_name_to_dim)),
             new_name_to_dim,
-            constantdict(new_dimtype_to_names),
+            new_dimtype_to_names,
         )
 
     def add_names(self, tagged_names_to_add: Sequence[_TaggedName]) -> Self:
-        grouped_names: dict[isl.dim_type, list[str]] = {
-            isl.dim_type.set: [],
-            isl.dim_type.in_: [],
-            isl.dim_type.param: [],
-        }
+        grouped_names = self._empty_grouped_names()
         for tagged_name in tagged_names_to_add:
             dim_type = _normalize_public_dim_type(tagged_name._isl_dim_type)
             if dim_type not in grouped_names:
@@ -757,29 +767,15 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         moved_names = sorted(names_to_move, key=self._name_to_dim.__getitem__)
         chunk_names[dst_type].extend(moved_names)
 
-        new_order = [
-            *chunk_names[isl.dim_type.set],
-            *chunk_names[isl.dim_type.in_],
-            *chunk_names[isl.dim_type.param],
-        ]
-        new_name_to_dim: NameToDim = constantdict({
-            name: dim for dim, name in enumerate(new_order)
-        })
-
-        new_dimtype_to_names: dict[isl.dim_type, frozenset[str]] = {}
-        if chunk_names[isl.dim_type.in_]:
-            new_dimtype_to_names[isl.dim_type.in_] = frozenset(
-                chunk_names[isl.dim_type.in_]
-            )
-        if chunk_names[isl.dim_type.param]:
-            new_dimtype_to_names[isl.dim_type.param] = frozenset(
-                chunk_names[isl.dim_type.param]
-            )
+        new_name_to_dim, new_dimtype_to_names = self._metadata_from_chunk_names(
+            chunk_names,
+            has_inputs=True,
+        )
 
         return _align_obj(
             self,
             new_name_to_dim,
-            constantdict(new_dimtype_to_names)
+            new_dimtype_to_names
         )
 
     def rename_dims(self, renaming: Mapping[str, str]) -> Self:
