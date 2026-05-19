@@ -206,6 +206,21 @@ def test_basic_set_intersection_promotes_to_set() -> None:
     assert reconstructed.n_basic_set() > 1
 
 
+def test_set_convex_hull_returns_basic_set() -> None:
+    set_ = nisl.make_set(
+        "{ [j, i] : "
+        "(j = 0 and 0 <= i <= 2) or "
+        "(j = 2 and 0 <= i <= 2) }"
+    )
+
+    result = set_.convex_hull()
+
+    assert isinstance(result, nisl.BasicSet)
+    assert result == nisl.make_basic_set(
+        "{ [j, i] : 0 <= j <= 2 and 0 <= i <= 2 }"
+    )
+
+
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 def test_set_eliminate(ndims: int):
     a, a_dims, _ = generate_random_named_set(ndims, "a", None)
@@ -459,6 +474,19 @@ def test_basic_map_subset_comparisons_allow_map_promotion() -> None:
     assert smaller <= larger
     assert larger > smaller
     assert larger >= smaller
+
+
+def test_map_convex_hull_returns_basic_map() -> None:
+    map_ = nisl.make_map(
+        "{ [i] -> [j] : "
+        "(i = 0 and j = 0) or "
+        "(i = 2 and j = 2) }"
+    )
+
+    result = map_.convex_hull()
+
+    assert isinstance(result, nisl.BasicMap)
+    assert result == nisl.make_basic_map("{ [i] -> [j] : j = i and 0 <= i <= 2 }")
 
 
 def test_subset_comparison_rejects_set_map_mismatch() -> None:

@@ -62,16 +62,36 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             self,
             _obj=self._obj.complement(),
             _name_to_dim=self._name_to_dim,
-            _dimtype_to_names=self._dimtype_to_names
+            _dimtype_to_names=self._dimtype_to_names,
         )
+
+    @overload
+    def convex_hull(self: BasicMap | Map) -> BasicMap: ...
+
+    @overload
+    def convex_hull(self: BasicSet | Set) -> BasicSet: ...
+
+    def convex_hull(self) -> BasicMap | BasicSet:
+        obj = self._reconstruct_isl_object()
+        assert isinstance(obj, isl.BasicMap | isl.Map | isl.BasicSet | isl.Set)
+
+        if isinstance(obj, isl.BasicMap):
+            return make_basic_map(obj.to_map().convex_hull())
+
+        if isinstance(obj, isl.Map):
+            return make_basic_map(obj.convex_hull())
+
+        if isinstance(obj, isl.BasicSet):
+            return make_basic_set(obj.to_set().convex_hull())
+
+        return make_basic_set(obj.convex_hull())
 
     def eliminate(self: Self, names_to_eliminate: str | Collection[str]) -> Self:
         if isinstance(names_to_eliminate, str):
             names_to_eliminate = [names_to_eliminate]
 
         dims_to_eliminate = sorted(
-            self._name_to_dim[name]
-            for name in names_to_eliminate
+            self._name_to_dim[name] for name in names_to_eliminate
         )
 
         contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_eliminate)
@@ -86,13 +106,13 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             self,
             _obj=new_isl_obj,
             _name_to_dim=self._name_to_dim,  # NOTE: no dims removed by eliminate
-            _dimtype_to_names=self._dimtype_to_names
+            _dimtype_to_names=self._dimtype_to_names,
         )
 
     def add_constraint(
-            self: Self,
-            constraints: str | Collection[str],
-        ) -> Self:
+        self: Self,
+        constraints: str | Collection[str],
+    ) -> Self:
         if isinstance(constraints, str):
             constraints = [constraints]
         else:
@@ -104,21 +124,14 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         ordered_names = tuple(
             sorted(self._name_to_dim, key=self._name_to_dim.__getitem__)
         )
-        constraint_text = " and ".join(f"({constraint})"
-                                       for constraint in constraints)
-        constraint_src = (
-            "{ "
-            f"[{', '.join(ordered_names)}] : "
-            f"{constraint_text}"
-            " }"
-        )
+        constraint_text = " and ".join(f"({constraint})" for constraint in constraints)
+        constraint_src = f"{{ [{', '.join(ordered_names)}] : {constraint_text} }}"
 
         try:
             constraint_obj = isl.Set(constraint_src)
         except isl.Error as exc:
             raise ValueError(
-                f"invalid constraint for names {ordered_names}: "
-                f"{constraint_text}"
+                f"invalid constraint for names {ordered_names}: {constraint_text}"
             ) from exc
 
         constraint_obj = constraint_obj.remove_redundancies()
@@ -129,13 +142,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 
         if constraint_name_to_dim != self._name_to_dim:
             constraint_set = _align_obj(
-                Set(
-                    constraint_set,
-                    constraint_name_to_dim,
-                    self._dimtype_to_names
-                ),
+                Set(constraint_set, constraint_name_to_dim, self._dimtype_to_names),
                 self._name_to_dim,
-                self._dimtype_to_names
+                self._dimtype_to_names,
             )._obj
             assert isinstance(constraint_set, isl.Set)
 
@@ -143,24 +152,20 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             self,
             _obj=self._obj.intersect(constraint_set),
             _name_to_dim=self._name_to_dim,
-            _dimtype_to_names=self._dimtype_to_names
+            _dimtype_to_names=self._dimtype_to_names,
         )
 
     @overload
-    def gist(self: BasicMap, context: _NamedIslSetLike) -> BasicMap | Map:
-        ...
+    def gist(self: BasicMap, context: _NamedIslSetLike) -> BasicMap | Map: ...
 
     @overload
-    def gist(self: Map, context: _NamedIslSetLike) -> Map:
-        ...
+    def gist(self: Map, context: _NamedIslSetLike) -> Map: ...
 
     @overload
-    def gist(self: BasicSet, context: _NamedIslSetLike) -> BasicSet | Set:
-        ...
+    def gist(self: BasicSet, context: _NamedIslSetLike) -> BasicSet | Set: ...
 
     @overload
-    def gist(self: Set, context: _NamedIslSetLike) -> Set:
-        ...
+    def gist(self: Set, context: _NamedIslSetLike) -> Set: ...
 
     def gist(self, context: _NamedIslSetLike) -> _NamedIslSetLike:
         self_aligned, context_aligned = _align_two(self, context)
@@ -176,23 +181,17 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             result_type = Set
 
         return result_type(
-            result,
-            self_aligned._name_to_dim,
-            self_aligned._dimtype_to_names
+            result, self_aligned._name_to_dim, self_aligned._dimtype_to_names
         )
 
-    def project_out(self: Self,
-                    names_to_project_out: str | Collection[str]) -> Self:
+    def project_out(self: Self, names_to_project_out: str | Collection[str]) -> Self:
 
         if isinstance(names_to_project_out, str):
             names_to_project_out = [names_to_project_out]
 
         names_to_remove = set(names_to_project_out)
 
-        dims_to_remove = sorted(
-            self._name_to_dim[name]
-            for name in names_to_remove
-        )
+        dims_to_remove = sorted(self._name_to_dim[name] for name in names_to_remove)
 
         new_isl_obj = self._obj
         contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_remove)
@@ -224,7 +223,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             self,
             _obj=new_isl_obj,
             _name_to_dim=constantdict(new_name_to_dim),
-            _dimtype_to_names=new_type_to_names
+            _dimtype_to_names=new_type_to_names,
         )
 
     def project_out_except(
@@ -236,8 +235,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
             names_to_keep = [names_to_keep] if names_to_keep else []
 
         names_to_project_out = [
-            name for name in self._name_to_dim
-            if name not in names_to_keep
+            name for name in self._name_to_dim if name not in names_to_keep
         ]
 
         return self.project_out(names_to_project_out)
@@ -247,6 +245,11 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 
     def dim_min(self, name: str) -> isl.PwAff:
         return self._obj.dim_min(self._name_to_dim[name])
+
+    def is_empty(self) -> bool:
+        obj = self._reconstruct_isl_object()
+        assert isinstance(obj, isl.Set | isl.Map)
+        return bool(obj.is_empty())
 
     def as_pw_multi_aff(self) -> isl.PwMultiAff:
         obj = self._reconstruct_isl_object()
@@ -260,63 +263,48 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         return super().dim(dim_type)
 
     @overload
-    def __and__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
-        ...
+    def __and__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
 
     @overload
-    def __and__(self: Map, other: BasicMap | Map) -> Map:
-        ...
+    def __and__(self: Map, other: BasicMap | Map) -> Map: ...
 
     @overload
-    def __and__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
-        ...
+    def __and__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
 
     @overload
-    def __and__(self: Set, other: BasicSet | Set) -> Set:
-        ...
+    def __and__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __and__(
-        self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __and__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
         return _apply_set_like_binary_op(self, other, operator.and_)
 
     @overload
-    def __or__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
-        ...
+    def __or__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
 
     @overload
-    def __or__(self: Map, other: BasicMap | Map) -> Map:
-        ...
+    def __or__(self: Map, other: BasicMap | Map) -> Map: ...
 
     @overload
-    def __or__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
-        ...
+    def __or__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
 
     @overload
-    def __or__(self: Set, other: BasicSet | Set) -> Set:
-        ...
+    def __or__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __or__(
-            self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __or__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
         return _apply_set_like_binary_op(self, other, operator.or_)
 
     @overload
-    def __sub__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map:
-        ...
+    def __sub__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
 
     @overload
-    def __sub__(self: Map, other: BasicMap | Map) -> Map:
-        ...
+    def __sub__(self: Map, other: BasicMap | Map) -> Map: ...
 
     @overload
-    def __sub__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set:
-        ...
+    def __sub__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
 
     @overload
-    def __sub__(self: Set, other: BasicSet | Set) -> Set:
-        ...
+    def __sub__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __sub__(
-            self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __sub__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
         return _apply_set_like_binary_op(self, other, operator.sub)
 
     @override
@@ -359,22 +347,18 @@ class BasicSet(_NamedIslSetLike):
         if not isinstance(obj, isl.Set) or obj.n_basic_set() != 1:
             raise ValueError(
                 "Cannot reconstruct an isl.BasicSet from anything other than "
-                "an isl.Set containing only a single isl.BasicSet.")
+                "an isl.Set containing only a single isl.BasicSet."
+            )
 
         return obj.get_basic_sets()[0]
 
-    def get_basic_sets(self) -> Sequence[BasicSet]:
-        return [self]
+
+@overload
+def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet: ...
 
 
 @overload
-def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet:
-    ...
-
-
-@overload
-def make_basic_set(src: isl.BasicSet) -> BasicSet:
-    ...
+def make_basic_set(src: isl.BasicSet) -> BasicSet: ...
 
 
 def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
@@ -406,54 +390,41 @@ class Set(_NamedIslSetLike):
 
 @overload
 def _apply_set_like_binary_op(
-        lhs: BasicMap,
-        rhs: BasicMap | Map,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> BasicMap | Map:
-    ...
+    lhs: BasicMap, rhs: BasicMap | Map, op: Callable[[isl.Set, isl.Set], isl.Set]
+) -> BasicMap | Map: ...
 
 
 @overload
 def _apply_set_like_binary_op(
-        lhs: Map,
-        rhs: BasicMap | Map,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> Map:
-    ...
+    lhs: Map, rhs: BasicMap | Map, op: Callable[[isl.Set, isl.Set], isl.Set]
+) -> Map: ...
 
 
 @overload
 def _apply_set_like_binary_op(
-        lhs: BasicSet,
-        rhs: BasicSet | Set,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> BasicSet | Set:
-    ...
+    lhs: BasicSet, rhs: BasicSet | Set, op: Callable[[isl.Set, isl.Set], isl.Set]
+) -> BasicSet | Set: ...
 
 
 @overload
 def _apply_set_like_binary_op(
-        lhs: Set,
-        rhs: BasicSet | Set,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> Set:
-    ...
+    lhs: Set, rhs: BasicSet | Set, op: Callable[[isl.Set, isl.Set], isl.Set]
+) -> Set: ...
 
 
 @overload
 def _apply_set_like_binary_op(
-        lhs: _NamedIslSetLike,
-        rhs: _NamedIslSetLike,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> _NamedIslSetLike:
-    ...
+    lhs: _NamedIslSetLike,
+    rhs: _NamedIslSetLike,
+    op: Callable[[isl.Set, isl.Set], isl.Set],
+) -> _NamedIslSetLike: ...
 
 
 def _apply_set_like_binary_op(
-        lhs: _NamedIslSetLike,
-        rhs: _NamedIslSetLike,
-        op: Callable[[isl.Set, isl.Set], isl.Set]
-    ) -> _NamedIslSetLike:
+    lhs: _NamedIslSetLike,
+    rhs: _NamedIslSetLike,
+    op: Callable[[isl.Set, isl.Set], isl.Set],
+) -> _NamedIslSetLike:
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
 
@@ -470,10 +441,8 @@ def _apply_set_like_binary_op(
 
 
 def _compare_set_like(
-        lhs: _NamedIslSetLike,
-        rhs: _NamedIslSetLike,
-        op: Callable[[isl.Set, isl.Set], bool]
-    ) -> bool:
+    lhs: _NamedIslSetLike, rhs: _NamedIslSetLike, op: Callable[[isl.Set, isl.Set], bool]
+) -> bool:
     lhs_is_map = isinstance(lhs, _NamedIslMapLike)
     rhs_is_map = isinstance(rhs, _NamedIslMapLike)
     if lhs_is_map != rhs_is_map:
@@ -508,10 +477,8 @@ class _NamedIslMapLike(_NamedIslSetLike):
         return make_map(result)
 
     def _map_with_universe(
-            self,
-            dim_type: isl.dim_type,
-            set_obj: isl.BasicSet | isl.Set
-        ) -> BasicMap | Map:
+        self, dim_type: isl.dim_type, set_obj: isl.BasicSet | isl.Set
+    ) -> BasicMap | Map:
         map_obj = self._map_obj()
         if dim_type == isl.dim_type.in_:
             universe = isl.Set.universe(map_obj.range().get_space())
@@ -525,9 +492,9 @@ class _NamedIslMapLike(_NamedIslSetLike):
         return tuple(sorted(names, key=self._name_to_dim.__getitem__))
 
     def _reject_surviving_name_collisions(
-            self,
-            collisions: frozenset[str],
-        ) -> None:
+        self,
+        collisions: frozenset[str],
+    ) -> None:
         if collisions:
             raise ValueError(
                 "composition would create duplicate surviving names: "
@@ -535,10 +502,8 @@ class _NamedIslMapLike(_NamedIslSetLike):
             )
 
     def _reorder_interface(
-            self,
-            dim_type: isl.dim_type,
-            ordered_names: tuple[str, ...]
-        ) -> _NamedIslMapLike:
+        self, dim_type: isl.dim_type, ordered_names: tuple[str, ...]
+    ) -> _NamedIslMapLike:
         interface_names = (
             self.input_names if dim_type == isl.dim_type.in_ else self._output_names()
         )
@@ -547,34 +512,37 @@ class _NamedIslMapLike(_NamedIslSetLike):
             return self
 
         out_names = (
-            ordered_names if dim_type == isl.dim_type.out
+            ordered_names
+            if dim_type == isl.dim_type.out
             else self._ordered_names(self._output_names())
         )
         in_names = (
-            ordered_names if dim_type == isl.dim_type.in_
+            ordered_names
+            if dim_type == isl.dim_type.in_
             else self._ordered_names(self.input_names)
         )
         param_names = self._ordered_names(self.parameter_names)
 
         ordering: NameToDim = constantdict({
-            name: dim
-            for dim, name in enumerate((*out_names, *in_names, *param_names))
+            name: dim for dim, name in enumerate((*out_names, *in_names, *param_names))
         })
 
         return _align_obj(self, ordering, self._dimtype_to_names)
 
     def _validate_composable(
-            self,
-            lhs_dim_type: isl.dim_type,
-            other: BasicMap | Map,
-            rhs_dim_type: isl.dim_type
-        ) -> tuple[str, ...]:
+        self,
+        lhs_dim_type: isl.dim_type,
+        other: BasicMap | Map,
+        rhs_dim_type: isl.dim_type,
+    ) -> tuple[str, ...]:
         lhs_names = (
-            self.input_names if lhs_dim_type == isl.dim_type.in_
+            self.input_names
+            if lhs_dim_type == isl.dim_type.in_
             else self._output_names()
         )
         rhs_names = (
-            other.input_names if rhs_dim_type == isl.dim_type.in_
+            other.input_names
+            if rhs_dim_type == isl.dim_type.in_
             else other._output_names()
         )
         if lhs_names != rhs_names:
@@ -587,8 +555,8 @@ class _NamedIslMapLike(_NamedIslSetLike):
         result = _apply_set_like_binary_op(
             self,
             self._map_with_universe(
-            isl.dim_type.in_,
-            domain_obj,
+                isl.dim_type.in_,
+                domain_obj,
             ),
             operator.and_,
         )
@@ -601,8 +569,8 @@ class _NamedIslMapLike(_NamedIslSetLike):
         result = _apply_set_like_binary_op(
             self,
             self._map_with_universe(
-            isl.dim_type.out,
-            range_obj,
+                isl.dim_type.out,
+                range_obj,
             ),
             operator.and_,
         )
@@ -611,9 +579,7 @@ class _NamedIslMapLike(_NamedIslSetLike):
 
     def apply_range(self, other: BasicMap | Map) -> BasicMap | Map:
         ordered_names = self._validate_composable(
-            isl.dim_type.out,
-            other,
-            isl.dim_type.in_
+            isl.dim_type.out, other, isl.dim_type.in_
         )
         reordered_other = other._reorder_interface(isl.dim_type.in_, ordered_names)
         assert isinstance(reordered_other, BasicMap | Map)
@@ -625,9 +591,7 @@ class _NamedIslMapLike(_NamedIslSetLike):
 
     def apply_domain(self, other: BasicMap | Map) -> BasicMap | Map:
         ordered_names = self._validate_composable(
-            isl.dim_type.in_,
-            other,
-            isl.dim_type.out
+            isl.dim_type.in_, other, isl.dim_type.out
         )
         reordered_other = other._reorder_interface(isl.dim_type.out, ordered_names)
         assert isinstance(reordered_other, BasicMap | Map)
@@ -654,13 +618,11 @@ class _NamedIslMapLike(_NamedIslSetLike):
 
 
 @overload
-def make_set(src: str, ctx: isl.Context | None = None) -> Set:
-    ...
+def make_set(src: str, ctx: isl.Context | None = None) -> Set: ...
 
 
 @overload
-def make_set(src: isl.Set) -> Set:
-    ...
+def make_set(src: isl.Set) -> Set: ...
 
 
 def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
@@ -700,8 +662,7 @@ class BasicMap(_NamedIslMapLike):
             range_space = self._map_obj().range().get_space()
             filter_map = make_basic_map(
                 isl.BasicMap.from_domain_and_range(
-                    domain._reconstruct_isl_object(),
-                    isl.BasicSet.universe(range_space)
+                    domain._reconstruct_isl_object(), isl.BasicSet.universe(range_space)
                 )
             )
             result = self & filter_map
@@ -716,7 +677,7 @@ class BasicMap(_NamedIslMapLike):
             filter_map = make_basic_map(
                 isl.BasicMap.from_domain_and_range(
                     isl.BasicSet.universe(domain_space),
-                    range_._reconstruct_isl_object()
+                    range_._reconstruct_isl_object(),
                 )
             )
             result = self & filter_map
@@ -734,19 +695,18 @@ class BasicMap(_NamedIslMapLike):
         if not isinstance(obj, isl.Map) or obj.n_basic_map() != 1:
             raise ValueError(
                 "Cannot reconstruct an isl.BasicMap from anything other than "
-                "an isl.Map containing only a single isl.BasicMap.")
+                "an isl.Map containing only a single isl.BasicMap."
+            )
 
         return obj.get_basic_maps()[0]
 
 
 @overload
-def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap:
-    ...
+def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap: ...
 
 
 @overload
-def make_basic_map(src: isl.BasicMap) -> BasicMap:
-    ...
+def make_basic_map(src: isl.BasicMap) -> BasicMap: ...
 
 
 def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> BasicMap:
@@ -757,9 +717,8 @@ def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> B
 
 
 def make_map_from_domain_and_range(
-        domain: BasicSet | Set,
-        range_: BasicSet | Set
-    ) -> BasicMap | Map:
+    domain: BasicSet | Set, range_: BasicSet | Set
+) -> BasicMap | Map:
     if isinstance(domain, BasicSet) and isinstance(range_, BasicSet):
         domain_obj = domain._reconstruct_isl_object()
         range_obj = range_._reconstruct_isl_object()
@@ -799,13 +758,11 @@ class Map(_NamedIslMapLike):
 
 
 @overload
-def make_map(src: str, ctx: isl.Context | None = None) -> Map:
-    ...
+def make_map(src: str, ctx: isl.Context | None = None) -> Map: ...
 
 
 @overload
-def make_map(src: isl.Map) -> Map:
-    ...
+def make_map(src: isl.Map) -> Map: ...
 
 
 def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
