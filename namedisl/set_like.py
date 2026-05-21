@@ -28,7 +28,7 @@ THE SOFTWARE.
 import operator
 from abc import ABC
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, final, overload
+from typing import TYPE_CHECKING, Any, cast, final, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -43,6 +43,14 @@ from .core import (
     _find_contiguous_dim_chunks,
     _make_named_object_pieces,
 )
+
+
+def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
+    return cast("isl.Set", cast(Any, operator.and_)(lhs, rhs))
+
+
+def _set_like_or(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
+    return cast("isl.Set", cast(Any, operator.or_)(lhs, rhs))
 
 
 if TYPE_CHECKING:
@@ -275,7 +283,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     def __and__(self: Set, other: BasicSet | Set) -> Set: ...
 
     def __and__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
-        return _apply_set_like_binary_op(self, other, operator.and_)
+        return _apply_set_like_binary_op(self, other, _set_like_and)
 
     @overload
     def __or__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
@@ -290,7 +298,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     def __or__(self: Set, other: BasicSet | Set) -> Set: ...
 
     def __or__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
-        return _apply_set_like_binary_op(self, other, operator.or_)
+        return _apply_set_like_binary_op(self, other, _set_like_or)
 
     @overload
     def __sub__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
@@ -558,7 +566,7 @@ class _NamedIslMapLike(_NamedIslSetLike):
                 isl.dim_type.in_,
                 domain_obj,
             ),
-            operator.and_,
+            _set_like_and,
         )
         assert isinstance(result, BasicMap | Map)
         return result
@@ -572,7 +580,7 @@ class _NamedIslMapLike(_NamedIslSetLike):
                 isl.dim_type.out,
                 range_obj,
             ),
-            operator.and_,
+            _set_like_and,
         )
         assert isinstance(result, BasicMap | Map)
         return result

@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 import operator
 from dataclasses import dataclass, replace
-from typing import final, overload
+from typing import Any, cast, final, overload
 
 from typing_extensions import Self, override
 
@@ -41,6 +41,24 @@ from .core import (
 )
 
 
+def _add_isl_expression(
+    lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
+) -> IslExpressionLikeT:
+    return cast("IslExpressionLikeT", cast(Any, operator.add)(lhs, rhs))
+
+
+def _sub_isl_expression(
+    lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
+) -> IslExpressionLikeT:
+    return cast("IslExpressionLikeT", cast(Any, operator.sub)(lhs, rhs))
+
+
+def _mul_isl_expression(
+    lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
+) -> IslExpressionLikeT:
+    return cast("IslExpressionLikeT", cast(Any, operator.mul)(lhs, rhs))
+
+
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 @dataclass(frozen=True, eq=False)
@@ -51,34 +69,34 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
         if isinstance(other, int):
             return replace(
                 self,
-                _obj=operator.add(self._obj, other),
+                _obj=_add_isl_expression(self._obj, other),
                 _name_to_dim=self._name_to_dim,
                 _dimtype_to_names=self._dimtype_to_names
             )
 
-        return _align_and_apply_binary_op(self, other, operator.add)
+        return _align_and_apply_binary_op(self, other, _add_isl_expression)
 
     def __sub__(self, other: Self | int) -> Self:
         if isinstance(other, int):
             return replace(
                 self,
-                _obj=operator.sub(self._obj, other),
+                _obj=_sub_isl_expression(self._obj, other),
                 _name_to_dim=self._name_to_dim,
                 _dimtype_to_names=self._dimtype_to_names
             )
 
-        return _align_and_apply_binary_op(self, other, operator.sub)
+        return _align_and_apply_binary_op(self, other, _sub_isl_expression)
 
     def __mul__(self, other: Self | int) -> Self:
         if isinstance(other, int):
             return replace(
                 self,
-                _obj=operator.mul(self._obj, other),
+                _obj=_mul_isl_expression(self._obj, other),
                 _name_to_dim=self._name_to_dim,
                 _dimtype_to_names=self._dimtype_to_names
             )
 
-        return _align_and_apply_binary_op(self, other, operator.mul)
+        return _align_and_apply_binary_op(self, other, _mul_isl_expression)
 
     def is_zero(self) -> bool:
         return bool(self._obj.is_zero())  # pyright: ignore[reportAttributeAccessIssue, reportUnknownArgumentType, reportUnknownMemberType]
