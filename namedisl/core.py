@@ -67,7 +67,7 @@ IslMultiExpressionLikeT = TypeVar(
     "IslMultiExpressionLikeT", bound=IslMultiExpressionLike
 )
 IslPwExpressionLikeT = TypeVar("IslPwExpressionLikeT", bound=IslPwExpressionLike)
-IslObjectT = TypeVar("IslObjectT", bound=IslObject, covariant=True)
+IslObjectT = TypeVar("IslObjectT", bound=IslObject, covariant=True)  # noqa: PLC0105
 
 NamedIslObjectT = TypeVar("NamedIslObjectT", bound="NamedIslObject[IslObject]")
 

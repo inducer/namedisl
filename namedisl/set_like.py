@@ -46,11 +46,11 @@ from .core import (
 
 
 def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast(Any, operator.and_)(lhs, rhs))
+    return cast("isl.Set", cast("Any", operator.and_)(lhs, rhs))
 
 
 def _set_like_or(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast(Any, operator.or_)(lhs, rhs))
+    return cast("isl.Set", cast("Any", operator.or_)(lhs, rhs))
 
 
 if TYPE_CHECKING:

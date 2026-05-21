@@ -44,19 +44,19 @@ from .core import (
 def _add_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast("IslExpressionLikeT", cast(Any, operator.add)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.add)(lhs, rhs))
 
 
 def _sub_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast("IslExpressionLikeT", cast(Any, operator.sub)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.sub)(lhs, rhs))
 
 
 def _mul_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast("IslExpressionLikeT", cast(Any, operator.mul)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.mul)(lhs, rhs))
 
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
