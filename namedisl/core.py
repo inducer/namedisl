@@ -1,3 +1,13 @@
+"""
+Core metadata machinery for name-aware isl wrappers.
+
+The public set-like and expression-like classes store an isl object together
+with metadata that records which semantic name belongs to each internal
+dimension.  This module
+contains the alignment, reconstruction, and metadata-manipulation helpers used
+to keep that invariant intact.
+"""
+
 from __future__ import annotations
 
 
@@ -36,14 +46,6 @@ from constantdict import constantdict
 from typing_extensions import Self, override
 
 import islpy as isl
-
-
-ISL_DIM_TYPES = [
-    isl.dim_type.out,
-    isl.dim_type.in_,
-    isl.dim_type.set,
-    isl.dim_type.param,
-]
 
 
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
@@ -193,6 +195,13 @@ def _normalize_dimtype_to_names(
 
 
 def _make_named_object_pieces(obj: IslObject) -> IslObjectPieces:
+    """
+    Extract the normalized isl object and name metadata for *obj*.
+
+    The returned object uses namedisl's internal flattened dimension layout.
+    The accompanying mappings record how to reconstruct the original public isl
+    dimension kinds and names.
+    """
     _ensure_unique_public_names(obj)
     decon_obj, dimtype_to_names = _deconstruct_object(obj)
     decon_obj, name_to_dim = _strip_names(decon_obj)
@@ -201,6 +210,13 @@ def _make_named_object_pieces(obj: IslObject) -> IslObjectPieces:
 
 
 def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
+    """
+    Return a copy of *obj* with dimension names restored from *name_to_dim*.
+
+    This is intentionally used at reconstruction boundaries.  Internal
+    metadata-only operations may leave the private isl object's own dimension
+    names stale because namedisl does not rely on those names for correctness.
+    """
     restored_obj = obj.copy()
     if isinstance(restored_obj, isl.PwAff):
         # input dimensions cannot be renamed for isl.PwAff, so we first move
@@ -272,6 +288,13 @@ def _deconstruct_object(obj: IslObject) -> tuple[IslObject, DimTypeToNames]: ...
 
 
 def _deconstruct_object(obj: IslObject) -> tuple[IslObject, DimTypeToNames]:
+    """
+    Convert a public isl object into namedisl's internal representation.
+
+    Set-like objects are represented as flattened sets whose dimensions are
+    grouped as set/output names, input names, and parameter names.  Expression
+    objects use input dimensions followed by parameters.
+    """
     dt_to_names: dict[isl.dim_type, frozenset[str]] = {}
 
     if isinstance(obj, IslSetLike | IslMultiExpressionLike):
@@ -393,6 +416,12 @@ def _find_joint_name_to_dim(
 def _align_obj(
     named_obj: NamedIslObjectT, ordering: NameToDim, dimtype_to_names: DimTypeToNames
 ) -> NamedIslObjectT:
+    """
+    Return *named_obj* with internal dimensions arranged according to *ordering*.
+
+    The isl object is moved or expanded as needed, but public names are carried
+    in metadata and are restored only when a raw isl object is reconstructed.
+    """
     new_isl_obj = cast(
         "IslSetLike | IslBaseExpressionLike | IslPwExpressionLike | isl.MultiAff",
         named_obj._obj,
@@ -433,8 +462,6 @@ def _align_obj(
 
         running_name_to_dim[name] = target_dim
 
-    new_isl_obj = _restore_names(new_isl_obj, ordering)
-
     return type(named_obj)(
         new_isl_obj,
         ordering,
@@ -444,7 +471,10 @@ def _align_obj(
 
 def _align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT
-) -> tuple[NamedIslObjectT, ...]:
+) -> tuple[NamedIslObjectT, NamedIslObjectT]:
+    """
+    Align two named isl objects to a common name-to-dimension mapping.
+    """
 
     name_to_dim, dimtype_to_names = _find_joint_name_to_dim(named_obj1, named_obj2)
 
@@ -459,6 +489,9 @@ def _align_and_apply_binary_op(
     rhs: NamedIslObject[IslObjectT],
     op: Callable[[IslObjectT, IslObjectT], IslObjectT],
 ) -> NamedIslObject[IslObjectT]:
+    """
+    Align *lhs* and *rhs*, apply *op* to their isl objects, and wrap the result.
+    """
 
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
@@ -470,6 +503,15 @@ def _align_and_apply_binary_op(
 
 @dataclass(frozen=True, eq=False)
 class NamedIslObject(ABC, Generic[IslObjectT]):
+    """
+    Base class for named isl wrappers.
+
+    Instances pair a private isl object with metadata that records the semantic
+    name and public dimension kind of every internal dimension.  Subclasses use
+    this metadata to implement operations in terms of names while still
+    delegating the underlying integer-set algebra to isl.
+    """
+
     _obj: IslObjectT
     _name_to_dim: NameToDim
 
@@ -622,50 +664,94 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         )
 
         return type(self)(
-            cast("IslObjectT", _restore_names(new_obj, new_name_to_dim)),
+            cast("IslObjectT", new_obj),
             new_name_to_dim,
             new_dimtype_to_names,
         )
 
     def add_set_names(self, names_to_add: Collection[str]) -> Self:
+        """
+        Return a copy with new unconstrained set/output dimensions.
+
+        :arg names_to_add: Names to insert.  Existing names and duplicates are
+            rejected.
+        """
         return self._add_names_by_dim_type(names_to_add, isl.dim_type.set)
 
     def add_output_names(self, names_to_add: Collection[str]) -> Self:
+        """
+        Return a copy with new unconstrained output dimensions.
+
+        This is equivalent to :meth:`add_set_names` for map-like objects.
+        """
         return self._add_names_by_dim_type(names_to_add, isl.dim_type.out)
 
     def add_input_names(self, names_to_add: Collection[str]) -> Self:
+        """
+        Return a copy with new unconstrained input dimensions.
+        """
         return self._add_names_by_dim_type(names_to_add, isl.dim_type.in_)
 
     def add_parameter_names(self, names_to_add: Collection[str]) -> Self:
+        """
+        Return a copy with new parameter dimensions.
+        """
         return self._add_names_by_dim_type(names_to_add, isl.dim_type.param)
 
     def add_dim_names(
         self, names_to_add: Collection[str], dim_type: isl.dim_type
     ) -> Self:
+        """
+        Return a copy with new dimensions of *dim_type*.
+
+        :arg dim_type: One of ``isl.dim_type.set``, ``isl.dim_type.out``,
+            ``isl.dim_type.in_``, or ``isl.dim_type.param``.
+        """
         return self._add_names_by_dim_type(names_to_add, dim_type)
 
     @property
     def names(self) -> frozenset[str]:
+        """
+        All dimension names known to this object.
+        """
         return frozenset(self._name_to_dim.keys())
 
     def dim_names(self, dim_type: isl.dim_type) -> frozenset[str]:
+        """
+        Return the names belonging to *dim_type*.
+        """
         return self._names_for_dim_type(dim_type)
 
     def ordered_dim_names(self, dim_type: isl.dim_type) -> tuple[str, ...]:
+        """
+        Return names for *dim_type* in their current dimension order.
+        """
         return self._ordered_names_for_dim_type(dim_type)
 
     @property
     def set_names(self) -> frozenset[str]:
+        """
+        Names of set dimensions.
+        """
         return self._names_for_dim_type(isl.dim_type.set)
 
     @property
     def output_names(self) -> frozenset[str]:
+        """
+        Names of output dimensions.
+        """
         return self._names_for_dim_type(isl.dim_type.out)
 
     def get_space(self) -> isl.Space:
+        """
+        Reconstruct and return the object's public isl space.
+        """
         return self._reconstruct_isl_object().get_space()
 
     def dim(self, dim_type: isl.dim_type) -> int:
+        """
+        Return the number of dimensions of *dim_type*.
+        """
         dim_type = _normalize_public_dim_type(dim_type)
         if dim_type in (isl.dim_type.set, isl.dim_type.in_, isl.dim_type.param):
             return len(self._names_for_dim_type(dim_type))
@@ -676,6 +762,12 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         names_to_move: str | Collection[str],
         dst_type: isl.dim_type,
     ) -> Self:
+        """
+        Return a copy with named dimensions moved to *dst_type*.
+
+        The relative order of moved names is preserved.  Moving a name to its
+        current dimension kind is a no-op.
+        """
         if isinstance(names_to_move, str):
             names_to_move = [names_to_move]
 
@@ -717,6 +809,12 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         return _align_obj(self, new_name_to_dim, new_dimtype_to_names)
 
     def rename_dims(self, renaming: Mapping[str, str]) -> Self:
+        """
+        Return a copy with dimension names changed according to *renaming*.
+
+        Renaming updates namedisl metadata only.  The private isl object's own
+        names are restored when :meth:`get_isl_object` is called.
+        """
         if not renaming:
             return self
 
@@ -767,6 +865,12 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         name1: str | Mapping[str, str],
         name2: str | None = None,
     ) -> Self:
+        """
+        Return a copy constrained so paired dimensions are equal.
+
+        Either pass two names, or pass a mapping whose keys and values are
+        equated pairwise.
+        """
         if isinstance(name1, str):
             if name2 is None:
                 raise TypeError("name2 must be provided when name1 is a string")
@@ -812,6 +916,9 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
 
     @property
     def input_names(self) -> frozenset[str]:
+        """
+        Names of input dimensions.
+        """
         return self._names_for_dim_type(isl.dim_type.in_)
 
     @property
@@ -826,6 +933,9 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
 
     @property
     def parameter_names(self) -> frozenset[str]:
+        """
+        Names of parameter dimensions.
+        """
         return self._metadata_parameter_names
 
     @property
@@ -889,6 +999,9 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         return obj
 
     def get_isl_object(self) -> IslObject:
+        """
+        Reconstruct and return the wrapped public :mod:`islpy` object.
+        """
         return self._reconstruct_isl_object()
 
     @override

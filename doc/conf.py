@@ -1,31 +1,30 @@
 from __future__ import annotations
 
-from urllib.request import urlopen
+import sys
+from importlib import metadata
+from pathlib import Path
 
 
-_conf_url = \
-        "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
-with urlopen(_conf_url) as _inf:
-    exec(compile(_inf.read(), _conf_url, "exec"), globals())
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-copyright = "2025- University of Illiois Board of Trustees"
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+]
+
+autodoc_member_order = "bysource"
+autodoc_typehints = "none"
+
+copyright = "2025- University of Illinois Board of Trustees"
 author = "Andreas Kloeckner"
 
-# The version info for the project you're documenting, acts as replacement for
-# |version| and |release|, also used in various other places throughout the
-# built documents.
-#
-# The short X.Y version.
-ver_dic = {}
-with open("../namedisl/__init__.py") as vfile:
-    exec(compile(vfile.read(), "../namedisl/__init__.py", "exec"), ver_dic)
-
-version = ".".join(str(x) for x in ver_dic["__version__"])
-release = ver_dic["__version__"]
+release = metadata.version("namedisl")
+version = ".".join(release.split(".")[:2])
 
 intersphinx_mapping = {
     "islpy": ("https://documen.tician.de/islpy", None),
     "constantdict": ("https://matthiasdiener.github.io/constantdict/", None),
+    "python": ("https://docs.python.org/3", None),
 }
 
 nitpicky = True

@@ -1,3 +1,11 @@
+"""
+Name-aware affine and polynomial expression wrappers.
+
+The wrappers in this module provide a small arithmetic interface around isl
+expression objects while preserving named dimension metadata across alignment
+and reconstruction.
+"""
+
 from __future__ import annotations
 
 
@@ -44,19 +52,19 @@ from .core import (
 def _add_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast(IslExpressionLikeT, cast(Any, operator.add)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.add)(lhs, rhs))
 
 
 def _sub_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast(IslExpressionLikeT, cast(Any, operator.sub)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.sub)(lhs, rhs))
 
 
 def _mul_isl_expression(
     lhs: IslExpressionLikeT, rhs: IslExpressionLikeT | int
 ) -> IslExpressionLikeT:
-    return cast(IslExpressionLikeT, cast(Any, operator.mul)(lhs, rhs))
+    return cast("IslExpressionLikeT", cast("Any", operator.mul)(lhs, rhs))
 
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
@@ -66,6 +74,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
     # FIXME: Self is used here is because _NamedExpressionLike is generic,
     # leading to complaints from basedpyright
     def __add__(self, other: Self | int) -> Self:
+        """
+        Add another compatible named expression or an integer.
+        """
         if isinstance(other, int):
             return replace(
                 self,
@@ -77,6 +88,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
         return _align_and_apply_binary_op(self, other, _add_isl_expression)
 
     def __sub__(self, other: Self | int) -> Self:
+        """
+        Subtract another compatible named expression or an integer.
+        """
         if isinstance(other, int):
             return replace(
                 self,
@@ -88,6 +102,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
         return _align_and_apply_binary_op(self, other, _sub_isl_expression)
 
     def __mul__(self, other: Self | int) -> Self:
+        """
+        Multiply by another compatible named expression or an integer.
+        """
         if isinstance(other, int):
             return replace(
                 self,
@@ -99,6 +116,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
         return _align_and_apply_binary_op(self, other, _mul_isl_expression)
 
     def is_zero(self) -> bool:
+        """
+        Return whether this expression is identically zero.
+        """
         return bool(self._obj.is_zero())  # pyright: ignore[reportAttributeAccessIssue, reportUnknownArgumentType, reportUnknownMemberType]
 
     @override
@@ -114,6 +134,12 @@ class _NamedPwExpressionLike(_NamedExpressionLike[IslExpressionLikeT]):
 @final
 @dataclass(frozen=True, eq=False)
 class Aff(_NamedExpressionLike[isl.Aff]):
+    """
+    Name-aware wrapper around :class:`islpy.Aff`.
+
+    Construct instances with :func:`make_aff`.
+    """
+
     _obj: isl.Aff
 
     @override
@@ -134,6 +160,9 @@ def make_aff(src: isl.Aff) -> Aff:
 
 
 def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
+    """
+    Create an :class:`Aff` from isl syntax or an :class:`islpy.Aff`.
+    """
     obj = isl.Aff(src, ctx) if isinstance(src, str) else src
     aff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(aff_obj, isl.Aff)
@@ -143,6 +172,12 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 @final
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedExpressionLike[isl.QPolynomial]):
+    """
+    Name-aware wrapper around :class:`islpy.QPolynomial`.
+
+    Construct instances with :func:`make_qpolynomial`.
+    """
+
     _obj: isl.QPolynomial
 
     @override
@@ -164,6 +199,9 @@ def make_qpolynomial(src: isl.QPolynomial) -> QPolynomial:
 
 def make_qpolynomial(
         src: str | isl.QPolynomial, ctx: isl.Context | None = None) -> QPolynomial:
+    """
+    Create a :class:`QPolynomial` from isl syntax or an isl qpolynomial.
+    """
     # NOTE: ISL does not have a QPolynomial constructor, but we can make one
     # here by first creating a PwQPolynomial, then taking the only QPolynomial
     # that comes out of it :shrug:
@@ -180,6 +218,12 @@ def make_qpolynomial(
 @final
 @dataclass(frozen=True, eq=False)
 class PwAff(_NamedPwExpressionLike[isl.PwAff]):
+    """
+    Name-aware wrapper around :class:`islpy.PwAff`.
+
+    Construct instances with :func:`make_pw_aff`.
+    """
+
     _obj: isl.PwAff
 
     @override
@@ -200,6 +244,9 @@ def make_pw_aff(src: isl.PwAff) -> PwAff:
 
 
 def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
+    """
+    Create a :class:`PwAff` from isl syntax or an :class:`islpy.PwAff`.
+    """
     obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
     pwaff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(pwaff_obj, isl.PwAff)
@@ -209,6 +256,12 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 @final
 @dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPwExpressionLike[isl.PwQPolynomial]):
+    """
+    Name-aware wrapper around :class:`islpy.PwQPolynomial`.
+
+    Construct instances with :func:`make_pw_qpolynomial`.
+    """
+
     _obj: isl.PwQPolynomial
 
     @override
@@ -233,6 +286,9 @@ def make_pw_qpolynomial(
         src: str | isl.PwQPolynomial,
         ctx: isl.Context | None = None
     ) -> PwQPolynomial:
+    """
+    Create a :class:`PwQPolynomial` from isl syntax or an isl object.
+    """
     obj = isl.PwQPolynomial(src, ctx) if isinstance(src, str) else src
     pw_qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(pw_qp_obj, isl.PwQPolynomial)
@@ -258,7 +314,16 @@ class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
 @final
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike):
+    """
+    Name-aware wrapper around :class:`islpy.PwMultiAff`.
+
+    Construct instances with :func:`make_pw_multi_aff`.
+    """
+
     def get_at(self, name: str) -> PwAff:
+        """
+        Return the output component named *name*.
+        """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
         return make_pw_aff(
@@ -288,6 +353,9 @@ def make_pw_multi_aff(
         src: str | isl.PwMultiAff,
         ctx: isl.Context | None = None
     ) -> PwMultiAff:
+    """
+    Create a :class:`PwMultiAff` from isl syntax or an :class:`islpy.PwMultiAff`.
+    """
 
     obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
     pw_maff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
@@ -298,7 +366,16 @@ def make_pw_multi_aff(
 @final
 @dataclass(frozen=True, eq=False)
 class MultiAff(_NamedMultiExpressionLike):
+    """
+    Name-aware wrapper around :class:`islpy.MultiAff`.
+
+    Construct instances with :func:`make_multi_aff`.
+    """
+
     def get_at(self, name: str) -> Aff:
+        """
+        Return the output component named *name*.
+        """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
         return make_aff(self._reconstruct_isl_object().get_at(self._name_to_dim[name]))
@@ -324,6 +401,9 @@ def make_multi_aff(src: isl.MultiAff) -> MultiAff:
 
 def make_multi_aff(
         src: str | isl.MultiAff, ctx: isl.Context | None = None) -> MultiAff:
+    """
+    Create a :class:`MultiAff` from isl syntax or an :class:`islpy.MultiAff`.
+    """
     obj = isl.MultiAff(src, ctx) if isinstance(src, str) else src
     maff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(maff_obj, isl.Set)

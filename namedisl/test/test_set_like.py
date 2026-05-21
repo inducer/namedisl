@@ -259,6 +259,16 @@ def test_set_dim_min(ndims: int):
         assert a.dim_min(name) == cond_pw_affs[i]
 
 
+def test_set_dim_bounds_reconstruct_parameter_metadata() -> None:
+    set_ = nisl.make_set("[n] -> { [i] : 0 <= i < n }").rename_dims({
+        "i": "j",
+        "n": "m",
+    })
+
+    assert set_.dim_min("j") == isl.PwAff("[m] -> { [(0)] : m > 0 }")
+    assert set_.dim_max("j") == isl.PwAff("[m] -> { [(-1 + m)] : m > 0 }")
+
+
 # }}}
 
 
@@ -478,42 +488,30 @@ def test_subset_comparison_rejects_set_map_mismatch() -> None:
         _ = set_ <= map_
 
 
-def test_map_alignment_syncs_internal_output_positions_and_names() -> None:
+def test_map_alignment_syncs_output_metadata() -> None:
     lhs = nisl.make_map("{ [i] -> [x] }")
     rhs = nisl.make_map("{ [i] -> [y, x] }")
 
     aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
 
-    lhs_names = [
-        aligned_lhs._obj.get_dim_name(isl.dim_type.set, dim)
-        for dim in range(aligned_lhs._obj.dim(isl.dim_type.set))
-    ]
-    rhs_names = [
-        aligned_rhs._obj.get_dim_name(isl.dim_type.set, dim)
-        for dim in range(aligned_rhs._obj.dim(isl.dim_type.set))
-    ]
-
-    assert lhs_names == ["x", "y", "i"]
-    assert rhs_names == ["x", "y", "i"]
+    assert aligned_lhs.ordered_dim_names(isl.dim_type.out) == ("x", "y")
+    assert aligned_lhs.ordered_dim_names(isl.dim_type.in_) == ("i",)
+    assert aligned_rhs.ordered_dim_names(isl.dim_type.out) == ("x", "y")
+    assert aligned_rhs.ordered_dim_names(isl.dim_type.in_) == ("i",)
 
 
-def test_map_alignment_syncs_internal_input_and_parameter_positions_and_names() -> None:
+def test_map_alignment_syncs_input_and_parameter_metadata() -> None:
     lhs = nisl.make_map("[n] -> { [i] -> [x] }")
     rhs = nisl.make_map("[m, n] -> { [j, i] -> [x] }")
 
     aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
 
-    lhs_names = [
-        aligned_lhs._obj.get_dim_name(isl.dim_type.set, dim)
-        for dim in range(aligned_lhs._obj.dim(isl.dim_type.set))
-    ]
-    rhs_names = [
-        aligned_rhs._obj.get_dim_name(isl.dim_type.set, dim)
-        for dim in range(aligned_rhs._obj.dim(isl.dim_type.set))
-    ]
-
-    assert lhs_names == ["x", "i", "j", "m", "n"]
-    assert rhs_names == ["x", "i", "j", "m", "n"]
+    assert aligned_lhs.ordered_dim_names(isl.dim_type.out) == ("x",)
+    assert aligned_lhs.ordered_dim_names(isl.dim_type.in_) == ("i", "j")
+    assert aligned_lhs.ordered_dim_names(isl.dim_type.param) == ("m", "n")
+    assert aligned_rhs.ordered_dim_names(isl.dim_type.out) == ("x",)
+    assert aligned_rhs.ordered_dim_names(isl.dim_type.in_) == ("i", "j")
+    assert aligned_rhs.ordered_dim_names(isl.dim_type.param) == ("m", "n")
 
 
 def test_map_apply_range_rejects_surviving_name_collisions() -> None:
@@ -729,6 +727,19 @@ def test_map_dim_min(ndims_domain: int, ndims_range: int):
 
     for i, name in enumerate(out_names.split(",")):
         assert m.dim_min(name) == out_lower_bound_pw_maffs[i]
+
+
+def test_map_dim_bounds_reconstruct_parameter_metadata() -> None:
+    map_ = nisl.make_map(
+        "[n] -> { [i] -> [j] : 0 <= i < n and j = i + 1 }"
+    ).rename_dims({
+        "i": "k",
+        "j": "l",
+        "n": "m",
+    })
+
+    assert map_.dim_min("k") == isl.PwAff("[m] -> { [(0)] : m > 0 }")
+    assert map_.dim_max("l") == isl.PwAff("[m] -> { [(m)] : m > 0 }")
 
 
 # }}}
