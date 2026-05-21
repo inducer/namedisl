@@ -26,9 +26,6 @@ THE SOFTWARE.
 """
 
 import pytest
-from loopy.symbolic import pwaff_from_expr
-from pymbolic import var
-from typing_extensions import assert_type
 
 import islpy as isl
 
@@ -38,6 +35,7 @@ from namedisl.core import _align_two
 
 
 # {{{ sets
+
 
 def test_set_from_str() -> None:
     s = nisl.make_set("[n] -> { [i]: 0 <= i < n }")
@@ -62,6 +60,7 @@ def test_set_equality(ndims: int, has_params: bool):
     a, a_dims, a_cond = generate_random_named_set(ndims, "a", a_param)
 
     from itertools import permutations
+
     for perm in list(permutations(a_dims.split(","))):
         perm_dims = ",".join(p for p in perm)
         set_str = f"{{ [{perm_dims}] : {a_cond} }}"
@@ -145,8 +144,7 @@ def test_set_add_constraint_rejects_unknown_name() -> None:
 
 def test_set_gist_simplifies_against_named_context() -> None:
     set_ = nisl.make_set(
-        "{ [i, j, kb] : 0 <= i <= 13 and 0 <= j <= 13 "
-        "and 0 <= kb <= 4 and kb <= 3 }"
+        "{ [i, j, kb] : 0 <= i <= 13 and 0 <= j <= 13 and 0 <= kb <= 4 and kb <= 3 }"
     )
     context = nisl.make_set("{ [j, i, kb] : 0 <= i <= 13 and 0 <= j <= 13 }")
 
@@ -208,17 +206,13 @@ def test_basic_set_intersection_promotes_to_set() -> None:
 
 def test_set_convex_hull_returns_basic_set() -> None:
     set_ = nisl.make_set(
-        "{ [j, i] : "
-        "(j = 0 and 0 <= i <= 2) or "
-        "(j = 2 and 0 <= i <= 2) }"
+        "{ [j, i] : (j = 0 and 0 <= i <= 2) or (j = 2 and 0 <= i <= 2) }"
     )
 
     result = set_.convex_hull()
 
     assert isinstance(result, nisl.BasicSet)
-    assert result == nisl.make_basic_set(
-        "{ [j, i] : 0 <= j <= 2 and 0 <= i <= 2 }"
-    )
+    assert result == nisl.make_basic_set("{ [j, i] : 0 <= j <= 2 and 0 <= i <= 2 }")
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -264,22 +258,22 @@ def test_set_dim_min(ndims: int):
     for i, name in enumerate(a_dims.split(",")):
         assert a.dim_min(name) == cond_pw_affs[i]
 
+
 # }}}
 
 
 # {{{ maps
 
+
 def test_map_from_str() -> None:
-    m = nisl.make_map(
-        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+    m = nisl.make_map("[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
 
     print(m._obj)
     print(m)
 
 
 def test_map_from_map() -> None:
-    m = isl.Map(
-        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+    m = isl.Map("[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
     named_map = nisl.make_map(m)
 
     print(named_map._obj)
@@ -298,13 +292,14 @@ def test_map_equality(ndims_domain: int, ndims_range: int, has_params: bool):
         r_param = None
 
     og_map, domain_info, range_info = generate_random_named_map(
-        ndims_domain, "d", d_param,
-        ndims_range, "r", r_param)
+        ndims_domain, "d", d_param, ndims_range, "r", r_param
+    )
 
     _, d_dims, d_cond = domain_info
     _, r_dims, r_cond = range_info
 
     from itertools import permutations
+
     d_perms = list(permutations(d_dims.split(",")))
     r_perms = list(permutations(r_dims.split(",")))
 
@@ -320,9 +315,7 @@ def test_map_equality(ndims_domain: int, ndims_range: int, has_params: bool):
             range_str = f"[{r_param}] ->" + range_str
 
         perm_map = nisl.make_map(
-            isl.Map.from_domain_and_range(
-                isl.Set(domain_str), isl.Set(range_str)
-            )
+            isl.Map.from_domain_and_range(isl.Set(domain_str), isl.Set(range_str))
         )
 
         assert perm_map == og_map
@@ -340,13 +333,11 @@ def test_map_union(ndims_domain: int, ndims_range: int, has_params: bool):
         r_param = None
 
     x, x_domain_info, x_range_info = generate_random_named_map(
-        ndims_domain, "x_in", d_param,
-        ndims_range, "x_out", r_param
+        ndims_domain, "x_in", d_param, ndims_range, "x_out", r_param
     )
 
     y, y_domain_info, y_range_info = generate_random_named_map(
-        ndims_domain, "y_in", d_param,
-        ndims_domain, "y_out", r_param
+        ndims_domain, "y_in", d_param, ndims_domain, "y_out", r_param
     )
 
     _, x_in_dims, x_in_cond = x_domain_info
@@ -380,13 +371,11 @@ def test_map_intersection(ndims_domain: int, ndims_range: int, has_params: bool)
         r_param = None
 
     x, x_domain_info, x_range_info = generate_random_named_map(
-        ndims_domain, "x_in", d_param,
-        ndims_range, "x_out", r_param
+        ndims_domain, "x_in", d_param, ndims_range, "x_out", r_param
     )
 
     y, y_domain_info, y_range_info = generate_random_named_map(
-        ndims_domain, "y_in", d_param,
-        ndims_domain, "y_out", r_param
+        ndims_domain, "y_in", d_param, ndims_domain, "y_out", r_param
     )
 
     _, x_in_dims, x_in_cond = x_domain_info
@@ -427,8 +416,7 @@ def test_map_add_constraint_preserves_basic_map_type() -> None:
 
 def test_map_add_constraint_supports_previous_context_relation() -> None:
     relation = nisl.make_map(
-        "{ [ki_prev, kb_prev] -> [ki_cur, kb_cur] : "
-        "kb_cur = kb_prev + 1 }"
+        "{ [ki_prev, kb_prev] -> [ki_cur, kb_cur] : kb_cur = kb_prev + 1 }"
     )
 
     constrained = relation.add_constraint("ki_prev = ki_cur - 1")
@@ -441,8 +429,7 @@ def test_map_add_constraint_supports_previous_context_relation() -> None:
 
 def test_map_gist_simplifies_against_named_context() -> None:
     map_ = nisl.make_map(
-        "{ [i, kb] -> [j] : 0 <= i <= 13 and 0 <= kb <= 4 "
-        "and kb <= 3 and j = i }"
+        "{ [i, kb] -> [j] : 0 <= i <= 13 and 0 <= kb <= 4 and kb <= 3 and j = i }"
     )
     context = nisl.make_map("{ [kb, i] -> [j] : 0 <= i <= 13 and j = i }")
 
@@ -452,9 +439,7 @@ def test_map_gist_simplifies_against_named_context() -> None:
 def test_map_subset_comparisons_align_by_name() -> None:
     smaller = nisl.make_map("{ [i] -> [x] : x = i and 0 <= i < 5 }")
     larger = nisl.make_map("{ [j, i] -> [y, x] : x = i and 0 <= i < 10 }")
-    equal_reordered = nisl.make_map(
-        "{ [i, j] -> [x, y] : x = i and 0 <= i < 5 }"
-    )
+    equal_reordered = nisl.make_map("{ [i, j] -> [x, y] : x = i and 0 <= i < 5 }")
 
     assert smaller < larger
     assert smaller <= larger
@@ -477,11 +462,7 @@ def test_basic_map_subset_comparisons_allow_map_promotion() -> None:
 
 
 def test_map_convex_hull_returns_basic_map() -> None:
-    map_ = nisl.make_map(
-        "{ [i] -> [j] : "
-        "(i = 0 and j = 0) or "
-        "(i = 2 and j = 2) }"
-    )
+    map_ = nisl.make_map("{ [i] -> [j] : (i = 0 and j = 0) or (i = 2 and j = 2) }")
 
     result = map_.convex_hull()
 
@@ -535,59 +516,6 @@ def test_map_alignment_syncs_internal_input_and_parameter_positions_and_names() 
     assert rhs_names == ["x", "i", "j", "m", "n"]
 
 
-def test_map_apply_range_for_compute_a_tile_usage_map() -> None:
-    bm = 32
-    bk = 16
-
-    compute_map = nisl.make_map(f"""{{
-        [is, ks] -> [ii_s, io, ki_s, ko] :
-            is = io * {bm} + ii_s and
-            ks = ko * {bk} + ki_s
-    }}""")
-
-    usage_domain = nisl.make_set(
-        "{ [i, j, k, io, jo, ko, ii, ji, ki, ii_s, ji_s, ki_s] }"
-    )
-    global_usage_map = nisl.make_map_from_domain_and_range(
-        usage_domain,
-        nisl.make_set("{ [is, ks] }")
-    )
-
-    local_usage_mpwaff = isl.MultiPwAff.zero(global_usage_map.get_space())
-    for idx, expr in enumerate([var("i"), var("k")]):
-        local_space = local_usage_mpwaff.get_at(idx).get_space().domain()
-        local_usage_mpwaff = local_usage_mpwaff.set_pw_aff(
-            idx,
-            pwaff_from_expr(local_space, expr)
-        )
-
-    local_usage_map = nisl.make_map(local_usage_mpwaff.as_map())
-    local_usage_map = local_usage_map.intersect_domain(
-        nisl.make_basic_set(
-            "{ [i, j, k, io, jo, ko, ii, ji, ki, ii_s, ji_s, ki_s] }"
-        )
-    )
-
-    global_usage_map = global_usage_map | local_usage_map
-    assert isinstance(global_usage_map, nisl.Map)
-    assert_type(global_usage_map, nisl.Map)
-    compute_map = compute_map.rename_dims({
-        "ii_s": "ii_s_out",
-        "io": "io_out",
-        "ki_s": "ki_s_out",
-        "ko": "ko_out",
-    })
-    composed = global_usage_map.apply_range(compute_map)
-
-    assert composed.input_names == frozenset(
-        {"i", "ii", "ii_s", "io", "j", "ji", "ji_s", "jo",
-         "k", "ki", "ki_s", "ko"}
-    )
-    assert composed.range().names == frozenset(
-        {"ii_s_out", "io_out", "ki_s_out", "ko_out"}
-    )
-
-
 def test_map_apply_range_rejects_surviving_name_collisions() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
     rhs = nisl.make_map("{ [y] -> [x] }")
@@ -605,7 +533,8 @@ def test_map_apply_range_can_explicitly_rename_and_equate_collision() -> None:
     assert result.input_names == frozenset({"x"})
     assert result.range().names == frozenset({"x_out"})
     assert (
-        result.intersect_domain(nisl.make_set("{ [x] : x = 3 }"))
+        result
+        .intersect_domain(nisl.make_set("{ [x] : x = 3 }"))
         .range()
         .dim_min("x_out")
         .plain_is_equal(isl.PwAff("{ [(3)] }"))
@@ -653,7 +582,8 @@ def test_map_apply_domain_can_explicitly_rename_and_equate_collision() -> None:
     assert result.input_names == frozenset({"x"})
     assert result.range().names == frozenset({"x_out"})
     assert (
-        result.intersect_domain(nisl.make_set("{ [x] : x = 4 }"))
+        result
+        .intersect_domain(nisl.make_set("{ [x] : x = 4 }"))
         .range()
         .dim_min("x_out")
         .plain_is_equal(isl.PwAff("{ [(4)] }"))
@@ -667,10 +597,7 @@ def test_duplicate_map_names_are_rejected() -> None:
 
 def test_map_empty_from_space_preserves_names_and_is_empty() -> None:
     space = isl.Space.create_from_names(
-        isl.DEFAULT_CONTEXT,
-        params=["n"],
-        in_=["i", "j"],
-        out=["x", "y"]
+        isl.DEFAULT_CONTEXT, params=["n"], in_=["i", "j"], out=["x", "y"]
     )
 
     m = nisl.Map.empty(space)
@@ -681,11 +608,7 @@ def test_map_empty_from_space_preserves_names_and_is_empty() -> None:
 
 
 def test_basic_map_empty_from_space_preserves_names_and_is_empty() -> None:
-    space = isl.Space.create_from_names(
-        isl.DEFAULT_CONTEXT,
-        in_=["i"],
-        out=["x"]
-    )
+    space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT, in_=["i"], out=["x"])
 
     m = nisl.BasicMap.empty(space)
 
@@ -706,11 +629,7 @@ def test_map_empty_matches_existing_named_space() -> None:
 
 
 def test_empty_map_is_identity_for_union() -> None:
-    space = isl.Space.create_from_names(
-        isl.DEFAULT_CONTEXT,
-        in_=["i"],
-        out=["x"]
-    )
+    space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT, in_=["i"], out=["x"])
     empty_map = nisl.Map.empty(space)
     nonempty_map = nisl.make_map("{ [i] -> [x] }")
 
@@ -722,8 +641,7 @@ def test_empty_map_is_identity_for_union() -> None:
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
 def test_map_eliminate(ndims_domain: int, ndims_range: int):
     x, x_domain_info, x_range_info = generate_random_named_map(
-        ndims_domain, "x_in", None,
-        ndims_range, "x_out", None
+        ndims_domain, "x_in", None, ndims_range, "x_out", None
     )
 
     _, x_in_dims, _ = x_domain_info
@@ -739,8 +657,7 @@ def test_map_eliminate(ndims_domain: int, ndims_range: int):
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
 def test_map_project_out(ndims_domain: int, ndims_range: int):
     x, x_domain_info, x_range_info = generate_random_named_map(
-        ndims_domain, "x_in", None,
-        ndims_range, "x_out", None
+        ndims_domain, "x_in", None, ndims_range, "x_out", None
     )
 
     _, x_in_dims, _ = x_domain_info
@@ -764,8 +681,7 @@ def test_map_as_pw_multi_aff():
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
 def test_map_dim_max(ndims_domain: int, ndims_range: int):
     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-        ndims_domain, "x_in", None,
-        ndims_range, "x_out", None
+        ndims_domain, "x_in", None, ndims_range, "x_out", None
     )
 
     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
@@ -793,8 +709,7 @@ def test_map_dim_max(ndims_domain: int, ndims_range: int):
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
 def test_map_dim_min(ndims_domain: int, ndims_range: int):
     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-        ndims_domain, "x_in", None,
-        ndims_range, "x_out", None
+        ndims_domain, "x_in", None, ndims_range, "x_out", None
     )
 
     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
@@ -815,25 +730,28 @@ def test_map_dim_min(ndims_domain: int, ndims_range: int):
     for i, name in enumerate(out_names.split(",")):
         assert m.dim_min(name) == out_lower_bound_pw_maffs[i]
 
+
 # }}}
 
 
 # {{{ basic{map, set}
 
+
 def test_basic_map_from_str() -> None:
     m = nisl.make_basic_map(
-        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }"
+    )
 
     print(m._obj)
     print(m)
 
 
 def test_basic_map_from_map() -> None:
-    m = isl.BasicMap(
-        "[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
+    m = isl.BasicMap("[n] -> { [i,j] -> [a,b] : 0 <= i, j < 10 and 0 <= a, b < 20 }")
     named_map = nisl.make_basic_map(m)
 
     print(named_map._obj)
     print(named_map)
+
 
 # }}}

@@ -30,7 +30,7 @@ from abc import ABC
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
-from typing import TYPE_CHECKING, Generic, TypeAlias, TypeVar, cast, overload
+from typing import Generic, TypeAlias, TypeVar, cast, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -46,10 +46,6 @@ ISL_DIM_TYPES = [
 ]
 
 
-if TYPE_CHECKING:
-    from namedisl.tags import _TaggedName
-
-
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
 IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
@@ -62,11 +58,6 @@ IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     bound=IslExpressionLike,
 )
-IslSetLikeT = TypeVar("IslSetLikeT", bound=IslSetLike)
-IslMultiExpressionLikeT = TypeVar(
-    "IslMultiExpressionLikeT", bound=IslMultiExpressionLike
-)
-IslPwExpressionLikeT = TypeVar("IslPwExpressionLikeT", bound=IslPwExpressionLike)
 IslObjectT = TypeVar("IslObjectT", bound=IslObject, covariant=True)  # noqa: PLC0105
 
 NamedIslObjectT = TypeVar("NamedIslObjectT", bound="NamedIslObject[IslObject]")
@@ -635,16 +626,6 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
             new_name_to_dim,
             new_dimtype_to_names,
         )
-
-    def add_names(self, tagged_names_to_add: Sequence[_TaggedName]) -> Self:
-        grouped_names = self._empty_grouped_names()
-        for tagged_name in tagged_names_to_add:
-            dim_type = _normalize_public_dim_type(tagged_name._isl_dim_type)
-            if dim_type not in grouped_names:
-                raise ValueError(f"unsupported dim type: {tagged_name._isl_dim_type}")
-            grouped_names[dim_type].append(tagged_name.name)
-
-        return self._add_grouped_names(grouped_names)
 
     def add_set_names(self, names_to_add: Collection[str]) -> Self:
         return self._add_names_by_dim_type(names_to_add, isl.dim_type.set)
