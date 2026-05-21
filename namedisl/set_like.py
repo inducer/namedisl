@@ -46,11 +46,11 @@ from .core import (
 
 
 def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast("Any", operator.and_)(lhs, rhs))
+    return cast(isl.Set, cast(Any, operator.and_)(lhs, rhs))
 
 
 def _set_like_or(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast("Any", operator.or_)(lhs, rhs))
+    return cast(isl.Set, cast(Any, operator.or_)(lhs, rhs))
 
 
 if TYPE_CHECKING:
@@ -150,7 +150,11 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 
         if constraint_name_to_dim != self._name_to_dim:
             constraint_set = _align_obj(
-                Set(constraint_set, constraint_name_to_dim, self._dimtype_to_names),
+                Set(  # pylint: disable=too-many-function-args
+                    constraint_set,
+                    constraint_name_to_dim,
+                    self._dimtype_to_names,
+                ),
                 self._name_to_dim,
                 self._dimtype_to_names,
             )._obj
@@ -188,8 +192,10 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         else:
             result_type = Set
 
-        return result_type(
-            result, self_aligned._name_to_dim, self_aligned._dimtype_to_names
+        return result_type(  # pylint: disable=too-many-function-args
+            result,
+            self_aligned._name_to_dim,
+            self_aligned._dimtype_to_names,
         )
 
     def project_out(self: Self, names_to_project_out: str | Collection[str]) -> Self:
@@ -445,7 +451,11 @@ def _apply_set_like_binary_op(
     else:
         result_type = Set
 
-    return result_type(result, lhs._name_to_dim, lhs._dimtype_to_names)
+        return result_type(  # pylint: disable=too-many-function-args
+            result,
+            lhs._name_to_dim,
+            lhs._dimtype_to_names,
+        )
 
 
 def _compare_set_like(
@@ -648,7 +658,11 @@ class BasicMap(_NamedIslMapLike):
         obj = isl.BasicMap.empty(space)
         set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
         assert isinstance(set_obj, isl.Set)
-        return cls(set_obj, name_to_dim, dimtype_to_names)
+        return cls(  # pylint: disable=too-many-function-args
+            set_obj,
+            name_to_dim,
+            dimtype_to_names,
+        )
 
     @override
     def _map_obj(self) -> isl.BasicMap:
