@@ -31,7 +31,7 @@ import islpy as isl
 
 import namedisl as nisl
 from .utils_for_tests import generate_random_named_map, generate_random_named_set
-from namedisl.core import _align_two
+from namedisl.core import _align_two, _find_joint_name_to_dim
 
 
 # {{{ sets
@@ -115,6 +115,14 @@ def test_set_intersection(ndims: int, has_params: bool):
     result = nisl.make_set(set_str)
 
     assert (a & b) == result
+
+
+def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
+    set_with_n = nisl.make_set("{ [n] }")
+    param_with_n = nisl.make_set("[n] -> { [i] }")
+
+    with pytest.raises(ValueError, match="duplicate|collision"):
+        _find_joint_name_to_dim(set_with_n, param_with_n)
 
 
 def test_set_add_constraint_uses_named_dimensions() -> None:

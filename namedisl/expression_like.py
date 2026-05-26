@@ -34,7 +34,8 @@ THE SOFTWARE.
 """
 
 import operator
-from dataclasses import dataclass, replace
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, TypeVar, cast, final, overload
 
 from typing_extensions import Self, override
@@ -42,9 +43,11 @@ from typing_extensions import Self, override
 import islpy as isl
 
 from .core import (
+    DimTypeToNames,
     IslExpressionLikeT,
     NamedIslObject,
-    _align_and_apply_binary_op,
+    NameToDim,
+    _align_two,
     _make_named_object_pieces,
 )
 
@@ -74,6 +77,16 @@ def _mul_isl_expression(
     return cast("IslExpressionLikeT", cast("Any", operator.mul)(lhs, rhs))
 
 
+def _explicitly_promote_isl_expressions(
+    lhs: IslExpressionLikeT, rhs: IslExpressionLikeT
+) -> tuple[IslExpressionLikeT, IslExpressionLikeT]:
+    if isinstance(lhs, isl.Aff) and isinstance(rhs, isl.PwAff):
+        return cast("IslExpressionLikeT", lhs.to_pw_aff()), rhs
+    if isinstance(lhs, isl.PwAff) and isinstance(rhs, isl.Aff):
+        return lhs, cast("IslExpressionLikeT", rhs.to_pw_aff())
+    return lhs, rhs
+
+
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 @dataclass(frozen=True, eq=False)
@@ -82,47 +95,50 @@ class _NamedExpressionLike(
 ):
     # FIXME: Self is used here is because _NamedExpressionLike is generic,
     # leading to complaints from basedpyright
-    def __add__(self, other: Self | int) -> Self:
+    def __add__(
+        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
+    ) -> _NamedExpressionLike[IslExpressionLikeT]:
         """
         Add another compatible named expression or an integer.
         """
         if isinstance(other, int):
-            return replace(
-                self,
-                _obj=_add_isl_expression(self._obj, other),
-                _name_to_dim=self._name_to_dim,
-                _dimtype_to_names=self._dimtype_to_names
+            return _wrap_expression_result(
+                _add_isl_expression(self._obj, other),
+                self._name_to_dim,
+                self._dimtype_to_names,
             )
 
-        return _align_and_apply_binary_op(self, other, _add_isl_expression)
+        return _align_and_apply_expression_op(self, other, _add_isl_expression)
 
-    def __sub__(self, other: Self | int) -> Self:
+    def __sub__(
+        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
+    ) -> _NamedExpressionLike[IslExpressionLikeT]:
         """
         Subtract another compatible named expression or an integer.
         """
         if isinstance(other, int):
-            return replace(
-                self,
-                _obj=_sub_isl_expression(self._obj, other),
-                _name_to_dim=self._name_to_dim,
-                _dimtype_to_names=self._dimtype_to_names
+            return _wrap_expression_result(
+                _sub_isl_expression(self._obj, other),
+                self._name_to_dim,
+                self._dimtype_to_names,
             )
 
-        return _align_and_apply_binary_op(self, other, _sub_isl_expression)
+        return _align_and_apply_expression_op(self, other, _sub_isl_expression)
 
-    def __mul__(self, other: Self | int) -> Self:
+    def __mul__(
+        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
+    ) -> _NamedExpressionLike[IslExpressionLikeT]:
         """
         Multiply by another compatible named expression or an integer.
         """
         if isinstance(other, int):
-            return replace(
-                self,
-                _obj=_mul_isl_expression(self._obj, other),
-                _name_to_dim=self._name_to_dim,
-                _dimtype_to_names=self._dimtype_to_names
+            return _wrap_expression_result(
+                _mul_isl_expression(self._obj, other),
+                self._name_to_dim,
+                self._dimtype_to_names,
             )
 
-        return _align_and_apply_binary_op(self, other, _mul_isl_expression)
+        return _align_and_apply_expression_op(self, other, _mul_isl_expression)
 
     def is_zero(self) -> bool:
         """
@@ -302,6 +318,49 @@ def make_pw_qpolynomial(
     pw_qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(pw_qp_obj, isl.PwQPolynomial)
     return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+
+
+def _wrap_expression_result(
+    result: IslExpressionLikeT,
+    name_to_dim: NameToDim,
+    dimtype_to_names: DimTypeToNames,
+) -> _NamedExpressionLike[IslExpressionLikeT]:
+    if isinstance(result, isl.Aff):
+        return cast(
+            "_NamedExpressionLike[IslExpressionLikeT]",
+            Aff(result, name_to_dim, dimtype_to_names),  # pylint: disable=too-many-function-args
+        )
+    if isinstance(result, isl.PwAff):
+        return cast(
+            "_NamedExpressionLike[IslExpressionLikeT]",
+            PwAff(result, name_to_dim, dimtype_to_names),  # pylint: disable=too-many-function-args
+        )
+    if isinstance(result, isl.QPolynomial):
+        return cast(
+            "_NamedExpressionLike[IslExpressionLikeT]",
+            QPolynomial(result, name_to_dim, dimtype_to_names),  # pylint: disable=too-many-function-args
+        )
+    if isinstance(result, isl.PwQPolynomial):
+        return cast(
+            "_NamedExpressionLike[IslExpressionLikeT]",
+            PwQPolynomial(result, name_to_dim, dimtype_to_names),  # pylint: disable=too-many-function-args
+        )
+    raise TypeError(f"unsupported expression result type: {type(result).__name__}")
+
+
+def _align_and_apply_expression_op(
+    lhs: _NamedExpressionLike[IslExpressionLikeT],
+    rhs: _NamedExpressionLike[IslExpressionLikeT],
+    op: Callable[[IslExpressionLikeT, IslExpressionLikeT], IslExpressionLikeT],
+) -> _NamedExpressionLike[IslExpressionLikeT]:
+    lhs, rhs = _align_two(lhs, rhs)
+    lhs_obj, rhs_obj = _explicitly_promote_isl_expressions(lhs._obj, rhs._obj)
+    result = op(lhs_obj, rhs_obj)
+    return _wrap_expression_result(
+        result,
+        lhs._name_to_dim,
+        lhs._dimtype_to_names,
+    )
 
 # }}}
 

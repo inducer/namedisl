@@ -245,10 +245,13 @@ def _restore_names(
             restored_obj.dim(isl.dim_type.in_),
         )
 
+        restored_union_pw_aff = restored_obj.to_union_pw_aff()
         for name, dim in name_to_dim.items():
-            restored_obj = restored_obj.set_dim_name(isl.dim_type.param, dim, name)
+            restored_union_pw_aff = restored_union_pw_aff.set_dim_name(
+                isl.dim_type.param, dim, name
+            )
 
-        restored_obj = restored_obj.get_pw_aff_list().get_at(0)
+        restored_obj = restored_union_pw_aff.get_pw_aff_list().get_at(0)
         return cast(
             "InternalIslObjectT_co",
             restored_obj.move_dims(
@@ -407,6 +410,17 @@ def _find_joint_name_to_dim(
     ) | obj2._names_for_dim_type(isl.dim_type.set)
     all_inp_names = obj1.input_names | obj2.input_names
     all_param_names = obj1.parameter_names | obj2.parameter_names
+
+    duplicate_names = (
+        (all_set_names & all_inp_names)
+        | (all_set_names & all_param_names)
+        | (all_inp_names & all_param_names)
+    )
+    if duplicate_names:
+        raise ValueError(
+            "duplicate dimension names across dimension types: "
+            + ", ".join(sorted(duplicate_names))
+        )
 
     dt_to_names: DimTypeToNames = {}
     dt_to_names[isl.dim_type.param] = all_param_names

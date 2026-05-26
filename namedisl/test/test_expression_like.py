@@ -25,7 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import islpy as isl
 
 import namedisl as nisl
@@ -135,6 +134,18 @@ def test_pwaff_binary_ops():
     npwaff_m_3 = named_pwaff * 3
 
     assert npwaff_m_3._reconstruct_isl_object() == pwaff_m_3
+
+
+def test_mixed_aff_and_pwaff_binary_op_promotes_to_pwaff() -> None:
+    aff = nisl.make_aff("{ [i] -> [i] }")
+    pwaff = nisl.make_pw_aff("{ [i] -> [i] }")
+
+    result = aff + pwaff
+
+    assert isinstance(result, nisl.PwAff)
+    assert result._reconstruct_isl_object() == (
+        aff._reconstruct_isl_object().to_pw_aff() + pwaff._reconstruct_isl_object()
+    )
 
 # }}}
 
