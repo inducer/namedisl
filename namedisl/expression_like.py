@@ -35,7 +35,7 @@ THE SOFTWARE.
 
 import operator
 from dataclasses import dataclass, replace
-from typing import Any, cast, final, overload
+from typing import Any, TypeVar, cast, final, overload
 
 from typing_extensions import Self, override
 
@@ -46,6 +46,13 @@ from .core import (
     NamedIslObject,
     _align_and_apply_binary_op,
     _make_named_object_pieces,
+)
+
+
+PublicMultiExpressionLikeT = TypeVar(
+    "PublicMultiExpressionLikeT",
+    isl.MultiAff,
+    isl.PwMultiAff,
 )
 
 
@@ -70,7 +77,9 @@ def _mul_isl_expression(
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 @dataclass(frozen=True, eq=False)
-class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT]):
+class _NamedExpressionLike(
+    NamedIslObject[IslExpressionLikeT, IslExpressionLikeT]
+):
     # FIXME: Self is used here is because _NamedExpressionLike is generic,
     # leading to complaints from basedpyright
     def __add__(self, other: Self | int) -> Self:
@@ -300,7 +309,9 @@ def make_pw_qpolynomial(
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
 @dataclass(frozen=True, eq=False)
-class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
+class _NamedMultiExpressionLike(
+    NamedIslObject[isl.Set, PublicMultiExpressionLikeT]
+):
     """
     Multi-expressions in ISL cannot have dimensions moved. As a workaround, we
     represent multi-expressions as sets internally. This is done during
@@ -313,7 +324,7 @@ class _NamedMultiExpressionLike(NamedIslObject[isl.Set]):
 
 @final
 @dataclass(frozen=True, eq=False)
-class PwMultiAff(_NamedMultiExpressionLike):
+class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
     """
     Name-aware wrapper around :class:`islpy.PwMultiAff`.
 
@@ -365,7 +376,7 @@ def make_pw_multi_aff(
 
 @final
 @dataclass(frozen=True, eq=False)
-class MultiAff(_NamedMultiExpressionLike):
+class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
     """
     Name-aware wrapper around :class:`islpy.MultiAff`.
 

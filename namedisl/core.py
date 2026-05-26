@@ -60,9 +60,21 @@ IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     bound=IslExpressionLike,
 )
-IslObjectT = TypeVar("IslObjectT", bound=IslObject, covariant=True)  # noqa: PLC0105
+InternalIslObjectT_co = TypeVar(
+    "InternalIslObjectT_co",
+    bound=IslObject,
+    covariant=True,
+)
+PublicIslObjectT_co = TypeVar(
+    "PublicIslObjectT_co",
+    bound=IslObject,
+    covariant=True,
+)
 
-NamedIslObjectT = TypeVar("NamedIslObjectT", bound="NamedIslObject[IslObject]")
+NamedIslObjectT = TypeVar(
+    "NamedIslObjectT",
+    bound="NamedIslObject[IslObject, IslObject]",
+)
 
 NameToDim: TypeAlias = Mapping[str, int]
 
@@ -117,7 +129,9 @@ def _ensure_unique_public_names(obj: IslObject) -> None:
             seen_names.add(name)
 
 
-def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
+def _strip_names(
+    obj: InternalIslObjectT_co,
+) -> tuple[InternalIslObjectT_co, NameToDim]:
     name_to_dim: dict[str, int] = {}
 
     dt_to_strip = isl.dim_type.set if isinstance(obj, IslSetLike) else isl.dim_type.in_
@@ -138,7 +152,7 @@ def _strip_names(obj: IslObjectT) -> tuple[IslObjectT, NameToDim]:
 
         name_to_dim[name] = i
 
-    return cast("IslObjectT", stripped_obj), constantdict(name_to_dim)
+    return cast("InternalIslObjectT_co", stripped_obj), constantdict(name_to_dim)
 
 
 def _get_obj_dim_name(obj: IslObject, dt: isl.dim_type, dim: int) -> str:
@@ -209,7 +223,9 @@ def _make_named_object_pieces(obj: IslObject) -> IslObjectPieces:
     return decon_obj, name_to_dim, dimtype_to_names
 
 
-def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
+def _restore_names(
+    obj: InternalIslObjectT_co, name_to_dim: NameToDim
+) -> InternalIslObjectT_co:
     """
     Return a copy of *obj* with dimension names restored from *name_to_dim*.
 
@@ -234,7 +250,7 @@ def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
 
         restored_obj = restored_obj.get_pw_aff_list().get_at(0)
         return cast(
-            "IslObjectT",
+            "InternalIslObjectT_co",
             restored_obj.move_dims(
                 isl.dim_type.in_,
                 0,
@@ -255,7 +271,7 @@ def _restore_names(obj: IslObjectT, name_to_dim: NameToDim) -> IslObjectT:
     if isinstance(restored_obj, isl.UnionPwAff | isl.UnionPwMultiAff):
         raise NotImplementedError
 
-    return cast("IslObjectT", restored_obj)
+    return cast("InternalIslObjectT_co", restored_obj)
 
 
 def _get_dim_names(obj: IslObject, dt: isl.dim_type) -> frozenset[str]:
@@ -378,7 +394,8 @@ def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
 # FIXME: think through whether or not alphabetical ordering will require more
 # work on average than using one of the objects as a template in alignment
 def _find_joint_name_to_dim(
-    obj1: NamedIslObject[IslObjectT], obj2: NamedIslObject[IslObjectT]
+    obj1: NamedIslObject[IslObject, IslObject],
+    obj2: NamedIslObject[IslObject, IslObject],
 ) -> tuple[NameToDim, DimTypeToNames]:
     """
     Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
@@ -485,10 +502,12 @@ def _align_two(
 
 
 def _align_and_apply_binary_op(
-    lhs: NamedIslObject[IslObjectT],
-    rhs: NamedIslObject[IslObjectT],
-    op: Callable[[IslObjectT, IslObjectT], IslObjectT],
-) -> NamedIslObject[IslObjectT]:
+    lhs: NamedIslObject[InternalIslObjectT_co, IslObject],
+    rhs: NamedIslObject[InternalIslObjectT_co, IslObject],
+    op: Callable[
+        [InternalIslObjectT_co, InternalIslObjectT_co], InternalIslObjectT_co
+    ],
+) -> NamedIslObject[InternalIslObjectT_co, IslObject]:
     """
     Align *lhs* and *rhs*, apply *op* to their isl objects, and wrap the result.
     """
@@ -502,7 +521,7 @@ def _align_and_apply_binary_op(
 
 
 @dataclass(frozen=True, eq=False)
-class NamedIslObject(ABC, Generic[IslObjectT]):
+class NamedIslObject(ABC, Generic[InternalIslObjectT_co, PublicIslObjectT_co]):
     """
     Base class for named isl wrappers.
 
@@ -512,7 +531,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
     delegating the underlying integer-set algebra to isl.
     """
 
-    _obj: IslObjectT
+    _obj: InternalIslObjectT_co
     _name_to_dim: NameToDim
 
     # used to reconstruct ISL object
@@ -664,7 +683,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
         )
 
         return type(self)(
-            cast("IslObjectT", new_obj),
+            cast("InternalIslObjectT_co", new_obj),
             new_name_to_dim,
             new_dimtype_to_names,
         )
@@ -905,7 +924,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
                 )
 
         return type(self)(
-            cast("IslObjectT", obj),
+            cast("InternalIslObjectT_co", obj),
             self._name_to_dim,
             self._dimtype_to_names,
         )
@@ -946,7 +965,7 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
             )
         return None
 
-    def _reconstruct_isl_object(self) -> IslObject:
+    def _reconstruct_isl_object(self) -> PublicIslObjectT_co:
         """
         Relies on the dimension type ordering in
         :func:`_deconstruct_set_like_object`.
@@ -996,9 +1015,9 @@ class NamedIslObject(ABC, Generic[IslObjectT]):
                 isl.dim_type.in_, 0, internal_dim, inp_start, len(self.input_names)
             )
 
-        return obj
+        return cast("PublicIslObjectT_co", obj)
 
-    def get_isl_object(self) -> IslObject:
+    def get_isl_object(self) -> PublicIslObjectT_co:
         """
         Reconstruct and return the wrapped public :mod:`islpy` object.
         """

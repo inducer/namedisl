@@ -37,7 +37,7 @@ THE SOFTWARE.
 import operator
 from abc import ABC
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, cast, final, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -45,12 +45,19 @@ from typing_extensions import Self, override
 import islpy as isl
 
 from .core import (
+    IslSetLike,
     NamedIslObject,
     NameToDim,
     _align_obj,
     _align_two,
     _find_contiguous_dim_chunks,
     _make_named_object_pieces,
+)
+
+
+PublicSetLikeT_co = TypeVar("PublicSetLikeT_co", bound=IslSetLike, covariant=True)
+PublicMapLikeT_co = TypeVar(
+    "PublicMapLikeT_co", isl.BasicMap, isl.Map, covariant=True
 )
 
 
@@ -67,7 +74,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
+class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
     """
     Represents set-like objects with parameter dimensions as a non-parameterized
     set. Names are organized as contiguous chunks of dimension types, i.e.
@@ -192,18 +199,24 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         )
 
     @overload
-    def gist(self: BasicMap, context: _NamedIslSetLike) -> BasicMap | Map: ...
+    def gist(
+        self: BasicMap, context: _NamedIslSetLike[IslSetLike]
+    ) -> BasicMap | Map: ...
 
     @overload
-    def gist(self: Map, context: _NamedIslSetLike) -> Map: ...
+    def gist(self: Map, context: _NamedIslSetLike[IslSetLike]) -> Map: ...
 
     @overload
-    def gist(self: BasicSet, context: _NamedIslSetLike) -> BasicSet | Set: ...
+    def gist(
+        self: BasicSet, context: _NamedIslSetLike[IslSetLike]
+    ) -> BasicSet | Set: ...
 
     @overload
-    def gist(self: Set, context: _NamedIslSetLike) -> Set: ...
+    def gist(self: Set, context: _NamedIslSetLike[IslSetLike]) -> Set: ...
 
-    def gist(self, context: _NamedIslSetLike) -> _NamedIslSetLike:
+    def gist(
+        self, context: _NamedIslSetLike[IslSetLike]
+    ) -> _NamedIslSetLike[IslSetLike]:
         """
         Simplify this object under the assumptions described by *context*.
         """
@@ -351,7 +364,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     @overload
     def __and__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __and__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __and__(
+        self, other: _NamedIslSetLike[IslSetLike]
+    ) -> _NamedIslSetLike[IslSetLike]:
         """
         Return the intersection of two compatible named set-like objects.
         """
@@ -369,7 +384,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     @overload
     def __or__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __or__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __or__(
+        self, other: _NamedIslSetLike[IslSetLike]
+    ) -> _NamedIslSetLike[IslSetLike]:
         """
         Return the union of two compatible named set-like objects.
         """
@@ -387,7 +404,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
     @overload
     def __sub__(self: Set, other: BasicSet | Set) -> Set: ...
 
-    def __sub__(self, other: _NamedIslSetLike) -> _NamedIslSetLike:
+    def __sub__(
+        self, other: _NamedIslSetLike[IslSetLike]
+    ) -> _NamedIslSetLike[IslSetLike]:
         """
         Return the set difference with *other* removed.
         """
@@ -406,25 +425,25 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
         assert isinstance(aligned_other._obj, isl.Set)
         return aligned_self._obj.plain_is_equal(aligned_other._obj)
 
-    def __lt__(self, other: _NamedIslSetLike) -> bool:
+    def __lt__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
         """
         Return whether this object is a strict subset of *other*.
         """
         return _compare_set_like(self, other, isl.Set.is_strict_subset)
 
-    def __le__(self, other: _NamedIslSetLike) -> bool:
+    def __le__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
         """
         Return whether this object is a subset of *other*.
         """
         return _compare_set_like(self, other, isl.Set.is_subset)
 
-    def __gt__(self, other: _NamedIslSetLike) -> bool:
+    def __gt__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
         """
         Return whether this object is a strict superset of *other*.
         """
         return _compare_set_like(other, self, isl.Set.is_strict_subset)
 
-    def __ge__(self, other: _NamedIslSetLike) -> bool:
+    def __ge__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
         """
         Return whether this object is a superset of *other*.
         """
@@ -433,7 +452,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set], ABC):
 
 @final
 @dataclass(frozen=True, eq=False)
-class BasicSet(_NamedIslSetLike):
+class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     """
     Name-aware wrapper around :class:`islpy.BasicSet`.
 
@@ -477,7 +496,7 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 
 @final
 @dataclass(frozen=True, eq=False)
-class Set(_NamedIslSetLike):
+class Set(_NamedIslSetLike[isl.Set]):
     """
     Name-aware wrapper around :class:`islpy.Set`.
 
@@ -530,17 +549,17 @@ def _apply_set_like_binary_op(
 
 @overload
 def _apply_set_like_binary_op(
-    lhs: _NamedIslSetLike,
-    rhs: _NamedIslSetLike,
+    lhs: _NamedIslSetLike[IslSetLike],
+    rhs: _NamedIslSetLike[IslSetLike],
     op: Callable[[isl.Set, isl.Set], isl.Set],
-) -> _NamedIslSetLike: ...
+) -> _NamedIslSetLike[IslSetLike]: ...
 
 
 def _apply_set_like_binary_op(
-    lhs: _NamedIslSetLike,
-    rhs: _NamedIslSetLike,
+    lhs: _NamedIslSetLike[IslSetLike],
+    rhs: _NamedIslSetLike[IslSetLike],
     op: Callable[[isl.Set, isl.Set], isl.Set],
-) -> _NamedIslSetLike:
+) -> _NamedIslSetLike[IslSetLike]:
     lhs, rhs = _align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
 
@@ -561,7 +580,9 @@ def _apply_set_like_binary_op(
 
 
 def _compare_set_like(
-    lhs: _NamedIslSetLike, rhs: _NamedIslSetLike, op: Callable[[isl.Set, isl.Set], bool]
+    lhs: _NamedIslSetLike[IslSetLike],
+    rhs: _NamedIslSetLike[IslSetLike],
+    op: Callable[[isl.Set, isl.Set], bool],
 ) -> bool:
     lhs_is_map = isinstance(lhs, _NamedIslMapLike)
     rhs_is_map = isinstance(rhs, _NamedIslMapLike)
@@ -575,14 +596,17 @@ def _compare_set_like(
     return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
-class _NamedIslMapLike(_NamedIslSetLike):
+class _NamedIslMapLike(_NamedIslSetLike[PublicMapLikeT_co]):
     @override
-    def _reconstruct_isl_object(self) -> isl.BasicMap | isl.Map:
+    def _reconstruct_isl_object(self) -> PublicMapLikeT_co:
         obj = super()._reconstruct_isl_object()
         if isinstance(obj, isl.Set):
-            return isl.Map.from_domain_and_range(isl.Set("{ [] }"), obj)
+            return cast(
+                "PublicMapLikeT_co",
+                isl.Map.from_domain_and_range(isl.Set("{ [] }"), obj),
+            )
         assert isinstance(obj, isl.BasicMap | isl.Map)
-        return obj
+        return cast("PublicMapLikeT_co", obj)
 
     def _output_names(self) -> frozenset[str]:
         return frozenset(self._name_to_dim) - self.input_names - self.parameter_names
@@ -623,7 +647,7 @@ class _NamedIslMapLike(_NamedIslSetLike):
 
     def _reorder_interface(
         self, dim_type: isl.dim_type, ordered_names: tuple[str, ...]
-    ) -> _NamedIslMapLike:
+    ) -> _NamedIslMapLike[PublicMapLikeT_co]:
         interface_names = (
             self.input_names if dim_type == isl.dim_type.in_ else self._output_names()
         )
@@ -782,7 +806,7 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
 
 @final
 @dataclass(frozen=True, eq=False)
-class BasicMap(_NamedIslMapLike):
+class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     """
     Name-aware wrapper around :class:`islpy.BasicMap`.
 
@@ -915,7 +939,7 @@ def make_map_from_domain_and_range(
 
 @final
 @dataclass(frozen=True, eq=False)
-class Map(_NamedIslMapLike):
+class Map(_NamedIslMapLike[isl.Map]):
     """
     Name-aware wrapper around :class:`islpy.Map`.
 
