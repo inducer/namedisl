@@ -123,6 +123,12 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
         if isinstance(names_to_eliminate, str):
             names_to_eliminate = [names_to_eliminate]
 
+        missing_names = [
+            name for name in names_to_eliminate if name not in self.names
+        ]
+        if missing_names:
+            raise ValueError(f"unknown names: {', '.join(missing_names)}")
+
         dims_to_eliminate = sorted(
             self._name_to_dim[name] for name in names_to_eliminate
         )
@@ -245,6 +251,12 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
 
         if isinstance(names_to_project_out, str):
             names_to_project_out = [names_to_project_out]
+
+        missing_names = [
+            name for name in names_to_project_out if name not in self.names
+        ]
+        if missing_names:
+            raise ValueError(f"unknown names: {', '.join(missing_names)}")
 
         names_to_remove = set(names_to_project_out)
 
@@ -415,7 +427,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
     @override
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            raise TypeError("Objects are not of the same type")
+            raise NotImplementedError("Objects are not of the same type")
 
         aligned_self, aligned_other = _align_two(self, other)
 

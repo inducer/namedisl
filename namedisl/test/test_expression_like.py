@@ -25,6 +25,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import pytest
+from constantdict import constantdict
+
 import islpy as isl
 
 import namedisl as nisl
@@ -147,6 +150,121 @@ def test_mixed_aff_and_pwaff_binary_op_promotes_to_pwaff() -> None:
         aff._reconstruct_isl_object().to_pw_aff() + pwaff._reconstruct_isl_object()
     )
 
+
+def test_expression_equality_type_mismatch_raises_not_implemented_error() -> None:
+    aff = nisl.make_aff("{ [i] -> [i] }")
+    pwaff = nisl.make_pw_aff("{ [i] -> [i] }")
+
+    with pytest.raises(NotImplementedError, match="Objects are not of the same type"):
+        _ = aff == pwaff
+
+
+def test_reflected_integer_expression_ops() -> None:
+    def is_zero(
+        expr: isl.Aff | isl.PwAff | isl.QPolynomial | isl.PwQPolynomial,
+    ) -> bool:
+        if isinstance(expr, isl.Aff):
+            return bool(expr.plain_is_zero())
+        if isinstance(expr, isl.PwAff):
+            return bool(expr.plain_is_equal(expr * 0))
+        return bool(expr.is_zero())
+
+    expressions = [
+        nisl.make_aff("{ [i] -> [i] }"),
+        nisl.make_pw_aff("{ [i] -> [i] }"),
+        nisl.make_qpolynomial("{ [i] -> i }"),
+        nisl.make_pw_qpolynomial("{ [i] -> i }"),
+    ]
+
+    for expr in expressions:
+        obj = expr._reconstruct_isl_object()
+
+        assert is_zero((1 + expr)._reconstruct_isl_object() - (1 + obj))
+        assert is_zero((1 - expr)._reconstruct_isl_object() - (1 - obj))
+        assert is_zero((2 * expr)._reconstruct_isl_object() - (2 * obj))
+
+
+def _qpolynomial(spec: str) -> isl.QPolynomial:
+    return isl.PwQPolynomial(spec).get_pieces()[0][1]
+
+
+def _assert_expression_equal(actual, expected) -> None:
+    if isinstance(actual, isl.Aff | isl.PwAff):
+        assert actual == expected
+        return
+
+    assert (actual - expected).is_zero()
+
+
+def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:
+    cases = (
+        (
+            nisl.make_aff("[n] -> { [i] -> [i + n] }"),
+            isl.Aff("[n] -> { [i] -> [i + n] }"),
+        ),
+        (
+            nisl.make_pw_aff("[n] -> { [i] -> [i + n] }"),
+            isl.PwAff("[n] -> { [i] -> [i + n] }"),
+        ),
+        (
+            nisl.make_qpolynomial("[n] -> { [i] -> i + n }"),
+            _qpolynomial("[n] -> { [i] -> i + n }"),
+        ),
+        (
+            nisl.make_pw_qpolynomial("[n] -> { [i] -> i + n }"),
+            isl.PwQPolynomial("[n] -> { [i] -> i + n }"),
+        ),
+    )
+
+    for named_expr, isl_expr in cases:
+        moved = named_expr.move_dims("n", isl.dim_type.in_)
+        expected = isl_expr.move_dims(
+            isl.dim_type.in_,
+            1,
+            isl.dim_type.param,
+            0,
+            1,
+        )
+
+        _assert_expression_equal(moved._reconstruct_isl_object(), expected)
+        assert moved.input_names == frozenset({"i", "n"})
+        assert moved.parameter_names == frozenset()
+
+
+def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
+    cases = (
+        (
+            nisl.make_aff("[n] -> { [i] -> [i + n] }"),
+            isl.Aff("[n] -> { [i] -> [i + n] }"),
+        ),
+        (
+            nisl.make_pw_aff("[n] -> { [i] -> [i + n] }"),
+            isl.PwAff("[n] -> { [i] -> [i + n] }"),
+        ),
+        (
+            nisl.make_qpolynomial("[n] -> { [i] -> i + n }"),
+            _qpolynomial("[n] -> { [i] -> i + n }"),
+        ),
+        (
+            nisl.make_pw_qpolynomial("[n] -> { [i] -> i + n }"),
+            isl.PwQPolynomial("[n] -> { [i] -> i + n }"),
+        ),
+    )
+
+    for named_expr, isl_expr in cases:
+        moved = named_expr.move_dims("i", isl.dim_type.param)
+        expected = isl_expr.move_dims(
+            isl.dim_type.param,
+            1,
+            isl.dim_type.in_,
+            0,
+            1,
+        )
+
+        _assert_expression_equal(moved._reconstruct_isl_object(), expected)
+        assert moved.input_names == frozenset()
+        assert moved.parameter_names == frozenset({"n", "i"})
+
 # }}}
 
 
@@ -155,13 +273,77 @@ def test_multi_aff_get_at_uses_name() -> None:
     maff = nisl.make_multi_aff(
         map_._reconstruct_isl_object().as_pw_multi_aff().as_multi_aff()
     )
-    assert maff.get_at("x")._reconstruct_isl_object() == isl.Aff("{ [i] -> [(i)] }")
+    assert maff.get_at("x")._reconstruct_isl_object() == isl.PwAff("{ [i] -> [(i)] }")
 
 
 def test_pw_multi_aff_get_at_uses_name() -> None:
     map_ = nisl.make_map("{ [i] -> [x = i, y = 2i] }")
     pmaff = nisl.make_pw_multi_aff(map_.as_pw_multi_aff())
     assert pmaff.get_at("y")._reconstruct_isl_object() == isl.PwAff("{ [i] -> [(2i)] }")
+
+
+def test_multi_aff_stores_pw_aff_parts() -> None:
+    raw_maff = isl.MultiAff("{ [i] -> [x = i, y = 2i] }")
+
+    maff = nisl.make_multi_aff(raw_maff)
+
+    assert isinstance(maff._obj, constantdict)
+    assert not isinstance(maff._obj, isl.Set)
+    assert all(isinstance(part, nisl.PwAff) for part in maff._obj.values())
+    assert maff.get_at("x") is maff._obj[0]
+    assert maff.get_at("y") is maff._obj[1]
+    assert maff._reconstruct_isl_object() == raw_maff
+
+
+def test_pw_multi_aff_stores_pw_aff_parts() -> None:
+    raw_pmaff = isl.PwMultiAff("[n] -> { [i] -> [x = i + n, y = 2i] }")
+
+    pmaff = nisl.make_pw_multi_aff(raw_pmaff)
+
+    assert isinstance(pmaff._obj, constantdict)
+    assert not isinstance(pmaff._obj, isl.Set)
+    assert all(isinstance(part, nisl.PwAff) for part in pmaff._obj.values())
+    assert pmaff.get_at("x") is pmaff._obj[0]
+    assert pmaff.get_at("y") is pmaff._obj[1]
+    assert pmaff._reconstruct_isl_object() == raw_pmaff
+
+
+def test_multi_aff_rename_dims_updates_stored_parts() -> None:
+    maff = nisl.make_multi_aff("[n] -> { [i] -> [x = i + n] }")
+
+    renamed = maff.rename_dims({"x": "z", "i": "j", "n": "m"})
+
+    part = renamed.get_at("z")
+    assert part.input_names == frozenset({"j"})
+    assert part.parameter_names == frozenset({"m"})
+    assert part._reconstruct_isl_object() == isl.PwAff("[m] -> { [j] -> [(j + m)] }")
+
+
+def test_multi_aff_move_dims_updates_stored_parts() -> None:
+    maff = nisl.make_multi_aff("[n] -> { [i] -> [x = i + n] }")
+
+    moved = maff.move_dims("n", isl.dim_type.in_)
+
+    part = moved.get_at("x")
+    assert moved.input_names == frozenset({"i", "n"})
+    assert moved.parameter_names == frozenset()
+    assert part.input_names == frozenset({"i", "n"})
+    assert part.parameter_names == frozenset()
+    assert part._reconstruct_isl_object() == isl.PwAff("{ [i, n] -> [(i + n)] }")
+
+
+def test_pw_multi_aff_named_operations_update_stored_parts() -> None:
+    pmaff = nisl.make_pw_multi_aff("[n] -> { [i] -> [x = i + n] }")
+
+    renamed = pmaff.rename_dims({"x": "z", "i": "j", "n": "m"})
+    moved = renamed.move_dims("m", isl.dim_type.in_)
+
+    part = moved.get_at("z")
+    assert moved.input_names == frozenset({"j", "m"})
+    assert moved.parameter_names == frozenset()
+    assert part.input_names == frozenset({"j", "m"})
+    assert part.parameter_names == frozenset()
+    assert part._reconstruct_isl_object() == isl.PwAff("{ [j, m] -> [(j + m)] }")
 
 
 # {{{ qpolynomials

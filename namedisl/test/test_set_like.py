@@ -71,6 +71,14 @@ def test_set_equality(ndims: int, has_params: bool):
         assert a == perm_set
 
 
+def test_set_like_equality_type_mismatch_raises_not_implemented_error() -> None:
+    set_ = nisl.make_set("{ [i] }")
+    map_ = nisl.make_map("{ [i] -> [j] }")
+
+    with pytest.raises(NotImplementedError, match="Objects are not of the same type"):
+        _ = set_ == map_
+
+
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
 @pytest.mark.parametrize("has_params", [True, False])
 def test_set_union(ndims: int, has_params: bool):
@@ -121,7 +129,7 @@ def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
     set_with_n = nisl.make_set("{ [n] }")
     param_with_n = nisl.make_set("[n] -> { [i] }")
 
-    with pytest.raises(ValueError, match="duplicate|collision"):
+    with pytest.raises(ValueError, match=r"duplicate|collision"):
         _find_joint_name_to_dim(set_with_n, param_with_n)
 
 
@@ -231,12 +239,26 @@ def test_set_eliminate(ndims: int):
     assert a == nisl.make_set(f"{{[{a_dims}]}}")
 
 
+def test_set_eliminate_rejects_unknown_name() -> None:
+    set_ = nisl.make_set("{ [i] }")
+
+    with pytest.raises(ValueError, match="unknown names: missing"):
+        _ = set_.eliminate("missing")
+
+
 @pytest.mark.parametrize("ndims", [2, 4, 8])
 def test_set_project_out(ndims: int):
     a, a_dims, _ = generate_random_named_set(ndims, "a", None)
     a = a.project_out(a_dims.split(","))
 
     assert a == nisl.make_set("{[]}")
+
+
+def test_set_project_out_rejects_unknown_name() -> None:
+    set_ = nisl.make_set("{ [i] }")
+
+    with pytest.raises(ValueError, match="unknown names: missing"):
+        _ = set_.project_out("missing")
 
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
@@ -659,6 +681,13 @@ def test_map_eliminate(ndims_domain: int, ndims_range: int):
     assert x == nisl.make_map(f"{{[{x_in_dims}] -> [{x_out_dims}]}}")
 
 
+def test_map_eliminate_rejects_unknown_name() -> None:
+    map_ = nisl.make_map("{ [i] -> [j] }")
+
+    with pytest.raises(ValueError, match="unknown names: missing"):
+        _ = map_.eliminate("missing")
+
+
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
 @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
 def test_map_project_out(ndims_domain: int, ndims_range: int):
@@ -673,6 +702,13 @@ def test_map_project_out(ndims_domain: int, ndims_range: int):
     x = x.project_out(dims_to_remove)
 
     assert x == nisl.make_map("{[] -> []}")
+
+
+def test_map_project_out_rejects_unknown_name() -> None:
+    map_ = nisl.make_map("{ [i] -> [j] }")
+
+    with pytest.raises(ValueError, match="unknown names: missing"):
+        _ = map_.project_out("missing")
 
 
 def test_map_as_pw_multi_aff():
