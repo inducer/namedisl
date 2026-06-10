@@ -34,7 +34,6 @@ THE SOFTWARE.
 """
 
 import operator
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, final, overload
 
@@ -56,7 +55,7 @@ from .core import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
 
 PublicMultiExpressionLikeT = TypeVar(
