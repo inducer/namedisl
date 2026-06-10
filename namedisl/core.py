@@ -38,29 +38,39 @@ THE SOFTWARE.
 import re
 from abc import ABC
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import metadata
 from typing import Generic, TypeAlias, TypeVar, cast, overload
 
 from constantdict import constantdict
-from typing_extensions import Self, override
+from typing_extensions import Self, TypeIs, override
 
 import islpy as isl
 
 
 IslBaseExpressionLike = isl.Aff | isl.QPolynomial
 IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
+IslScalarExpressionLike = IslBaseExpressionLike | IslPwExpressionLike
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
-MultiExpressionParts: TypeAlias = Mapping[int, object]
+MultiExpressionPart: TypeAlias = (
+    "NamedIslObject[isl.Aff, isl.Aff] | NamedIslObject[isl.PwAff, isl.PwAff]"
+)
+MultiExpressionParts: TypeAlias = Mapping[int, MultiExpressionPart]
 
-IslExpressionLike = IslBaseExpressionLike | IslPwExpressionLike | IslMultiExpressionLike
+IslExpressionLike = IslScalarExpressionLike | IslMultiExpressionLike
 IslSetLike = isl.BasicSet | isl.BasicMap | isl.Set | isl.Map
-IslObject = IslSetLike | IslExpressionLike | IslMultiExpressionLike
-InternalIslObject = IslObject | MultiExpressionParts
+IslObject = IslSetLike | IslExpressionLike
+RawInternalIslObject = IslSetLike | IslScalarExpressionLike
+InternalIslObject = RawInternalIslObject | MultiExpressionParts
 
 IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
-    bound=IslExpressionLike,
+    bound=IslScalarExpressionLike,
+)
+RawInternalIslObjectT_co = TypeVar(
+    "RawInternalIslObjectT_co",
+    bound=RawInternalIslObject,
+    covariant=True,
 )
 InternalIslObjectT_co = TypeVar(
     "InternalIslObjectT_co",
@@ -85,7 +95,7 @@ NameToDim: TypeAlias = Mapping[str, int]
 # alignment
 DimTypeToNames: TypeAlias = Mapping[isl.dim_type, frozenset[str]]
 
-IslObjectPieces: TypeAlias = tuple[IslObject, NameToDim, DimTypeToNames]
+IslObjectPieces: TypeAlias = tuple[RawInternalIslObject, NameToDim, DimTypeToNames]
 
 
 __version__ = metadata.version("namedisl")
@@ -111,15 +121,21 @@ def _normalize_public_dim_type(dim_type: isl.dim_type) -> isl.dim_type:
     return dim_type
 
 
-def _is_multi_expression_parts(obj: object) -> bool:
-    return isinstance(obj, Mapping)
+def _is_multi_expression_parts(obj: object) -> TypeIs[MultiExpressionParts]:
+    if not isinstance(obj, Mapping):
+        return False
+
+    mapping: Mapping[object, object] = obj
+    return all(
+        isinstance(dim, int) and isinstance(part, NamedIslObject)
+        for dim, part in mapping.items()
+    )
 
 
 def _uses_explicit_input_metadata(obj: object) -> bool:
-    return (
-        isinstance(obj, IslSetLike | IslMultiExpressionLike)
-        or _is_multi_expression_parts(obj)
-    )
+    return isinstance(
+        obj, IslSetLike | IslMultiExpressionLike
+    ) or _is_multi_expression_parts(obj)
 
 
 def _ensure_unique_public_names(obj: IslObject) -> None:
@@ -143,8 +159,8 @@ def _ensure_unique_public_names(obj: IslObject) -> None:
 
 
 def _strip_names(
-    obj: InternalIslObjectT_co,
-) -> tuple[InternalIslObjectT_co, NameToDim]:
+    obj: RawInternalIslObjectT_co,
+) -> tuple[RawInternalIslObjectT_co, NameToDim]:
     name_to_dim: dict[str, int] = {}
 
     dt_to_strip = isl.dim_type.set if isinstance(obj, IslSetLike) else isl.dim_type.in_
@@ -165,7 +181,7 @@ def _strip_names(
 
         name_to_dim[name] = i
 
-    return cast("InternalIslObjectT_co", stripped_obj), constantdict(name_to_dim)
+    return cast("RawInternalIslObjectT_co", stripped_obj), constantdict(name_to_dim)
 
 
 def _get_obj_dim_name(obj: IslObject, dt: isl.dim_type, dim: int) -> str:
@@ -237,8 +253,8 @@ def _make_named_object_pieces(obj: IslObject) -> IslObjectPieces:
 
 
 def _restore_names(
-    obj: InternalIslObjectT_co, name_to_dim: NameToDim
-) -> InternalIslObjectT_co:
+    obj: RawInternalIslObjectT_co, name_to_dim: NameToDim
+) -> RawInternalIslObjectT_co:
     """
     Return a copy of *obj* with dimension names restored from *name_to_dim*.
 
@@ -266,7 +282,7 @@ def _restore_names(
 
         restored_obj = restored_union_pw_aff.get_pw_aff_list().get_at(0)
         return cast(
-            "InternalIslObjectT_co",
+            "RawInternalIslObjectT_co",
             restored_obj.move_dims(
                 isl.dim_type.in_,
                 0,
@@ -287,7 +303,7 @@ def _restore_names(
     if isinstance(restored_obj, isl.UnionPwAff | isl.UnionPwMultiAff):
         raise NotImplementedError
 
-    return cast("InternalIslObjectT_co", restored_obj)
+    return cast("RawInternalIslObjectT_co", restored_obj)
 
 
 def _get_dim_names(obj: IslObject, dt: isl.dim_type) -> frozenset[str]:
@@ -316,10 +332,16 @@ def _deconstruct_object(obj: isl.PwMultiAff) -> tuple[isl.Set, DimTypeToNames]: 
 
 
 @overload
-def _deconstruct_object(obj: IslObject) -> tuple[IslObject, DimTypeToNames]: ...
+def _deconstruct_object(obj: isl.MultiAff) -> tuple[isl.Set, DimTypeToNames]: ...
 
 
-def _deconstruct_object(obj: IslObject) -> tuple[IslObject, DimTypeToNames]:
+@overload
+def _deconstruct_object(
+    obj: RawInternalIslObject,
+) -> tuple[RawInternalIslObject, DimTypeToNames]: ...
+
+
+def _deconstruct_object(obj: IslObject) -> tuple[RawInternalIslObject, DimTypeToNames]:
     """
     Convert a public isl object into namedisl's internal representation.
 
@@ -375,6 +397,7 @@ def _deconstruct_object(obj: IslObject) -> tuple[IslObject, DimTypeToNames]:
             decon_obj.dim(isl.dim_type.param),
         )
 
+    assert not isinstance(decon_obj, IslMultiExpressionLike)
     return decon_obj, constantdict(dt_to_names)
 
 
@@ -410,8 +433,8 @@ def _find_contiguous_dim_chunks(dims: Sequence[int]) -> Mapping[int, int]:
 # FIXME: think through whether or not alphabetical ordering will require more
 # work on average than using one of the objects as a template in alignment
 def _find_joint_name_to_dim(
-    obj1: NamedIslObject[IslObject, IslObject],
-    obj2: NamedIslObject[IslObject, IslObject],
+    obj1: NamedIslObject[InternalIslObject, IslObject],
+    obj2: NamedIslObject[InternalIslObject, IslObject],
 ) -> tuple[NameToDim, DimTypeToNames]:
     """
     Enforces alphabetical ordering of all dimensions found in :arg:`obj1` and
@@ -494,8 +517,7 @@ def _align_obj(
 
         new_parts = constantdict({
             new_dim: _align_obj(
-                cast("NamedIslObject[InternalIslObject, IslObject]",
-                     named_obj._obj[named_obj._name_to_dim[name]]),
+                named_obj._obj[named_obj._name_to_dim[name]],
                 part_ordering,
                 part_dimtype_to_names,
             )
@@ -508,10 +530,7 @@ def _align_obj(
             dimtype_to_names,
         )
 
-    new_isl_obj = cast(
-        "IslSetLike | IslBaseExpressionLike | IslPwExpressionLike | isl.MultiAff",
-        named_obj._obj,
-    )
+    new_isl_obj = named_obj._obj
     running_name_to_dim = dict(named_obj._name_to_dim)
 
     target_dt = (
@@ -726,8 +745,7 @@ class NamedIslObject(ABC, Generic[InternalIslObjectT_co, PublicIslObjectT_co]):
                 if not names_to_add:
                     continue
                 new_obj = constantdict({
-                    dim: cast("NamedIslObject[InternalIslObject, IslObject]", part)
-                    .add_dim_names(names_to_add, dim_type)
+                    dim: part.add_dim_names(names_to_add, dim_type)
                     for dim, part in new_obj.items()
                 })
 
@@ -747,10 +765,11 @@ class NamedIslObject(ABC, Generic[InternalIslObjectT_co, PublicIslObjectT_co]):
                 has_inputs=True,
             )
 
-            return type(self)(
-                new_obj,
-                new_name_to_dim,
-                new_dimtype_to_names,
+            return replace(
+                self,
+                _obj=new_obj,
+                _name_to_dim=new_name_to_dim,
+                _dimtype_to_names=new_dimtype_to_names,
             )
 
         new_obj = self._obj
@@ -977,18 +996,20 @@ class NamedIslObject(ABC, Generic[InternalIslObjectT_co, PublicIslObjectT_co]):
         new_obj = self._obj
         if _is_multi_expression_parts(new_obj):
             new_obj = constantdict({
-                dim: cast("NamedIslObject[InternalIslObject, IslObject]", part)
-                .rename_dims({
+                dim: part.rename_dims({
                     old_name: new_name
                     for old_name, new_name in renaming.items()
-                    if old_name in cast(
-                        "NamedIslObject[InternalIslObject, IslObject]", part
-                    ).names
+                    if old_name in part.names
                 })
                 for dim, part in new_obj.items()
             })
 
-        return type(self)(new_obj, new_name_to_dim, new_dimtype_to_names)
+        return replace(
+            self,
+            _obj=new_obj,
+            _name_to_dim=new_name_to_dim,
+            _dimtype_to_names=new_dimtype_to_names,
+        )
 
     @overload
     def equate_dims(self, name1: Mapping[str, str]) -> Self: ...
@@ -1087,10 +1108,12 @@ class NamedIslObject(ABC, Generic[InternalIslObjectT_co, PublicIslObjectT_co]):
         Relies on the dimension type ordering in
         :func:`_deconstruct_set_like_object`.
         """
-        obj = cast(
-            "IslSetLike | IslBaseExpressionLike | IslPwExpressionLike | isl.MultiAff",
-            _restore_names(self._obj, self._name_to_dim),
-        )
+        if _is_multi_expression_parts(self._obj):
+            raise NotImplementedError(
+                "multi-expression parts require subclass reconstruction"
+            )
+
+        obj = _restore_names(self._obj, self._name_to_dim)
 
         internal_dim = (
             isl.dim_type.set if isinstance(obj, isl.Set) else isl.dim_type.in_

@@ -33,6 +33,17 @@ import islpy as isl
 import namedisl as nisl
 
 
+ScalarIslExpression = isl.Aff | isl.PwAff | isl.QPolynomial | isl.PwQPolynomial
+
+
+def _is_zero_expression(expr: ScalarIslExpression) -> bool:
+    if isinstance(expr, isl.Aff):
+        return bool(expr.plain_is_zero())
+    if isinstance(expr, isl.PwAff):
+        return bool(expr.plain_is_equal(expr * 0))
+    return bool(expr.is_zero())
+
+
 # {{{ affs
 
 def test_aff_from_str():
@@ -160,40 +171,73 @@ def test_expression_equality_type_mismatch_raises_not_implemented_error() -> Non
 
 
 def test_reflected_integer_expression_ops() -> None:
-    def is_zero(
-        expr: isl.Aff | isl.PwAff | isl.QPolynomial | isl.PwQPolynomial,
-    ) -> bool:
-        if isinstance(expr, isl.Aff):
-            return bool(expr.plain_is_zero())
-        if isinstance(expr, isl.PwAff):
-            return bool(expr.plain_is_equal(expr * 0))
-        return bool(expr.is_zero())
+    aff_expr = nisl.make_aff("{ [i] -> [i] }")
+    aff_obj = aff_expr._reconstruct_isl_object()
+    assert _is_zero_expression((1 + aff_expr)._reconstruct_isl_object() - (1 + aff_obj))
+    assert _is_zero_expression((1 - aff_expr)._reconstruct_isl_object() - (1 - aff_obj))
+    assert _is_zero_expression((2 * aff_expr)._reconstruct_isl_object() - (2 * aff_obj))
 
-    expressions = [
-        nisl.make_aff("{ [i] -> [i] }"),
-        nisl.make_pw_aff("{ [i] -> [i] }"),
-        nisl.make_qpolynomial("{ [i] -> i }"),
-        nisl.make_pw_qpolynomial("{ [i] -> i }"),
-    ]
+    pw_aff_expr = nisl.make_pw_aff("{ [i] -> [i] }")
+    pw_aff_obj = pw_aff_expr._reconstruct_isl_object()
+    assert _is_zero_expression(
+        (1 + pw_aff_expr)._reconstruct_isl_object() - (1 + pw_aff_obj)
+    )
+    assert _is_zero_expression(
+        (1 - pw_aff_expr)._reconstruct_isl_object() - (1 - pw_aff_obj)
+    )
+    assert _is_zero_expression(
+        (2 * pw_aff_expr)._reconstruct_isl_object() - (2 * pw_aff_obj)
+    )
 
-    for expr in expressions:
-        obj = expr._reconstruct_isl_object()
+    qpoly_expr = nisl.make_qpolynomial("{ [i] -> i }")
+    qpoly_obj = qpoly_expr._reconstruct_isl_object()
+    assert _is_zero_expression(
+        (1 + qpoly_expr)._reconstruct_isl_object() - (1 + qpoly_obj)
+    )
+    assert _is_zero_expression(
+        (1 - qpoly_expr)._reconstruct_isl_object() - (1 - qpoly_obj)
+    )
+    assert _is_zero_expression(
+        (2 * qpoly_expr)._reconstruct_isl_object() - (2 * qpoly_obj)
+    )
 
-        assert is_zero((1 + expr)._reconstruct_isl_object() - (1 + obj))
-        assert is_zero((1 - expr)._reconstruct_isl_object() - (1 - obj))
-        assert is_zero((2 * expr)._reconstruct_isl_object() - (2 * obj))
+    pw_qpoly_expr = nisl.make_pw_qpolynomial("{ [i] -> i }")
+    pw_qpoly_obj = pw_qpoly_expr._reconstruct_isl_object()
+    assert _is_zero_expression(
+        (1 + pw_qpoly_expr)._reconstruct_isl_object() - (1 + pw_qpoly_obj)
+    )
+    assert _is_zero_expression(
+        (1 - pw_qpoly_expr)._reconstruct_isl_object() - (1 - pw_qpoly_obj)
+    )
+    assert _is_zero_expression(
+        (2 * pw_qpoly_expr)._reconstruct_isl_object() - (2 * pw_qpoly_obj)
+    )
 
 
 def _qpolynomial(spec: str) -> isl.QPolynomial:
     return isl.PwQPolynomial(spec).get_pieces()[0][1]
 
 
-def _assert_expression_equal(actual, expected) -> None:
+def _assert_expression_equal(
+    actual: ScalarIslExpression, expected: ScalarIslExpression
+) -> None:
     if isinstance(actual, isl.Aff | isl.PwAff):
         assert actual == expected
         return
 
-    assert (actual - expected).is_zero()
+    if isinstance(actual, isl.QPolynomial) and isinstance(expected, isl.QPolynomial):
+        assert (actual - expected).is_zero()
+        return
+
+    if isinstance(actual, isl.PwQPolynomial) and isinstance(
+        expected, isl.PwQPolynomial
+    ):
+        assert (actual - expected).is_zero()
+        return
+
+    raise TypeError(
+        f"cannot compare {type(actual).__name__} and {type(expected).__name__}"
+    )
 
 
 def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:

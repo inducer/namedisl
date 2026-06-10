@@ -21,7 +21,7 @@ classifiers = [
 dependencies = [
     "constantdict",
     "islpy",
-    "typing-extensions>=4.5",
+    "typing-extensions>=4.10",
 ]
 
 [project.urls]
@@ -111,4 +111,3 @@ exclude = [
     ".conda-root",
     ".env",
 ]
-

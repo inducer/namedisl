@@ -34,6 +34,7 @@ THE SOFTWARE.
 """
 
 import operator
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
 
@@ -45,7 +46,7 @@ import islpy as isl
 from .core import (
     DimTypeToNames,
     IslExpressionLikeT,
-    MultiExpressionParts,
+    IslScalarExpressionLike,
     NamedIslObject,
     NameToDim,
     _align_two,
@@ -61,6 +62,11 @@ PublicMultiExpressionLikeT = TypeVar(
     "PublicMultiExpressionLikeT",
     isl.MultiAff,
     isl.PwMultiAff,
+)
+NamedScalarExpressionLikeT_co = TypeVar(
+    "NamedScalarExpressionLikeT_co",
+    bound=IslScalarExpressionLike,
+    covariant=True,
 )
 
 
@@ -108,7 +114,7 @@ def _explicitly_promote_isl_expressions(
 
 @dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(
-    NamedIslObject[IslExpressionLikeT, IslExpressionLikeT]
+    NamedIslObject[NamedScalarExpressionLikeT_co, NamedScalarExpressionLikeT_co]
 ):
     @overload
     def __add__(self: Aff, other: Aff | int) -> Aff: ...
@@ -128,19 +134,13 @@ class _NamedExpressionLike(
     ) -> PwQPolynomial: ...
 
     def __add__(
-        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
-    ) -> _NamedExpressionLike[IslExpressionLikeT]:
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: _NamedExpressionLike[IslScalarExpressionLike] | int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Add another compatible named expression or an integer.
         """
-        if isinstance(other, int):
-            return _wrap_expression_result(
-                _add_isl_expression(self._obj, other),
-                self._name_to_dim,
-                self._dimtype_to_names,
-            )
-
-        return _align_and_apply_expression_op(self, other, _add_isl_expression)
+        return _apply_expression_binary_op(self, other, _add_isl_expression)
 
     @overload
     def __radd__(self: Aff, other: int) -> Aff: ...
@@ -154,15 +154,14 @@ class _NamedExpressionLike(
     @overload
     def __radd__(self: PwQPolynomial, other: int) -> PwQPolynomial: ...
 
-    def __radd__(self, other: int) -> _NamedExpressionLike[IslExpressionLikeT]:
+    def __radd__(
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Add this expression to an integer.
         """
-        return _wrap_expression_result(
-            _radd_isl_expression(other, self._obj),
-            self._name_to_dim,
-            self._dimtype_to_names,
-        )
+        return _apply_reflected_int_expression_op(self, other, _radd_isl_expression)
 
     @overload
     def __sub__(self: Aff, other: Aff | int) -> Aff: ...
@@ -182,19 +181,13 @@ class _NamedExpressionLike(
     ) -> PwQPolynomial: ...
 
     def __sub__(
-        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
-    ) -> _NamedExpressionLike[IslExpressionLikeT]:
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: _NamedExpressionLike[IslScalarExpressionLike] | int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Subtract another compatible named expression or an integer.
         """
-        if isinstance(other, int):
-            return _wrap_expression_result(
-                _sub_isl_expression(self._obj, other),
-                self._name_to_dim,
-                self._dimtype_to_names,
-            )
-
-        return _align_and_apply_expression_op(self, other, _sub_isl_expression)
+        return _apply_expression_binary_op(self, other, _sub_isl_expression)
 
     @overload
     def __rsub__(self: Aff, other: int) -> Aff: ...
@@ -208,15 +201,14 @@ class _NamedExpressionLike(
     @overload
     def __rsub__(self: PwQPolynomial, other: int) -> PwQPolynomial: ...
 
-    def __rsub__(self, other: int) -> _NamedExpressionLike[IslExpressionLikeT]:
+    def __rsub__(
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Subtract this expression from an integer.
         """
-        return _wrap_expression_result(
-            _rsub_isl_expression(other, self._obj),
-            self._name_to_dim,
-            self._dimtype_to_names,
-        )
+        return _apply_reflected_int_expression_op(self, other, _rsub_isl_expression)
 
     @overload
     def __mul__(self: Aff, other: Aff | int) -> Aff: ...
@@ -236,19 +228,13 @@ class _NamedExpressionLike(
     ) -> PwQPolynomial: ...
 
     def __mul__(
-        self, other: _NamedExpressionLike[IslExpressionLikeT] | int
-    ) -> _NamedExpressionLike[IslExpressionLikeT]:
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: _NamedExpressionLike[IslScalarExpressionLike] | int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Multiply by another compatible named expression or an integer.
         """
-        if isinstance(other, int):
-            return _wrap_expression_result(
-                _mul_isl_expression(self._obj, other),
-                self._name_to_dim,
-                self._dimtype_to_names,
-            )
-
-        return _align_and_apply_expression_op(self, other, _mul_isl_expression)
+        return _apply_expression_binary_op(self, other, _mul_isl_expression)
 
     @overload
     def __rmul__(self: Aff, other: int) -> Aff: ...
@@ -262,15 +248,14 @@ class _NamedExpressionLike(
     @overload
     def __rmul__(self: PwQPolynomial, other: int) -> PwQPolynomial: ...
 
-    def __rmul__(self, other: int) -> _NamedExpressionLike[IslExpressionLikeT]:
+    def __rmul__(
+        self: _NamedExpressionLike[IslScalarExpressionLike],
+        other: int,
+    ) -> _NamedExpressionLike[IslScalarExpressionLike]:
         """
         Multiply this expression by an integer.
         """
-        return _wrap_expression_result(
-            _rmul_isl_expression(other, self._obj),
-            self._name_to_dim,
-            self._dimtype_to_names,
-        )
+        return _apply_reflected_int_expression_op(self, other, _rmul_isl_expression)
 
     def is_zero(self) -> bool:
         """
@@ -286,7 +271,7 @@ class _NamedExpressionLike(
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedPwExpressionLike(_NamedExpressionLike[IslExpressionLikeT]):
+class _NamedPwExpressionLike(_NamedExpressionLike[NamedScalarExpressionLikeT_co]):
     ...
 
 
@@ -482,11 +467,87 @@ def _wrap_expression_result(
     raise TypeError(f"unsupported expression result type: {type(result).__name__}")
 
 
-def _align_and_apply_expression_op(
-    lhs: _NamedExpressionLike[IslExpressionLikeT],
-    rhs: _NamedExpressionLike[IslExpressionLikeT],
-    op: Callable[[IslExpressionLikeT, IslExpressionLikeT], IslExpressionLikeT],
-) -> _NamedExpressionLike[IslExpressionLikeT]:
+@overload
+def _apply_expression_binary_op(
+    lhs: Aff,
+    rhs: Aff | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> Aff: ...
+
+
+@overload
+def _apply_expression_binary_op(
+    lhs: Aff,
+    rhs: PwAff,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> PwAff: ...
+
+
+@overload
+def _apply_expression_binary_op(
+    lhs: PwAff,
+    rhs: Aff | PwAff | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> PwAff: ...
+
+
+@overload
+def _apply_expression_binary_op(
+    lhs: QPolynomial,
+    rhs: QPolynomial | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> QPolynomial: ...
+
+
+@overload
+def _apply_expression_binary_op(
+    lhs: PwQPolynomial,
+    rhs: PwQPolynomial | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> PwQPolynomial: ...
+
+
+@overload
+def _apply_expression_binary_op(
+    lhs: _NamedExpressionLike[IslScalarExpressionLike],
+    rhs: _NamedExpressionLike[IslScalarExpressionLike] | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> _NamedExpressionLike[IslScalarExpressionLike]: ...
+
+
+def _apply_expression_binary_op(
+    lhs: _NamedExpressionLike[IslScalarExpressionLike],
+    rhs: _NamedExpressionLike[IslScalarExpressionLike] | int,
+    op: Callable[
+        [IslScalarExpressionLike, IslScalarExpressionLike | int],
+        IslScalarExpressionLike,
+    ],
+) -> _NamedExpressionLike[IslScalarExpressionLike]:
+    if isinstance(rhs, int):
+        return _wrap_expression_result(
+            op(lhs._obj, rhs),
+            lhs._name_to_dim,
+            lhs._dimtype_to_names,
+        )
+
     lhs, rhs = _align_two(lhs, rhs)
     lhs_obj, rhs_obj = _explicitly_promote_isl_expressions(lhs._obj, rhs._obj)
     result = op(lhs_obj, rhs_obj)
@@ -494,6 +555,58 @@ def _align_and_apply_expression_op(
         result,
         lhs._name_to_dim,
         lhs._dimtype_to_names,
+    )
+
+
+@overload
+def _apply_reflected_int_expression_op(
+    expr: Aff,
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> Aff: ...
+
+
+@overload
+def _apply_reflected_int_expression_op(
+    expr: PwAff,
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> PwAff: ...
+
+
+@overload
+def _apply_reflected_int_expression_op(
+    expr: QPolynomial,
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> QPolynomial: ...
+
+
+@overload
+def _apply_reflected_int_expression_op(
+    expr: PwQPolynomial,
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> PwQPolynomial: ...
+
+
+@overload
+def _apply_reflected_int_expression_op(
+    expr: _NamedExpressionLike[IslScalarExpressionLike],
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> _NamedExpressionLike[IslScalarExpressionLike]: ...
+
+
+def _apply_reflected_int_expression_op(
+    expr: _NamedExpressionLike[IslScalarExpressionLike],
+    other: int,
+    op: Callable[[int, IslScalarExpressionLike], IslScalarExpressionLike],
+) -> _NamedExpressionLike[IslScalarExpressionLike]:
+    return _wrap_expression_result(
+        op(other, expr._obj),
+        expr._name_to_dim,
+        expr._dimtype_to_names,
     )
 
 # }}}
@@ -516,7 +629,7 @@ def _ordered_multi_dim_names(
 
 def _make_multi_expression_parts(
     obj: isl.MultiAff | isl.PwMultiAff,
-) -> tuple[MultiExpressionParts, NameToDim, DimTypeToNames]:
+) -> tuple[Mapping[int, PwAff], NameToDim, DimTypeToNames]:
     output_names = _ordered_multi_dim_names(obj, isl.dim_type.out)
     input_names = _ordered_multi_dim_names(obj, isl.dim_type.in_)
     parameter_names = _ordered_multi_dim_names(obj, isl.dim_type.param)
@@ -527,7 +640,7 @@ def _make_multi_expression_parts(
             raise ValueError(f"duplicate dimension name found: {name}")
         seen_names.add(name)
 
-    parts: MultiExpressionParts = constantdict({
+    parts: Mapping[int, PwAff] = constantdict({
         dim: make_pw_aff(
             obj.get_at(dim).to_pw_aff()
             if isinstance(obj, isl.MultiAff)
@@ -552,19 +665,18 @@ def _make_multi_expression_parts(
 
 @dataclass(frozen=True, eq=False)
 class _NamedMultiExpressionLike(
-    NamedIslObject[MultiExpressionParts, PublicMultiExpressionLikeT]
+    NamedIslObject[Mapping[int, PwAff], PublicMultiExpressionLikeT]
 ):
     """
     Multi-expression components are stored directly as named :class:`PwAff`
     parts, keyed by output dimension.
     """
 
-    _obj: MultiExpressionParts
+    _obj: Mapping[int, PwAff]
 
     def _multi_expression_context(self) -> isl.Context:
         if self._obj:
-            first_part = cast("PwAff", next(iter(self._obj.values())))
-            return first_part._obj.get_ctx()
+            return next(iter(self._obj.values()))._obj.get_ctx()
         return isl.DEFAULT_CONTEXT
 
     def _multi_expression_space(self) -> isl.Space:
@@ -577,7 +689,7 @@ class _NamedMultiExpressionLike(
 
     def _ordered_pw_aff_parts(self) -> tuple[isl.PwAff, ...]:
         return tuple(
-            cast("PwAff", self._obj[dim])._reconstruct_isl_object()
+            self._obj[dim]._reconstruct_isl_object()
             for dim in range(self.dim(isl.dim_type.out))
         )
 
@@ -597,7 +709,7 @@ class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
         """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
-        return cast("PwAff", self._obj[self._name_to_dim[name]])
+        return self._obj[self._name_to_dim[name]]
 
     @override
     def _reconstruct_isl_object(self) -> isl.PwMultiAff:
@@ -655,7 +767,7 @@ class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
         """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
-        return cast("PwAff", self._obj[self._name_to_dim[name]])
+        return self._obj[self._name_to_dim[name]]
 
     @override
     def _reconstruct_isl_object(self) -> isl.MultiAff:
