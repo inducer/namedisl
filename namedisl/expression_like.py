@@ -36,7 +36,7 @@ THE SOFTWARE.
 import operator
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, final, overload
 
 from constantdict import constantdict
 from typing_extensions import override
@@ -51,6 +51,7 @@ from .core import (
     NameToDim,
     _align_two,
     _make_named_object_pieces,
+    _normalize_public_dim_type,
 )
 
 
@@ -629,25 +630,30 @@ def _ordered_multi_dim_names(
 
 def _make_multi_expression_parts(
     obj: isl.MultiAff | isl.PwMultiAff,
-) -> tuple[Mapping[int, PwAff], NameToDim, DimTypeToNames]:
+) -> tuple[Mapping[str, PwAff], NameToDim, DimTypeToNames]:
     output_names = _ordered_multi_dim_names(obj, isl.dim_type.out)
-    input_names = _ordered_multi_dim_names(obj, isl.dim_type.in_)
-    parameter_names = _ordered_multi_dim_names(obj, isl.dim_type.param)
+
+    parts: Mapping[str, PwAff] = constantdict({
+        name: make_pw_aff(
+            obj.get_at(dim).to_pw_aff()
+            if isinstance(obj, isl.MultiAff)
+            else obj.get_at(dim)
+        )
+        for dim, name in enumerate(output_names)
+    })
+
+    if parts:
+        input_names = _ordered_part_dim_names(parts, isl.dim_type.in_)
+        parameter_names = _ordered_part_dim_names(parts, isl.dim_type.param)
+    else:
+        input_names = _ordered_multi_dim_names(obj, isl.dim_type.in_)
+        parameter_names = _ordered_multi_dim_names(obj, isl.dim_type.param)
 
     seen_names: set[str] = set()
     for name in (*output_names, *input_names, *parameter_names):
         if name in seen_names:
             raise ValueError(f"duplicate dimension name found: {name}")
         seen_names.add(name)
-
-    parts: Mapping[int, PwAff] = constantdict({
-        dim: make_pw_aff(
-            obj.get_at(dim).to_pw_aff()
-            if isinstance(obj, isl.MultiAff)
-            else obj.get_at(dim)
-        )
-        for dim in range(obj.dim(isl.dim_type.out))
-    })
 
     all_names = [*output_names, *input_names, *parameter_names]
     name_to_dim: NameToDim = constantdict({
@@ -663,16 +669,128 @@ def _make_multi_expression_parts(
     return parts, name_to_dim, constantdict(dimtype_to_names)
 
 
+def _ordered_part_dim_names(
+    parts: Mapping[str, PwAff],
+    dim_type: isl.dim_type,
+) -> tuple[str, ...]:
+    part_iter = iter(parts.items())
+    _, first_part = next(part_iter)
+    ordered_names = first_part.ordered_dim_names(dim_type)
+
+    for output_name, part in part_iter:
+        part_ordered_names = part.ordered_dim_names(dim_type)
+        if part_ordered_names != ordered_names:
+            raise ValueError(
+                f"multi expression part '{output_name}' has inconsistent "
+                f"{dim_type.name} dimension names"
+            )
+
+    return ordered_names
+
+
 @dataclass(frozen=True, eq=False)
-class _NamedMultiExpressionLike(
-    NamedIslObject[Mapping[int, PwAff], PublicMultiExpressionLikeT]
-):
+class _NamedMultiExpressionLike(Generic[PublicMultiExpressionLikeT]):
     """
     Multi-expression components are stored directly as named :class:`PwAff`
-    parts, keyed by output dimension.
+    parts, keyed by output name.
     """
 
-    _obj: Mapping[int, PwAff]
+    _obj: Mapping[str, PwAff]
+    _name_to_dim: NameToDim
+    _dimtype_to_names: DimTypeToNames
+
+    @property
+    def _metadata_input_names(self) -> frozenset[str]:
+        return self._dimtype_to_names.get(isl.dim_type.in_, frozenset())
+
+    @property
+    def _metadata_parameter_names(self) -> frozenset[str]:
+        return self._dimtype_to_names.get(isl.dim_type.param, frozenset())
+
+    def _names_for_dim_type(self, dim_type: isl.dim_type) -> frozenset[str]:
+        dim_type = _normalize_public_dim_type(dim_type)
+        if dim_type == isl.dim_type.param:
+            return self.parameter_names
+        if dim_type == isl.dim_type.in_:
+            return self._metadata_input_names
+        if dim_type == isl.dim_type.set:
+            return frozenset(self._obj)
+        raise ValueError(f"unsupported dim type: {dim_type}")
+
+    def _ordered_names_for_dim_type(self, dim_type: isl.dim_type) -> tuple[str, ...]:
+        names = self._names_for_dim_type(dim_type)
+        return tuple(sorted(names, key=self._name_to_dim.__getitem__))
+
+    @property
+    def names(self) -> frozenset[str]:
+        """
+        All dimension names known to this object.
+        """
+        return self.output_names | self.input_names | self.parameter_names
+
+    def dim_names(self, dim_type: isl.dim_type) -> frozenset[str]:
+        """
+        Return the names belonging to *dim_type*.
+        """
+        return self._names_for_dim_type(dim_type)
+
+    def ordered_dim_names(self, dim_type: isl.dim_type) -> tuple[str, ...]:
+        """
+        Return names for *dim_type* in their current dimension order.
+        """
+        return self._ordered_names_for_dim_type(dim_type)
+
+    @property
+    def set_names(self) -> frozenset[str]:
+        """
+        Names of set dimensions.
+        """
+        return self._names_for_dim_type(isl.dim_type.set)
+
+    @property
+    def output_names(self) -> frozenset[str]:
+        """
+        Names of output dimensions.
+        """
+        return self._names_for_dim_type(isl.dim_type.out)
+
+    @property
+    def input_names(self) -> frozenset[str]:
+        """
+        Names of input dimensions.
+        """
+        return self._names_for_dim_type(isl.dim_type.in_)
+
+    @property
+    def parameter_names(self) -> frozenset[str]:
+        """
+        Names of parameter dimensions.
+        """
+        return self._metadata_parameter_names
+
+    def dim(self, dim_type: isl.dim_type) -> int:
+        """
+        Return the number of dimensions of *dim_type*.
+        """
+        dim_type = _normalize_public_dim_type(dim_type)
+        if dim_type in (isl.dim_type.set, isl.dim_type.in_, isl.dim_type.param):
+            return len(self._names_for_dim_type(dim_type))
+        return self._reconstruct_isl_object().dim(dim_type)
+
+    def get_space(self) -> isl.Space:
+        """
+        Reconstruct and return the object's public isl space.
+        """
+        return self._reconstruct_isl_object().get_space()
+
+    def get_isl_object(self) -> PublicMultiExpressionLikeT:
+        """
+        Reconstruct and return the wrapped public :mod:`islpy` object.
+        """
+        return self._reconstruct_isl_object()
+
+    def _reconstruct_isl_object(self) -> PublicMultiExpressionLikeT:
+        raise NotImplementedError
 
     def _multi_expression_context(self) -> isl.Context:
         if self._obj:
@@ -689,8 +807,8 @@ class _NamedMultiExpressionLike(
 
     def _ordered_pw_aff_parts(self) -> tuple[isl.PwAff, ...]:
         return tuple(
-            self._obj[dim]._reconstruct_isl_object()
-            for dim in range(self.dim(isl.dim_type.out))
+            self._obj[name]._reconstruct_isl_object()
+            for name in self.ordered_dim_names(isl.dim_type.out)
         )
 
 
@@ -709,7 +827,7 @@ class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
         """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
-        return self._obj[self._name_to_dim[name]]
+        return self._obj[name]
 
     @override
     def _reconstruct_isl_object(self) -> isl.PwMultiAff:
@@ -767,7 +885,7 @@ class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
         """
         if name not in self._names_for_dim_type(isl.dim_type.set):
             raise ValueError(f"unknown output name: {name}")
-        return self._obj[self._name_to_dim[name]]
+        return self._obj[name]
 
     @override
     def _reconstruct_isl_object(self) -> isl.MultiAff:

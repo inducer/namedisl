@@ -334,8 +334,11 @@ def test_multi_aff_stores_pw_aff_parts() -> None:
     assert isinstance(maff._obj, constantdict)
     assert not isinstance(maff._obj, isl.Set)
     assert all(isinstance(part, nisl.PwAff) for part in maff._obj.values())
-    assert maff.get_at("x") is maff._obj[0]
-    assert maff.get_at("y") is maff._obj[1]
+    assert maff.get_at("x") is maff._obj["x"]
+    assert maff.get_at("y") is maff._obj["y"]
+    assert maff.output_names == frozenset(maff._obj)
+    assert maff.input_names == maff.get_at("x").input_names
+    assert maff.parameter_names == maff.get_at("x").parameter_names
     assert maff._reconstruct_isl_object() == raw_maff
 
 
@@ -347,47 +350,12 @@ def test_pw_multi_aff_stores_pw_aff_parts() -> None:
     assert isinstance(pmaff._obj, constantdict)
     assert not isinstance(pmaff._obj, isl.Set)
     assert all(isinstance(part, nisl.PwAff) for part in pmaff._obj.values())
-    assert pmaff.get_at("x") is pmaff._obj[0]
-    assert pmaff.get_at("y") is pmaff._obj[1]
+    assert pmaff.get_at("x") is pmaff._obj["x"]
+    assert pmaff.get_at("y") is pmaff._obj["y"]
+    assert pmaff.output_names == frozenset(pmaff._obj)
+    assert pmaff.input_names == pmaff.get_at("x").input_names
+    assert pmaff.parameter_names == pmaff.get_at("x").parameter_names
     assert pmaff._reconstruct_isl_object() == raw_pmaff
-
-
-def test_multi_aff_rename_dims_updates_stored_parts() -> None:
-    maff = nisl.make_multi_aff("[n] -> { [i] -> [x = i + n] }")
-
-    renamed = maff.rename_dims({"x": "z", "i": "j", "n": "m"})
-
-    part = renamed.get_at("z")
-    assert part.input_names == frozenset({"j"})
-    assert part.parameter_names == frozenset({"m"})
-    assert part._reconstruct_isl_object() == isl.PwAff("[m] -> { [j] -> [(j + m)] }")
-
-
-def test_multi_aff_move_dims_updates_stored_parts() -> None:
-    maff = nisl.make_multi_aff("[n] -> { [i] -> [x = i + n] }")
-
-    moved = maff.move_dims("n", isl.dim_type.in_)
-
-    part = moved.get_at("x")
-    assert moved.input_names == frozenset({"i", "n"})
-    assert moved.parameter_names == frozenset()
-    assert part.input_names == frozenset({"i", "n"})
-    assert part.parameter_names == frozenset()
-    assert part._reconstruct_isl_object() == isl.PwAff("{ [i, n] -> [(i + n)] }")
-
-
-def test_pw_multi_aff_named_operations_update_stored_parts() -> None:
-    pmaff = nisl.make_pw_multi_aff("[n] -> { [i] -> [x = i + n] }")
-
-    renamed = pmaff.rename_dims({"x": "z", "i": "j", "n": "m"})
-    moved = renamed.move_dims("m", isl.dim_type.in_)
-
-    part = moved.get_at("z")
-    assert moved.input_names == frozenset({"j", "m"})
-    assert moved.parameter_names == frozenset()
-    assert part.input_names == frozenset({"j", "m"})
-    assert part.parameter_names == frozenset()
-    assert part._reconstruct_isl_object() == isl.PwAff("{ [j, m] -> [(j + m)] }")
 
 
 # {{{ qpolynomials
