@@ -53,6 +53,7 @@ from .core import (
     _find_contiguous_dim_chunks,
     _make_named_object_pieces,
 )
+from .expression_like import PwAff, make_pw_aff
 
 
 PublicSetLikeT_co = TypeVar("PublicSetLikeT_co", bound=IslSetLike, covariant=True)
@@ -148,59 +149,24 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
             _dimtype_to_names=self._dimtype_to_names,
         )
 
-    def add_constraint(
-        self: Self,
-        constraints: str | Collection[str],
+    def equate_dims(
+        self,
+        names: Sequence[tuple[str, str]]
     ) -> Self:
-        """
-        Return a copy intersected with additional named constraints.
+        obj = self._obj
+        for lhs_name, rhs_name in names:
+            if lhs_name != rhs_name:
+                lhs_dim_id = self._name_to_dim[lhs_name]
+                rhs_dim_id = self._name_to_dim[rhs_name]
+                obj = obj.equate(
+                    lhs_dim_id.dim_type.as_isl(),
+                    lhs_dim_id.dim_index,
+                    rhs_dim_id.dim_type.as_isl(),
+                    rhs_dim_id.dim_index,
+                )
 
-        :arg constraints: One constraint string or a collection of constraint
-            strings in isl syntax, written using this object's dimension names.
-        """
-        if isinstance(constraints, str):
-            constraints = [constraints]
-        else:
-            constraints = list(constraints)
-
-        if not constraints:
-            return self
-
-        ordered_names = tuple(
-            sorted(self._name_to_dim, key=self._name_to_dim.__getitem__)
-        )
-        constraint_text = " and ".join(f"({constraint})" for constraint in constraints)
-        constraint_src = f"{{ [{', '.join(ordered_names)}] : {constraint_text} }}"
-
-        try:
-            constraint_obj = isl.Set(constraint_src)
-        except isl.Error as exc:
-            raise ValueError(
-                f"invalid constraint for names {ordered_names}: {constraint_text}"
-            ) from exc
-
-        constraint_obj = constraint_obj.remove_redundancies()
-        constraint_set, constraint_name_to_dim, _ = _make_named_object_pieces(
-            constraint_obj
-        )
-        assert isinstance(constraint_set, isl.Set)
-
-        if constraint_name_to_dim != self._name_to_dim:
-            constraint_set = _align_obj(
-                Set(  # pylint: disable=too-many-function-args
-                    constraint_set,
-                    constraint_name_to_dim,
-                    self._dimtype_to_names,
-                ),
-                self._name_to_dim,
-                self._dimtype_to_names,
-            )._obj
-            assert isinstance(constraint_set, isl.Set)
-
-        return replace(
-            self,
-            _obj=self._obj.intersect(constraint_set),
-            _name_to_dim=self._name_to_dim,
+        return type(self)(
+            cast("InternalIslObjectT_co", obj),
             _dimtype_to_names=self._dimtype_to_names,
         )
 
@@ -238,10 +204,9 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
         else:
             result_type = Set
 
-        return result_type(  # pylint: disable=too-many-function-args
+        return result_type(
             result,
-            self_aligned._name_to_dim,
-            self_aligned._dimtype_to_names,
+            _dimtype_to_names=self_aligned._dimtype_to_names,
         )
 
     def project_out(self: Self, names_to_project_out: str | Collection[str]) -> Self:
@@ -312,19 +277,19 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
 
         return self.project_out(names_to_project_out)
 
-    def dim_max(self, name: str) -> isl.PwAff:
+    def dim_max(self, name: str) -> PwAff:
         """
         Return the parametric maximum of the named dimension.
         """
         obj, dim = self._dim_bound_object_and_dim(name)
-        return obj.dim_max(dim)
+        return make_pw_aff(obj.dim_max(dim))
 
-    def dim_min(self, name: str) -> isl.PwAff:
+    def dim_min(self, name: str) -> PwAff:
         """
         Return the parametric minimum of the named dimension.
         """
         obj, dim = self._dim_bound_object_and_dim(name)
-        return obj.dim_min(dim)
+        return make_pw_aff(obj.dim_min(dim))
 
     def _dim_bound_object_and_dim(
         self, name: str
@@ -422,7 +387,7 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
         """
         Return the set difference with *other* removed.
         """
-        return _apply_set_like_binary_op(self, other, operator.sub)
+        return _align_and_apply_binary_op(self, other, operator.sub)
 
     @override
     def __eq__(self, other: object) -> bool:
@@ -465,27 +430,8 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
 @final
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
-    """
-    Name-aware wrapper around :class:`islpy.BasicSet`.
-
-    Construct instances with :func:`make_basic_set`.
-    """
-
-    @override
-    def add_input_names(self, names_to_add: Collection[str]) -> BasicSet:
-        raise NotImplementedError
-
-    @override
-    def _reconstruct_isl_object(self) -> isl.BasicSet:
-        obj = super()._reconstruct_isl_object()
-
-        if not isinstance(obj, isl.Set) or obj.n_basic_set() != 1:
-            raise ValueError(
-                "Cannot reconstruct an isl.BasicSet from anything other than "
-                "an isl.Set containing only a single isl.BasicSet."
-            )
-
-        return obj.get_basic_sets()[0]
+    pass
+    # TODO: add_constraint?
 
 
 @overload
@@ -503,7 +449,7 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
     obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
     set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
     assert isinstance(set_obj, isl.Set)
-    return BasicSet(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return BasicSet(set_obj, name_to_dim, dimtype_to_names)
 
 
 @final
@@ -533,62 +479,6 @@ class Set(_NamedIslSetLike[isl.Set]):
 
         bsets = isl_obj.get_basic_sets()
         return [make_basic_set(bset) for bset in bsets]
-
-
-@overload
-def _apply_set_like_binary_op(
-    lhs: BasicMap, rhs: BasicMap | Map, op: Callable[[isl.Set, isl.Set], isl.Set]
-) -> BasicMap | Map: ...
-
-
-@overload
-def _apply_set_like_binary_op(
-    lhs: Map, rhs: BasicMap | Map, op: Callable[[isl.Set, isl.Set], isl.Set]
-) -> Map: ...
-
-
-@overload
-def _apply_set_like_binary_op(
-    lhs: BasicSet, rhs: BasicSet | Set, op: Callable[[isl.Set, isl.Set], isl.Set]
-) -> BasicSet | Set: ...
-
-
-@overload
-def _apply_set_like_binary_op(
-    lhs: Set, rhs: BasicSet | Set, op: Callable[[isl.Set, isl.Set], isl.Set]
-) -> Set: ...
-
-
-@overload
-def _apply_set_like_binary_op(
-    lhs: _NamedIslSetLike[IslSetLike],
-    rhs: _NamedIslSetLike[IslSetLike],
-    op: Callable[[isl.Set, isl.Set], isl.Set],
-) -> _NamedIslSetLike[IslSetLike]: ...
-
-
-def _apply_set_like_binary_op(
-    lhs: _NamedIslSetLike[IslSetLike],
-    rhs: _NamedIslSetLike[IslSetLike],
-    op: Callable[[isl.Set, isl.Set], isl.Set],
-) -> _NamedIslSetLike[IslSetLike]:
-    lhs, rhs = _align_two(lhs, rhs)
-    result = op(lhs._obj, rhs._obj)
-
-    if isinstance(lhs, BasicMap) and isinstance(rhs, BasicMap):
-        result_type = BasicMap if result.n_basic_set() == 1 else Map
-    elif isinstance(lhs, BasicSet) and isinstance(rhs, BasicSet):
-        result_type = BasicSet if result.n_basic_set() == 1 else Set
-    elif isinstance(lhs, (BasicMap, Map)) and isinstance(rhs, (BasicMap, Map)):
-        result_type = Map
-    else:
-        result_type = Set
-
-    return result_type(  # pylint: disable=too-many-function-args
-        result,
-        lhs._name_to_dim,
-        lhs._dimtype_to_names,
-    )
 
 
 def _compare_set_like(

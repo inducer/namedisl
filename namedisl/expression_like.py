@@ -49,13 +49,14 @@ from .core import (
     NamedIslObject,
     NameToDim,
     _align_two,
-    _make_named_object_pieces,
-    _normalize_public_dim_type,
+    _dimtype_to_names,
 )
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+
+    from namedisl.set_like import Set
 
 
 PublicMultiExpressionLikeT = TypeVar(
@@ -308,9 +309,7 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
     Create an :class:`Aff` from isl syntax or an :class:`islpy.Aff`.
     """
     obj = isl.Aff(src, ctx) if isinstance(src, str) else src
-    aff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(aff_obj, isl.Aff)
-    return Aff(aff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return Aff(obj, _dimtype_to_names=_dimtype_to_names(obj))
 
 
 @final
@@ -354,9 +353,7 @@ def make_qpolynomial(
         else src
     )
 
-    qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(qp_obj, isl.QPolynomial)
-    return QPolynomial(qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return QPolynomial(obj, _dimtype_to_names=_dimtype_to_names(obj))
 
 
 @final
@@ -376,6 +373,13 @@ class PwAff(_NamedPwExpressionLike[isl.PwAff]):
         assert isinstance(obj, isl.PwAff)
         return obj
 
+    def gist(self, set: Set):
+        self_a, set_a = _align_two(self, set)
+        result = self_a._obj.gist(set_a._obj)
+        return PwAff(
+            result,
+            _dimtype_to_names=self_a._dimtype_to_names)
+
 
 @overload
 def make_pw_aff(src: str, ctx: isl.Context | None = None) -> PwAff:
@@ -392,9 +396,7 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
     Create a :class:`PwAff` from isl syntax or an :class:`islpy.PwAff`.
     """
     obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
-    pwaff_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(pwaff_obj, isl.PwAff)
-    return PwAff(pwaff_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return PwAff(obj, _dimtype_to_names=_dimtype_to_names(obj))
 
 
 @final
@@ -434,9 +436,7 @@ def make_pw_qpolynomial(
     Create a :class:`PwQPolynomial` from isl syntax or an isl object.
     """
     obj = isl.PwQPolynomial(src, ctx) if isinstance(src, str) else src
-    pw_qp_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(pw_qp_obj, isl.PwQPolynomial)
-    return PwQPolynomial(pw_qp_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return PwQPolynomial(obj, _dimtype_to_names=_dimtype_to_names(obj))
 
 
 def _wrap_expression_result(

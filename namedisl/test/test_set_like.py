@@ -648,7 +648,7 @@ def test_basic_map_empty_from_space_preserves_names_and_is_empty() -> None:
 def test_map_empty_matches_existing_named_space() -> None:
     template = nisl.make_map("[n] -> { [i, k] -> [ii_s, io, ki_s, ko] }")
 
-    empty_map = nisl.Map.empty(template.get_space())
+    empty_map = nisl.Map.empty(template._get_space())
 
     assert empty_map._reconstruct_isl_object().is_empty()
     assert empty_map.input_names == template.input_names

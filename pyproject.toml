@@ -110,4 +110,5 @@ exclude = [
     "doc",
     ".conda-root",
     ".env",
+    ".venv",
 ]
