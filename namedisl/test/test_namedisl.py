@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing_extensions import reveal_type
-
 
 __copyright__ = """
 Copyright (C) 2025- University of Illinois Board of Trustees

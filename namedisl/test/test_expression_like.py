@@ -240,7 +240,7 @@ def _assert_expression_equal(
     )
 
 
-def as_isl() -> None:
+def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:
     cases = (
         (
             nisl.make_aff("[n] -> { [i] -> [i + n] }"),
@@ -275,7 +275,7 @@ def as_isl() -> None:
         assert moved.parameter_names == frozenset()
 
 
-def as_isl() -> None:
+def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
     cases = (
         (
             nisl.make_aff("[n] -> { [i] -> [i + n] }"),

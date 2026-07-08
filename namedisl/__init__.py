@@ -38,6 +38,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from .core import Space
 from .expression_like import (
     Aff,
     MultiAff,
@@ -76,6 +77,7 @@ __all__ = [
     "PwQPolynomial",
     "QPolynomial",
     "Set",
+    "Space",
     "make_aff",
     "make_basic_map",
     "make_basic_set",

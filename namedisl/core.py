@@ -39,11 +39,12 @@ import enum
 import re
 from abc import ABC
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from importlib import metadata
 from typing import ClassVar, Generic, TypeAlias, TypeVar, cast, final
 
+from constantdict import constantdict
 from typing_extensions import NamedTuple, Self, override
 
 import islpy as isl
@@ -67,7 +68,7 @@ IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
 IslSetLike = isl.BasicSet | isl.Set
 IslMapLike = isl.BasicMap | isl.Map
 IslSetOrMapLike = IslSetLike | IslMapLike
-IslObject = IslSetOrMapLike | IslExpressionLike
+IslObject = IslSetOrMapLike | IslExpressionLike | IslMultiExpressionLike
 
 IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 IslObjectT2 = TypeVar("IslObjectT2", bound=IslObject)
@@ -146,9 +147,8 @@ def _dimtype_to_names(
         obj.space if isinstance(obj, (isl.QPolynomial, isl.PwQPolynomial)) else obj)
 
     return {
-        dt: [
-            not_none(gdn_obj.get_dim_name(dt.value, i))
-            for i in range(obj.dim(dt.as_isl()))]
+        dt: tuple(not_none(gdn_obj.get_dim_name(dt.value, i))
+            for i in range(obj.dim(dt.as_isl())))
         for dt in active_dim_types}
 
 
@@ -220,7 +220,7 @@ def _find_joint_space(
 
     dim_type_to_names = {
         dt: {
-            *space1.dimtype_to_name_sets[dt], 
+            *space1.dimtype_to_name_sets[dt],
             *space2.dimtype_to_name_sets[dt]
         }
         for dt in space1.dimtype_to_names
@@ -236,10 +236,10 @@ def _find_joint_space(
                     f"{', '.join(sorted(dup_names))} across {dt1} and {dt2}"
                 )
 
-    return Space({
-        dt: sorted(names)
+    return Space(constantdict({
+        dt: tuple(sorted(names))
         for dt, names in dim_type_to_names.items()
-    })
+    }))
 
 
 def _align_obj(
@@ -249,6 +249,9 @@ def _align_obj(
 ) -> NamedIslObjectT:
     obj = named_obj._obj
     running_name_to_dim_id = dict(named_obj.sp.name_to_dim)
+
+    if isinstance(obj, isl.PwMultiAff):
+        raise NotImplementedError
 
     for target_dt, names in space.dimtype_to_names.items():
         for target_dim, name in enumerate(names):
@@ -310,11 +313,7 @@ def _align_obj(
 def _align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
-    """
-    Align two named isl objects to a common name-to-dimension mapping.
-    """
-
-    if named_obj1.sp == named_obj2.sp:
+    if named_obj1.sp.order_equal(named_obj2.sp):
         return named_obj1, named_obj2
 
     space = _find_joint_space(named_obj1.sp, named_obj2.sp)
@@ -323,6 +322,55 @@ def _align_two(
     named_obj2 = _align_obj(named_obj2, space)
 
     return named_obj1, named_obj2
+
+
+def _align_for_compostition(
+    lhs: NamedIslObject[IslObjectT],
+    lhs_dt: DimType,
+    rhs: NamedIslObject[IslObjectT2],
+    rhs_dt: DimType,
+) -> tuple[NamedIslObject[IslObjectT], NamedIslObject[IslObjectT2]]:
+    interface_names_set = {
+        *lhs.sp.dimtype_to_names[lhs_dt],
+        *rhs.sp.dimtype_to_names[rhs_dt],
+    }
+
+    lhs_intersection = lhs.sp.names_except([lhs_dt]) & interface_names_set
+    rhs_intersection = rhs.sp.names_except([rhs_dt]) & interface_names_set
+    if lhs_intersection:
+        raise ValueError(
+            f"LHS names intersect with interface: {', '.join(lhs_intersection)}")
+    if rhs_intersection:
+        raise ValueError(
+            f"RHS names intersect with interface: {', '.join(rhs_intersection)}")
+    remaining_intersection = (
+        lhs.sp.names_except([lhs_dt, DimType.param])
+        & rhs.sp.names_except([rhs_dt, DimType.param])
+    )
+    if remaining_intersection:
+        raise ValueError(
+            f"Uninvolved names intersect : {', '.join(remaining_intersection)}")
+
+    param_names = tuple(sorted({
+        *lhs.sp.dimtype_to_names[DimType.param],
+        *rhs.sp.dimtype_to_names[DimType.param],
+    }))
+
+    interface_names = tuple(sorted(interface_names_set))
+    lhs_sp = Space(constantdict({
+        **lhs.sp.dimtype_to_names,
+        DimType.param: param_names,
+        lhs_dt: interface_names,
+    }))
+    rhs_sp = Space(constantdict({
+        **rhs.sp.dimtype_to_names,
+        DimType.param: param_names,
+        rhs_dt: interface_names,
+    }))
+
+    lhs = _align_obj(lhs, lhs_sp)
+    rhs = _align_obj(rhs, rhs_sp)
+    return lhs, rhs
 
 
 def _align_and_apply_binary_op(
@@ -343,23 +391,61 @@ class Space:
 
     if __debug__:
         def __post_init__(self):
+            hash(self.dimtype_to_names)
+
             all_names: list[str] = []
             for names in self.dimtype_to_names.values():
                 all_names.extend(names)
             if len(all_names) != len(set(all_names)):
                 raise ValueError("names must be unique across dim types")
 
+    @staticmethod
+    def from_names(
+        param: Sequence[str] | None = None,
+        in_: Sequence[str] | None = None,
+        set: Sequence[str] | None = None,
+    ):
+        dim_type_to_names: dict[DimType, tuple[str, ...]] = {}
+        if param is not None:
+            dim_type_to_names[DimType.param] = tuple(param)
+        if in_ is not None:
+            dim_type_to_names[DimType.in_] = tuple(in_)
+        if set is not None:
+            dim_type_to_names[DimType.set] = tuple(set)
+        return Space(constantdict(dim_type_to_names))
+
+    @staticmethod
+    def from_isl(obj: IslObject, dim_types: Collection[DimType]):
+        return Space(constantdict(_dimtype_to_names(obj, dim_types)))
+
     @override
     def __eq__(self, other: object):
+        raise RuntimeError("use .order_equal or .semantically_equal")
+
+        # FIXME: Reenable for consistency with hash
         if not isinstance(other, Space):
             return False
+        return self.order_equal(other)
 
+    def order_equal(self, other: Space):
         if self is other:
             return True
+
+        return self.dimtype_to_names == other.dimtype_to_names
+
+    def semantically_equal(self, other: Space):
+        if self is other:
+            return True
+        if not isinstance(other, Space):
+            return False
         if hash(self) != hash(other):
             return False
 
-        return self.dimtype_to_names == other.dimtype_to_names
+        return self.dimtype_to_name_sets == other.dimtype_to_name_sets
+
+    @override
+    def __hash__(self):
+        return hash((type(self), self.dimtype_to_names))
 
     @property
     def name_to_dim(self) -> NameToDim:
@@ -404,10 +490,94 @@ class Space:
     def dim(self, dim_type: DimType) -> int:
         return len(self.dimtype_to_names[dim_type])
 
+    def names_except(self, dim_type: Collection[DimType]):
+        return {name
+            for dt, names in self.dimtype_to_names.items()
+            if dt not in dim_type
+            for name in names}
+
+    def move_dim_type(self, source: DimType, target: DimType) -> Space:
+        if target in self.dimtype_to_names:
+            raise ValueError(f"target dim type {target} already exists")
+        new_dim_type_to_names = dict(self.dimtype_to_names)
+        new_dim_type_to_names[target] = new_dim_type_to_names[source]
+        del new_dim_type_to_names[source]
+        return Space(constantdict(new_dim_type_to_names))
+
+    def swap_dim_types(self, dt1: DimType, dt2: DimType) -> Space:
+        new_dim_type_to_names = dict(self.dimtype_to_names)
+        new_dim_type_to_names[dt1], new_dim_type_to_names[dt2] = \
+            new_dim_type_to_names[dt2], new_dim_type_to_names[dt1]
+        return Space(constantdict(new_dim_type_to_names))
+
+    def drop_dim_type(self, dt: DimType) -> Space:
+        new_dim_type_to_names = dict(self.dimtype_to_names)
+        del new_dim_type_to_names[dt]
+        return Space(constantdict(new_dim_type_to_names))
+
+    def as_expr_space(self) -> Space:
+        try:
+            return self._expr_space_cache  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        except AttributeError:
+            pass
+
+        # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
+        result = self.move_dim_type(DimType.set, DimType.in_)
+        object.__setattr__(self, "_expr_space_cache", result)
+        return result
+
+    def as_set_space(self) -> Space:
+        try:
+            return self._set_space_cache  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        except AttributeError:
+            pass
+
+        # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
+        result = self.move_dim_type(DimType.in_, DimType.set)
+        object.__setattr__(self, "_set_space_cache", result)
+        return result
+
+    def as_isl(self, ctx: isl.Context | None = None):
+        if ctx is None:
+            ctx = isl.DEFAULT_CONTEXT
+        result = isl.Space.alloc(
+            ctx,
+            nparam=len(self.dimtype_to_names.get(DimType.param, ())),
+            n_in=len(self.dimtype_to_names.get(DimType.in_, ())),
+            n_out=len(self.dimtype_to_names.get(DimType.set, ())),
+        )
+
+        for dim_type, names in self.dimtype_to_names.items():
+            for i, name in enumerate(names):
+                result = result.set_dim_name(dim_type.as_isl(), i, name)
+
+        return result
+
+    def as_isl_set_space(self, ctx: isl.Context | None = None):
+        if self.dimtype_to_names.get(DimType.in_, []):
+            raise ValueError("in-dimensions not allowed")
+
+        if ctx is None:
+            ctx = isl.DEFAULT_CONTEXT
+        result = isl.Space.set_alloc(
+            ctx,
+            nparam=len(self.dimtype_to_names.get(DimType.param, ())),
+            dim=len(self.dimtype_to_names.get(DimType.set, ())),
+        )
+
+        for dim_type, names in self.dimtype_to_names.items():
+            for i, name in enumerate(names):
+                result = result.set_dim_name(dim_type.as_isl(), i, name)
+
+        return result
+
 
 @dataclass(frozen=True, eq=False)
 class NamedIslObject(ABC, Generic[IslObjectT_co]):
+    # NOTE: _obj holds names, but they are not kept up to date and should not
+    # be considered authoritative. See as_isl().
     _obj: IslObjectT_co
+
     sp: Space
 
     active_dim_types: ClassVar[frozenset[DimType]]
@@ -427,12 +597,16 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
 
         new_dimtype_to_names = {
             **self.sp.dimtype_to_names,
-            dt: [*self.sp.dimtype_to_names[dt], *names_to_add]
+            dt: (*self.sp.dimtype_to_names[dt], *names_to_add)
         }
+
+        if isinstance(self._obj, isl.PwMultiAff):
+            raise NotImplementedError
+
         obj = cast("IslObjectT_co",
             self._obj.insert_dims(dt.as_isl(), self.sp.dim(dt), len(names_to_add)))
 
-        return type(self)(obj, Space(new_dimtype_to_names))
+        return type(self)(obj, Space(constantdict(new_dimtype_to_names)))
 
     def move_dims(
         self,
@@ -449,19 +623,27 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
 
         obj = self._obj
+
         for source_dt, chunks in chunked_dims_by_type(
                 names, self.sp.name_to_dim).items():
             for start, count in chunks[::-1]:
                 del new_dimtype_to_names[source_dt][start:start+count]
                 new_dimtype_to_names[dest_dt].extend(self.sp.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
+
+                if isinstance(obj, isl.PwMultiAff):
+                    raise NotImplementedError
+
                 obj = cast("IslObjectT_co",
                     obj.move_dims(
                         isl_dest_dt, obj.dim(isl_dest_dt),
                         source_dt.as_isl(), start,
                         count))
 
-        return type(self)(obj, Space(new_dimtype_to_names))
+        return type(self)(obj, Space(constantdict({
+            dt: tuple(names)
+            for dt, names in new_dimtype_to_names.items()
+        })))
 
     def rename_dims(self, renaming: Mapping[str, str]) -> Self:
         if not renaming:
@@ -482,7 +664,10 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             dim_type, idx = self.sp.name_to_dim[old_name]
             new_dimtype_to_names[dim_type][idx] = new_name
 
-        return type(self)(self._obj, Space(new_dimtype_to_names))
+        return type(self)(self._obj, Space(constantdict({
+            dt: tuple(names)
+            for dt, names in new_dimtype_to_names.items()
+        })))
 
     def as_isl(self) -> IslObjectT_co:
         return _restore_names(self._obj, self.sp.dimtype_to_names)

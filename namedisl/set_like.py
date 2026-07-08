@@ -37,7 +37,7 @@ THE SOFTWARE.
 import operator
 from abc import ABC
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, cast, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -48,15 +48,12 @@ from .core import (
     DimType,
     IslMapLikeT,
     IslSetLikeT,
-    IslSetOrMapLike,
     IslSetOrMapLikeT,
     NamedIslObject,
-    NameToDim,
     Space,
     _align_and_apply_binary_op,
-    _align_obj,
+    _align_for_compostition,
     _align_two,
-    _dimtype_to_names,
     chunked_dims_by_type,
 )
 from .expression_like import PwAff, make_pw_aff, make_pw_multi_aff
@@ -72,20 +69,16 @@ def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
     return cast("isl.Set", cast("Any", operator.and_)(lhs, rhs))
 
 
-def _compare_set_like(
-    lhs: _NamedIslSetOrMapLike[IslSetOrMapLike],
-    rhs: _NamedIslSetOrMapLike[IslSetOrMapLike],
-    op: Callable[[isl.Set, isl.Set], bool],
+def _compare_set_or_map_like(
+    lhs: _NamedIslSetOrMapLike[IslSetOrMapLikeT],
+    rhs: _NamedIslSetOrMapLike[IslSetOrMapLikeT],
+    op: Callable[[IslSetOrMapLikeT, IslSetOrMapLikeT], bool],
 ) -> bool:
-    lhs_is_map = isinstance(lhs, _NamedIslMapLike)
-    rhs_is_map = isinstance(rhs, _NamedIslMapLike)
-    if lhs_is_map != rhs_is_map:
+    if type(lhs) is not type(rhs):
         return NotImplemented
 
     aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
 
-    assert isinstance(aligned_lhs._obj, isl.Set)
-    assert isinstance(aligned_rhs._obj, isl.Set)
     return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
@@ -113,7 +106,10 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
                 obj = cast("IslSetOrMapLikeT",
                     obj.project_out(dt.as_isl(), start, count))
 
-        return type(self)(obj, self.sp)
+        return type(self)(obj, Space(constantdict({
+            dt: tuple(names)
+            for dt, names in new_dimtype_to_names.items()
+        })))
 
     def project_out_except(
         self: Self,
@@ -170,22 +166,31 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
 
     @override
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, type(self)):
+        if type(self) is not type(other):
             return NotImplemented
+        other = cast("Self", other)
 
-        aligned_self, aligned_other = _align_two(self, other)
-        return aligned_self._obj.plain_is_equal(aligned_other._obj)
+        # XXXX FIXME enable this version
+        # if not self.sp.order_equal(other.sp):
+        #     return False
+        aligned_lhs, aligned_rhs = _align_two(self, other)
 
-    def __lt__(self, other: _NamedIslSetOrMapLike[IslSetOrMapLike]) -> bool:
-        return _compare_set_like(self, other, isl.Set.is_strict_subset)
+        return aligned_lhs._obj.plain_is_equal(aligned_rhs._obj)
 
-    def __le__(self, other: _NamedIslSetOrMapLike[IslSetOrMapLike]) -> bool:
-        return _compare_set_like(self, other, isl.Set.is_subset)
+    def equals(self, other: Self) -> bool:
+        return _compare_set_or_map_like(self, other, operator.eq)
+
+    def __lt__(self, other: Self) -> bool:
+        return _compare_set_or_map_like(self, other, operator.lt)
+
+    def __le__(self, other: Self) -> bool:
+        return _compare_set_or_map_like(self, other, operator.le)
 
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT], ABC):
-    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({DimType.param, DimType.set})
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
+        {DimType.param, DimType.set})
 
     def dim_max(self, name: str) -> PwAff:
         dt, idx = self.sp.name_to_dim[name]
@@ -203,13 +208,33 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT], ABC):
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     def complement(self):
-        return Set(self._obj.complement(), _dimtype_to_names=self._dimtype_to_names)
+        return Set(self._obj.complement(), self.sp)
 
     def convex_hull(self):
         return self
 
-    def add_equality_constraint(self, name: str, aff: Aff) -> BasicSet:
-        pass
+    def add_eq_constraint(self, aff: Aff) -> BasicSet:
+        if __debug__:  # noqa: SIM102
+            if not self.sp.as_expr_space().order_equal(aff.sp):
+                raise ValueError("spaces don't match")
+        return BasicSet(
+            self._obj.add_constraint(isl.Constraint.equality_from_aff(aff._obj)),
+            self.sp)
+
+    def add_ineq_constraint(self, aff: Aff) -> BasicSet:
+        if __debug__:  # noqa: SIM102
+            if not self.sp.as_expr_space().order_equal(aff.sp):
+                raise ValueError("spaces don't match")
+        return BasicSet(
+            self._obj.add_constraint(isl.Constraint.inequality_from_aff(aff._obj)),
+            self.sp)
+
+    def affs(self) -> dict[str | Literal[0], Aff]:
+        from .expression_like import Aff
+        return Aff.from_space(self.sp)
+
+    def as_set(self):
+        return Set(self._obj.to_set(), self.sp)
 
 
 @overload
@@ -221,13 +246,8 @@ def make_basic_set(src: isl.BasicSet) -> BasicSet: ...
 
 
 def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
-    """
-    Create a :class:`BasicSet` from isl syntax or an :class:`islpy.BasicSet`.
-    """
     obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
-    return BasicSet(
-        obj,
-        Space(_dimtype_to_names(obj, BasicSet.active_dim_types)))
+    return BasicSet(obj, Space.from_isl(obj, BasicSet.active_dim_types))
 
 
 @dataclass(frozen=True, eq=False)
@@ -265,165 +285,37 @@ def make_set(src: isl.Set) -> Set: ...
 
 def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
-    return Set(obj, Space(_dimtype_to_names(obj, Set.active_dim_types)))
+    return Set(obj, Space.from_isl(obj, Set.active_dim_types))
 
 
 class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.set})
 
-    def _ordered_names(self, names: frozenset[str]) -> tuple[str, ...]:
-        return tuple(sorted(names, key=self._name_to_dim.__getitem__))
+    def apply_range(self, other: Self) -> Self:
+        self_a, other_a = _align_for_compostition(self, DimType.set, other, DimType.in_)
+        return type(self)(
+            cast("IslMapLikeT", self._obj.apply_range(other_a._obj)),
+            Space(constantdict({
+                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
+                DimType.in_: self_a.sp.dimtype_to_names[DimType.in_],
+                DimType.set: other_a.sp.dimtype_to_names[DimType.set],
+            })))
 
-    def _reject_surviving_name_collisions(
-        self,
-        collisions: frozenset[str],
-    ) -> None:
-        if collisions:
-            raise ValueError(
-                "composition would create duplicate surviving names: "
-                + ", ".join(sorted(collisions))
-            )
+    def apply_domain(self, other: Self) -> Self:
+        self_a, other_a = _align_for_compostition(self, DimType.in_, other, DimType.set)
+        return type(self)(
+            cast("IslMapLikeT", self._obj.apply_domain(other_a._obj)),
+            Space(constantdict({
+                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
+                DimType.in_: other_a.sp.dimtype_to_names[DimType.in_],
+                DimType.set: self.sp.dimtype_to_names[DimType.set],
+            })))
 
-    def _reorder_interface(
-        self, dim_type: isl.dim_type, ordered_names: tuple[str, ...]
-    ) -> _NamedIslMapLike[PublicMapLikeT_co]:
-        interface_names = (
-            self.input_names if dim_type == isl.dim_type.in_ else self._output_names()
-        )
-        current_names = self._ordered_names(interface_names)
-        if current_names == ordered_names:
-            return self
-
-        out_names = (
-            ordered_names
-            if dim_type == isl.dim_type.out
-            else self._ordered_names(self._output_names())
-        )
-        in_names = (
-            ordered_names
-            if dim_type == isl.dim_type.in_
-            else self._ordered_names(self.input_names)
-        )
-        param_names = self._ordered_names(self.parameter_names)
-
-        ordering: NameToDim = constantdict({
-            name: dim for dim, name in enumerate((*out_names, *in_names, *param_names))
-        })
-
-        return _align_obj(self, ordering, self._dimtype_to_names)
-
-    def _validate_composable(
-        self,
-        lhs_dim_type: isl.dim_type,
-        other: BasicMap | Map,
-        rhs_dim_type: isl.dim_type,
-    ) -> tuple[str, ...]:
-        lhs_names = (
-            self.input_names
-            if lhs_dim_type == isl.dim_type.in_
-            else self._output_names()
-        )
-        rhs_names = (
-            other.input_names
-            if rhs_dim_type == isl.dim_type.in_
-            else other._output_names()
-        )
-        if lhs_names != rhs_names:
-            raise ValueError("maps are not composable: interface names differ")
-        return self._ordered_names(lhs_names)
-
-    def intersect_domain(self, domain: BasicSet | Set) -> BasicMap | Map:
-        """
-        Return this map restricted to *domain*.
-        """
-        domain_obj = domain._reconstruct_isl_object()
-        assert isinstance(domain_obj, isl.BasicSet | isl.Set)
-        result = _apply_set_like_binary_op(
-            self,
-            self._map_with_universe(
-                isl.dim_type.in_,
-                domain_obj,
-            ),
-            _set_like_and,
-        )
-        assert isinstance(result, BasicMap | Map)
-        return result
-
-    def intersect_range(self, range_: BasicSet | Set) -> BasicMap | Map:
-        """
-        Return this map restricted to *range_*.
-        """
-        range_obj = range_._reconstruct_isl_object()
-        assert isinstance(range_obj, isl.BasicSet | isl.Set)
-        result = _apply_set_like_binary_op(
-            self,
-            self._map_with_universe(
-                isl.dim_type.out,
-                range_obj,
-            ),
-            _set_like_and,
-        )
-        assert isinstance(result, BasicMap | Map)
-        return result
-
-    def apply_range(self, other: BasicMap | Map) -> BasicMap | Map:
-        """
-        Compose this map with *other* on this map's range.
-
-        The output names of this map must match the input names of *other*.
-        """
-        ordered_names = self._validate_composable(
-            isl.dim_type.out, other, isl.dim_type.in_
-        )
-        reordered_other = other._reorder_interface(isl.dim_type.in_, ordered_names)
-        assert isinstance(reordered_other, BasicMap | Map)
-        self._reject_surviving_name_collisions(
-            self.input_names & reordered_other._output_names()
-        )
-        result = self._map_obj().apply_range(reordered_other._map_obj())
-        return self._wrap_map_result(result)
-
-    def apply_domain(self, other: BasicMap | Map) -> BasicMap | Map:
-        """
-        Compose *other* with this map on this map's domain.
-
-        The input names of this map must match the output names of *other*.
-        """
-        ordered_names = self._validate_composable(
-            isl.dim_type.in_, other, isl.dim_type.out
-        )
-        reordered_other = other._reorder_interface(isl.dim_type.out, ordered_names)
-        assert isinstance(reordered_other, BasicMap | Map)
-        self._reject_surviving_name_collisions(
-            reordered_other.input_names & self._output_names()
-        )
-        result = reordered_other._map_obj().apply_range(self._map_obj())
-        return self._wrap_map_result(result)
-
-    def reverse(self) -> BasicMap | Map:
-        """
-        Return the map with domain and range exchanged.
-        """
-        return self._wrap_map_result(self._map_obj().reverse())
-
-    def domain(self) -> BasicSet | Set:
-        """
-        Return the domain as a named set.
-        """
-        domain = self._map_obj().domain()
-        if isinstance(domain, isl.BasicSet):
-            return make_basic_set(domain)
-        return make_set(domain)
-
-    def range(self) -> BasicSet | Set:
-        """
-        Return the range as a named set.
-        """
-        range_ = self._map_obj().range()
-        if isinstance(range_, isl.BasicSet):
-            return make_basic_set(range_)
-        return make_set(range_)
+    def reverse(self) -> Self:
+        return type(self)(
+            cast("IslMapLikeT", self._obj.reverse()),
+            self.sp.swap_dim_types(DimType.in_, DimType.set))
 
 
 @dataclass(frozen=True, eq=False)
@@ -435,53 +327,26 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     """
 
     def complement(self):
-        return Map(self._obj.complement(), _dimtype_to_names=self._dimtype_to_names)
+        return Map(self._obj.complement(), self.sp)
 
     def convex_hull(self):
         return self
 
-    @override
-    def _map_obj(self) -> isl.BasicMap:
-        obj = self._reconstruct_isl_object()
-        assert isinstance(obj, isl.BasicMap)
-        return obj
+    def domain(self):
+        return BasicSet(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
 
-    @override
-    def domain(self) -> BasicSet:
-        return make_basic_set(self._map_obj().domain())
+    def range(self):
+        return BasicSet(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
 
-    @override
-    def range(self) -> BasicSet:
-        return make_basic_set(self._map_obj().range())
+    def intersect_domain(self, domain: BasicSet) -> Self:
+        self_a, domain_a = _align_for_compostition(
+            self, DimType.in_, domain, DimType.set)
+        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
 
-    @override
-    def intersect_domain(self, domain: BasicSet | Set) -> BasicMap | Map:
-        if isinstance(domain, BasicSet):
-            range_space = self._map_obj().range().get_space()
-            filter_map = make_basic_map(
-                isl.BasicMap.from_domain_and_range(
-                    domain._reconstruct_isl_object(), isl.BasicSet.universe(range_space)
-                )
-            )
-            result = self & filter_map
-            assert isinstance(result, BasicMap | Map)
-            return result
-        return super().intersect_domain(domain)
-
-    @override
-    def intersect_range(self, range_: BasicSet | Set) -> BasicMap | Map:
-        if isinstance(range_, BasicSet):
-            domain_space = self._map_obj().domain().get_space()
-            filter_map = make_basic_map(
-                isl.BasicMap.from_domain_and_range(
-                    isl.BasicSet.universe(domain_space),
-                    range_._reconstruct_isl_object(),
-                )
-            )
-            result = self & filter_map
-            assert isinstance(result, BasicMap | Map)
-            return result
-        return super().intersect_range(range_)
+    def intersect_range(self, range: BasicSet) -> Self:
+        self_a, range_a = _align_for_compostition(
+            self, DimType.set, range, DimType.set)
+        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
 
 
 @overload
@@ -497,9 +362,7 @@ def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> B
     Create a :class:`BasicMap` from isl syntax or an :class:`islpy.BasicMap`.
     """
     obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
-    return BasicMap(
-        obj,
-        Space(_dimtype_to_names(obj, BasicSet.active_dim_types)))
+    return BasicMap(obj, Space.from_isl(obj, BasicMap.active_dim_types))
 
 
 def make_map_from_domain_and_range(
@@ -531,18 +394,28 @@ def make_map_from_domain_and_range(
 
 @dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map]):
-    """
-    Name-aware wrapper around :class:`islpy.Map`.
-
-    Construct instances with :func:`make_map`.
-    """
-
     def complement(self):
         return Map(self._obj.complement(), self.sp)
 
     def convex_hull(self):
         return BasicMap(
             self._obj.convex_hull(), self.sp)
+
+    def domain(self):
+        return Set(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
+
+    def range(self):
+        return Set(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
+
+    def intersect_domain(self, domain: Set) -> Self:
+        self_a, domain_a = _align_for_compostition(
+            self, DimType.in_, domain, DimType.set)
+        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
+
+    def intersect_range(self, range: Set) -> Self:
+        self_a, range_a = _align_for_compostition(
+            self, DimType.set, range, DimType.set)
+        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
 
 
 @overload
@@ -555,4 +428,4 @@ def make_map(src: isl.Map) -> Map: ...
 
 def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
     obj = isl.Map(src, ctx) if isinstance(src, str) else src
-    return Map(obj, Space(_dimtype_to_names(obj, Map.active_dim_types)))
+    return Map(obj, Space.from_isl(obj, Map.active_dim_types))

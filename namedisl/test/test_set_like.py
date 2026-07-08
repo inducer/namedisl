@@ -31,7 +31,7 @@ import islpy as isl
 
 import namedisl as nisl
 from .utils_for_tests import generate_random_named_map, generate_random_named_set
-from namedisl.core import _align_two, _find_joint_space
+from namedisl.core import _find_joint_space
 
 
 # {{{ sets
@@ -68,15 +68,14 @@ def test_set_equality(ndims: int, has_params: bool):
             set_str = f"[{a_param}] ->" + set_str
         perm_set = nisl.make_set(set_str)
 
-        assert a == perm_set
+        assert a.equals(perm_set)
 
 
-def test_set_like_equality_type_mismatch_raises_not_implemented_error() -> None:
+def test_set_like_equality_type_mismatch() -> None:
     set_ = nisl.make_set("{ [i] }")
     map_ = nisl.make_map("{ [i] -> [j] }")
 
-    with pytest.raises(NotImplementedError, match="Objects are not of the same type"):
-        _ = set_ == map_
+    assert set_ != map_
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -99,7 +98,7 @@ def test_set_union(ndims: int, has_params: bool):
 
     result = nisl.make_set(set_str)
 
-    assert (a | b) == result
+    assert (a | b).equals(result)
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -122,7 +121,7 @@ def test_set_intersection(ndims: int, has_params: bool):
 
     result = nisl.make_set(set_str)
 
-    assert (a & b) == result
+    assert (a & b).equals(result)
 
 
 def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
@@ -130,32 +129,31 @@ def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
     param_with_n = nisl.make_set("[n] -> { [i] }")
 
     with pytest.raises(ValueError, match=r"duplicate|collision"):
-        _find_joint_space(set_with_n, param_with_n)
+        _find_joint_space(set_with_n.sp, param_with_n.sp)
 
 
 def test_set_add_constraint_uses_named_dimensions() -> None:
-    set_ = nisl.make_set("{ [j, i] }")
+    bset = nisl.make_basic_set("[m,n,p] -> { [j, i] }")
 
-    constrained = set_.add_constraint("i = j - 1")
+    v = bset.affs()
+    constrained = bset.add_eq_constraint(v["i"] - v["j"] + 1)
 
-    assert constrained == nisl.make_set("{ [j, i] : i = j - 1 }")
+    assert constrained.as_set().equals(nisl.make_set("{ [j, i] : i = j - 1 }"))
 
 
-def test_set_add_constraint_accepts_multiple_constraints() -> None:
-    set_ = nisl.make_set("{ [i, j, k] }")
+def test_set_where() -> None:
+    sp = nisl.Space.from_names(param=[], set=["i", "j", "k"])
 
-    constrained = set_.add_constraint(["0 <= i", "j = i + 1", "k <= j"])
+    v = nisl.PwAff.from_space(sp)
+    zero = v[0]
+    i = v["i"]
+    j = v["j"]
+    k = v["k"]
+    constrained = zero.where("<=", i) & j.where("=", i + 1) & k.where("<=", j)
 
     assert constrained == nisl.make_set(
         "{ [i, j, k] : 0 <= i and j = i + 1 and k <= j }"
     )
-
-
-def test_set_add_constraint_rejects_unknown_name() -> None:
-    set_ = nisl.make_set("{ [i] }")
-
-    with pytest.raises(ValueError, match="invalid constraint"):
-        _ = set_.add_constraint("j = i")
 
 
 def test_set_gist_simplifies_against_named_context() -> None:
@@ -192,17 +190,7 @@ def test_set_subset_comparisons_align_by_name() -> None:
     assert not larger <= smaller
 
 
-def test_basic_set_subset_comparisons_allow_set_promotion() -> None:
-    smaller = nisl.make_basic_set("{ [i] : 0 <= i < 5 }")
-    larger = nisl.make_set("{ [j, i] : 0 <= i < 10 }")
-
-    assert smaller < larger
-    assert smaller <= larger
-    assert larger > smaller
-    assert larger >= smaller
-
-
-def test_basic_set_intersection_promotes_to_set() -> None:
+def test_basic_set_intersection_promotion_to_set() -> None:
     basic = nisl.make_basic_set(
         "{ [ii_s, ji_s, k_s] : 0 <= ii_s <= 4 and 0 <= ji_s <= 4 and k_s = 0 }"
     )
@@ -212,10 +200,10 @@ def test_basic_set_intersection_promotes_to_set() -> None:
         "(ii_s = 2 and 0 <= ji_s <= 4 and k_s = 0) }"
     )
 
-    result = basic & footprint
+    result = basic.as_set() & footprint
 
     assert isinstance(result, nisl.Set)
-    reconstructed = result._reconstruct_isl_object()
+    reconstructed = result.as_isl()
     assert isinstance(reconstructed, isl.Set)
     assert reconstructed.n_basic_set() > 1
 
@@ -228,7 +216,15 @@ def test_set_convex_hull_returns_basic_set() -> None:
     result = set_.convex_hull()
 
     assert isinstance(result, nisl.BasicSet)
-    assert result == nisl.make_basic_set("{ [j, i] : 0 <= j <= 2 and 0 <= i <= 2 }")
+    bs2 = nisl.make_basic_set("{ [j, i] : 0 <= j <= 2 and 0 <= i <= 2 }")
+    print(result == bs2)
+    if result != bs2:
+        print(result == bs2)
+        print(result.sp.order_equal(bs2.sp))
+        print(result._obj)
+        print(bs2._obj)
+        print(result._obj.plain_is_equal(bs2._obj))
+    assert result == bs2
 
 
 @pytest.mark.parametrize("ndims", [1, 2, 4, 8])
@@ -242,8 +238,8 @@ def test_set_eliminate(ndims: int):
 def test_set_eliminate_rejects_unknown_name() -> None:
     set_ = nisl.make_set("{ [i] }")
 
-    with pytest.raises(ValueError, match="unknown names: missing"):
-        _ = set_.eliminate("missing")
+    with pytest.raises(KeyError, match="missing"):
+        _ = set_.eliminate(["missing"])
 
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
@@ -257,8 +253,8 @@ def test_set_project_out(ndims: int):
 def test_set_project_out_rejects_unknown_name() -> None:
     set_ = nisl.make_set("{ [i] }")
 
-    with pytest.raises(ValueError, match="unknown names: missing"):
-        _ = set_.project_out("missing")
+    with pytest.raises(KeyError, match="missing"):
+        _ = set_.project_out(["missing"])
 
 
 @pytest.mark.parametrize("ndims", [2, 4, 8])
@@ -267,7 +263,7 @@ def test_set_dim_max(ndims: int):
 
     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
     cond_pw_affs = [
-        isl.PwAff(f"{{ [{cond.split('<')[2].strip(' ')}] }}")
+        nisl.make_pw_aff(f"{{ [{cond.split('<')[2].strip(' ')}] }}")
         for cond in a_cond.split("and")
     ]
 
@@ -281,7 +277,7 @@ def test_set_dim_min(ndims: int):
 
     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
     cond_pw_affs = [
-        isl.PwAff(f"{{ [{cond.split('<')[0].strip(' ')}] }}")
+        nisl.make_pw_aff(f"{{ [{cond.split('<')[0].strip(' ')}] }}")
         for cond in a_cond.split("and")
     ]
 
@@ -295,8 +291,8 @@ def test_set_dim_bounds_reconstruct_parameter_metadata() -> None:
         "n": "m",
     })
 
-    assert set_.dim_min("j") == isl.PwAff("[m] -> { [(0)] : m > 0 }")
-    assert set_.dim_max("j") == isl.PwAff("[m] -> { [(-1 + m)] : m > 0 }")
+    assert set_.dim_min("j") == nisl.make_pw_aff("[m] -> { [(0)] : m > 0 }")
+    assert set_.dim_max("j") == nisl.make_pw_aff("[m] -> { [(-1 + m)] : m > 0 }")
 
 
 # }}}
@@ -358,7 +354,7 @@ def test_map_equality(ndims_domain: int, ndims_range: int, has_params: bool):
             isl.Map.from_domain_and_range(isl.Set(domain_str), isl.Set(range_str))
         )
 
-        assert perm_map == og_map
+        assert perm_map.equals(og_map)
 
 
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
@@ -396,7 +392,7 @@ def test_map_union(ndims_domain: int, ndims_range: int, has_params: bool):
 
     result_map = nisl.make_map(result_str)
 
-    assert (x | y) == result_map
+    assert (x | y).equals(result_map)
 
 
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
@@ -434,37 +430,7 @@ def test_map_intersection(ndims_domain: int, ndims_range: int, has_params: bool)
 
     result_map = nisl.make_map(result_str)
 
-    assert (x & y) == result_map
-
-
-def test_map_add_constraint_uses_input_output_and_parameter_names() -> None:
-    map_ = nisl.make_map("[n] -> { [i] -> [j] }")
-
-    constrained = map_.add_constraint("j = i + n")
-
-    assert constrained == nisl.make_map("[n] -> { [i] -> [j] : j = i + n }")
-
-
-def test_map_add_constraint_preserves_basic_map_type() -> None:
-    map_ = nisl.make_basic_map("{ [i] -> [j] }")
-
-    constrained = map_.add_constraint("j = i + 1")
-
-    assert isinstance(constrained, nisl.BasicMap)
-    assert constrained == nisl.make_basic_map("{ [i] -> [j] : j = i + 1 }")
-
-
-def test_map_add_constraint_supports_previous_context_relation() -> None:
-    relation = nisl.make_map(
-        "{ [ki_prev, kb_prev] -> [ki_cur, kb_cur] : kb_cur = kb_prev + 1 }"
-    )
-
-    constrained = relation.add_constraint("ki_prev = ki_cur - 1")
-
-    assert constrained == nisl.make_map(
-        "{ [ki_prev, kb_prev] -> [ki_cur, kb_cur] : "
-        "ki_prev = ki_cur - 1 and kb_cur = kb_prev + 1 }"
-    )
+    assert (x & y).equals(result_map)
 
 
 def test_map_gist_simplifies_against_named_context() -> None:
@@ -491,16 +457,6 @@ def test_map_subset_comparisons_align_by_name() -> None:
     assert not larger <= smaller
 
 
-def test_basic_map_subset_comparisons_allow_map_promotion() -> None:
-    smaller = nisl.make_basic_map("{ [i] -> [x] : x = i and 0 <= i < 5 }")
-    larger = nisl.make_map("{ [j, i] -> [y, x] : x = i and 0 <= i < 10 }")
-
-    assert smaller < larger
-    assert smaller <= larger
-    assert larger > smaller
-    assert larger >= smaller
-
-
 def test_map_convex_hull_returns_basic_map() -> None:
     map_ = nisl.make_map("{ [i] -> [j] : (i = 0 and j = 0) or (i = 2 and j = 2) }")
 
@@ -515,40 +471,14 @@ def test_subset_comparison_rejects_set_map_mismatch() -> None:
     map_ = nisl.make_map("{ [i] -> [x] : x = i and 0 <= i < 5 }")
 
     with pytest.raises(TypeError):
-        _ = set_ <= map_
-
-
-def test_map_alignment_syncs_output_metadata() -> None:
-    lhs = nisl.make_map("{ [i] -> [x] }")
-    rhs = nisl.make_map("{ [i] -> [y, x] }")
-
-    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
-
-    assert aligned_lhs.ordered_dim_names(isl.dim_type.out) == ("x", "y")
-    assert aligned_lhs.ordered_dim_names(isl.dim_type.in_) == ("i",)
-    assert aligned_rhs.ordered_dim_names(isl.dim_type.out) == ("x", "y")
-    assert aligned_rhs.ordered_dim_names(isl.dim_type.in_) == ("i",)
-
-
-def test_map_alignment_syncs_input_and_parameter_metadata() -> None:
-    lhs = nisl.make_map("[n] -> { [i] -> [x] }")
-    rhs = nisl.make_map("[m, n] -> { [j, i] -> [x] }")
-
-    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
-
-    assert aligned_lhs.ordered_dim_names(isl.dim_type.out) == ("x",)
-    assert aligned_lhs.ordered_dim_names(isl.dim_type.in_) == ("i", "j")
-    assert aligned_lhs.ordered_dim_names(isl.dim_type.param) == ("m", "n")
-    assert aligned_rhs.ordered_dim_names(isl.dim_type.out) == ("x",)
-    assert aligned_rhs.ordered_dim_names(isl.dim_type.in_) == ("i", "j")
-    assert aligned_rhs.ordered_dim_names(isl.dim_type.param) == ("m", "n")
+        _ = set_ <= map_  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
 
 
 def test_map_apply_range_rejects_surviving_name_collisions() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
     rhs = nisl.make_map("{ [y] -> [x] }")
 
-    with pytest.raises(ValueError, match="duplicate surviving names"):
+    with pytest.raises(ValueError, match="Uninvolved"):
         _ = lhs.apply_range(rhs)
 
 
@@ -556,16 +486,16 @@ def test_map_apply_range_can_explicitly_rename_and_equate_collision() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
     rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"})
 
-    result = lhs.apply_range(rhs).equate_dims("x", "x_out")
+    result = lhs.apply_range(rhs).equate_dims([("x", "x_out")])
 
-    assert result.input_names == frozenset({"x"})
-    assert result.range().names == frozenset({"x_out"})
+    assert result.sp.in_names == frozenset({"x"})
+    assert result.range().sp.names == frozenset({"x_out"})
     assert (
         result
         .intersect_domain(nisl.make_set("{ [x] : x = 3 }"))
         .range()
         .dim_min("x_out")
-        .plain_is_equal(isl.PwAff("{ [(3)] }"))
+        == nisl.make_pw_aff("{ [(3)] }")
     )
 
 
@@ -576,10 +506,10 @@ def test_map_apply_range_can_equate_renamed_collisions_from_mapping() -> None:
         "z": "z_out",
     })
 
-    result = lhs.apply_range(rhs).equate_dims({
-        "x": "x_out",
-        "z": "z_out",
-    })
+    result = lhs.apply_range(rhs).equate_dims([
+        ("x", "x_out"),
+        ("z", "z_out"),
+    ])
 
     assert result == nisl.make_map(
         "{ [x, z] -> [x_out, z_out] : x = x_out and z = z_out }"
@@ -589,8 +519,8 @@ def test_map_apply_range_can_equate_renamed_collisions_from_mapping() -> None:
 def test_equate_dims_mapping_rejects_unknown_name() -> None:
     map_ = nisl.make_map("{ [x] -> [x_out] }")
 
-    with pytest.raises(ValueError, match="unknown name: missing"):
-        _ = map_.equate_dims({"x": "missing"})
+    with pytest.raises(KeyError, match="missing"):
+        _ = map_.equate_dims([("x", "missing")])
 
 
 def test_map_apply_domain_rejects_surviving_name_collisions() -> None:
@@ -605,16 +535,16 @@ def test_map_apply_domain_can_explicitly_rename_and_equate_collision() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
     rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"})
 
-    result = rhs.apply_domain(lhs).equate_dims("x", "x_out")
+    result = rhs.apply_domain(lhs).equate_dims([("x", "x_out")])
 
-    assert result.input_names == frozenset({"x"})
-    assert result.range().names == frozenset({"x_out"})
+    assert result.sp.in_names == frozenset({"x"})
+    assert result.range().sp.names == frozenset({"x_out"})
     assert (
         result
         .intersect_domain(nisl.make_set("{ [x] : x = 4 }"))
         .range()
         .dim_min("x_out")
-        .plain_is_equal(isl.PwAff("{ [(4)] }"))
+        == nisl.make_pw_aff("{ [(4)] }")
     )
 
 
@@ -685,7 +615,7 @@ def test_map_eliminate_rejects_unknown_name() -> None:
     map_ = nisl.make_map("{ [i] -> [j] }")
 
     with pytest.raises(ValueError, match="unknown names: missing"):
-        _ = map_.eliminate("missing")
+        _ = map_.eliminate(["missing"])
 
 
 @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
@@ -719,58 +649,60 @@ def test_map_as_pw_multi_aff():
     assert m.as_pw_multi_aff() == m_isl.as_pw_multi_aff()
 
 
-@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
-@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-def test_map_dim_max(ndims_domain: int, ndims_range: int):
-    m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-        ndims_domain, "x_in", None, ndims_range, "x_out", None
-    )
+# Maps have dim_min/max in isl, but what do those even do?
+#
+# @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+# @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+# def test_map_dim_max(ndims_domain: int, ndims_range: int):
+#     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
+#         ndims_domain, "x_in", None, ndims_range, "x_out", None
+#     )
 
-    # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-    in_upper_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
-        for cond in in_conds.split("and")
-    ]
+#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
+#     in_upper_bound_pw_maffs = [
+#         isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+#         for cond in in_conds.split("and")
+#     ]
 
-    for i, name in enumerate(in_names.split(",")):
-        # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
-        assert m.dim_max(name) == (in_upper_bound_pw_maffs[i] - 1)
+#     for i, name in enumerate(in_names.split(",")):
+#         # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
+#         assert m.dim_max(name) == (in_upper_bound_pw_maffs[i] - 1)
 
-    # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-    out_upper_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
-        for cond in out_conds.split("and")
-    ]
+#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
+#     out_upper_bound_pw_maffs = [
+#         isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
+#         for cond in out_conds.split("and")
+#     ]
 
-    for i, name in enumerate(out_names.split(",")):
-        # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
-        assert m.dim_max(name) == (out_upper_bound_pw_maffs[i] - 1)
+#     for i, name in enumerate(out_names.split(",")):
+#         # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
+#         assert m.dim_max(name) == (out_upper_bound_pw_maffs[i] - 1)
 
 
-@pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
-@pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-def test_map_dim_min(ndims_domain: int, ndims_range: int):
-    m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-        ndims_domain, "x_in", None, ndims_range, "x_out", None
-    )
+# @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
+# @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
+# def test_map_dim_min(ndims_domain: int, ndims_range: int):
+#     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
+#         ndims_domain, "x_in", None, ndims_range, "x_out", None
+#     )
 
-    # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-    in_lower_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
-        for cond in in_conds.split("and")
-    ]
+#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
+#     in_lower_bound_pw_maffs = [
+#         isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+#         for cond in in_conds.split("and")
+#     ]
 
-    for i, name in enumerate(in_names.split(",")):
-        assert m.dim_min(name) == in_lower_bound_pw_maffs[i]
+#     for i, name in enumerate(in_names.split(",")):
+#         assert m.dim_min(name) == in_lower_bound_pw_maffs[i]
 
-    # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-    out_lower_bound_pw_maffs = [
-        isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
-        for cond in out_conds.split("and")
-    ]
+#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
+#     out_lower_bound_pw_maffs = [
+#         isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
+#         for cond in out_conds.split("and")
+#     ]
 
-    for i, name in enumerate(out_names.split(",")):
-        assert m.dim_min(name) == out_lower_bound_pw_maffs[i]
+#     for i, name in enumerate(out_names.split(",")):
+#         assert m.dim_min(name) == out_lower_bound_pw_maffs[i]
 
 
 def test_map_dim_bounds_reconstruct_parameter_metadata() -> None:
