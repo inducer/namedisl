@@ -36,8 +36,8 @@ THE SOFTWARE.
 
 import operator
 from abc import ABC
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, ClassVar, cast, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -45,109 +45,88 @@ from typing_extensions import Self, override
 import islpy as isl
 
 from .core import (
-    IslSetLike,
+    DimType,
+    IslMapLikeT,
+    IslSetLikeT,
+    IslSetOrMapLike,
+    IslSetOrMapLikeT,
     NamedIslObject,
     NameToDim,
+    Space,
+    _align_and_apply_binary_op,
     _align_obj,
     _align_two,
-    _find_contiguous_dim_chunks,
-    _make_named_object_pieces,
+    _dimtype_to_names,
+    chunked_dims_by_type,
 )
-from .expression_like import PwAff, make_pw_aff
+from .expression_like import PwAff, make_pw_aff, make_pw_multi_aff
 
 
-PublicSetLikeT_co = TypeVar("PublicSetLikeT_co", bound=IslSetLike, covariant=True)
-PublicMapLikeT_co = TypeVar(
-    "PublicMapLikeT_co", isl.BasicMap, isl.Map, covariant=True
-)
+if TYPE_CHECKING:
+    from collections.abc import Callable, Collection, Sequence
+
+    from namedisl import Aff, PwMultiAff
 
 
 def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
     return cast("isl.Set", cast("Any", operator.and_)(lhs, rhs))
 
 
-def _set_like_or(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast("Any", operator.or_)(lhs, rhs))
+def _compare_set_like(
+    lhs: _NamedIslSetOrMapLike[IslSetOrMapLike],
+    rhs: _NamedIslSetOrMapLike[IslSetOrMapLike],
+    op: Callable[[isl.Set, isl.Set], bool],
+) -> bool:
+    lhs_is_map = isinstance(lhs, _NamedIslMapLike)
+    rhs_is_map = isinstance(rhs, _NamedIslMapLike)
+    if lhs_is_map != rhs_is_map:
+        return NotImplemented
 
+    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
 
-if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Sequence
+    assert isinstance(aligned_lhs._obj, isl.Set)
+    assert isinstance(aligned_rhs._obj, isl.Set)
+    return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
-    """
-    Represents set-like objects with parameter dimensions as a non-parameterized
-    set. Names are organized as contiguous chunks of dimension types, i.e.
-        [ (set names), (input names), (parameter names) ]
-    """
+class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
+    def eliminate(self: Self, names: Collection[str]) -> Self:
+        obj = self._obj
+        for dt, chunks in chunked_dims_by_type(
+                names, self.sp.name_to_dim).items():
+            for start, count in chunks:
+                obj = cast("IslSetOrMapLikeT",
+                    obj.eliminate(dt.as_isl(), start, count))
 
-    def complement(self: Self) -> Self:
-        """
-        Return the complement of this set-like object.
-        """
-        return replace(
-            self,
-            _obj=self._obj.complement(),
-            _name_to_dim=self._name_to_dim,
-            _dimtype_to_names=self._dimtype_to_names,
-        )
+        return type(self)(obj, self.sp)
 
-    @overload
-    def convex_hull(self: BasicMap | Map) -> BasicMap: ...
+    def project_out(self: Self, names: str | Collection[str]) -> Self:
+        new_dimtype_to_names = {
+            dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
+        obj = self._obj
 
-    @overload
-    def convex_hull(self: BasicSet | Set) -> BasicSet: ...
+        for dt, chunks in chunked_dims_by_type(
+                names, self.sp.name_to_dim).items():
+            for start, count in chunks[::-1]:
+                del new_dimtype_to_names[dt][start:start+count]
+                obj = cast("IslSetOrMapLikeT",
+                    obj.project_out(dt.as_isl(), start, count))
 
-    def convex_hull(self) -> BasicMap | BasicSet:
-        """
-        Return the convex hull as a basic set or basic map.
-        """
-        result = isl.Set.from_basic_set(self._obj.convex_hull())
-        if isinstance(self, _NamedIslMapLike):
-            return BasicMap(  # pylint: disable=too-many-function-args
-                result,
-                self._name_to_dim,
-                self._dimtype_to_names,
-            )
+        return type(self)(obj, self.sp)
 
-        return BasicSet(  # pylint: disable=too-many-function-args
-            result,
-            self._name_to_dim,
-            self._dimtype_to_names,
-        )
+    def project_out_except(
+        self: Self,
+        names_to_keep: Collection[str],
+    ) -> Self:
+        if isinstance(names_to_keep, str):
+            raise TypeError("names_to_keep must be a collection of str")
 
-    def eliminate(self: Self, names_to_eliminate: str | Collection[str]) -> Self:
-        """
-        Eliminate constraints involving the named dimensions without removing them.
-        """
-        if isinstance(names_to_eliminate, str):
-            names_to_eliminate = [names_to_eliminate]
-
-        missing_names = [
-            name for name in names_to_eliminate if name not in self.names
+        names_to_project_out = [
+            name for name in self.sp.name_to_dim if name not in names_to_keep
         ]
-        if missing_names:
-            raise ValueError(f"unknown names: {', '.join(missing_names)}")
 
-        dims_to_eliminate = sorted(
-            self._name_to_dim[name] for name in names_to_eliminate
-        )
-
-        contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_eliminate)
-
-        new_isl_obj = self._obj
-        for start in sorted(contiguous_dim_chunks):
-            new_isl_obj = new_isl_obj.eliminate(
-                isl.dim_type.set, start, contiguous_dim_chunks[start]
-            )
-
-        return replace(
-            self,
-            _obj=new_isl_obj,
-            _name_to_dim=self._name_to_dim,  # NOTE: no dims removed by eliminate
-            _dimtype_to_names=self._dimtype_to_names,
-        )
+        return self.project_out(names_to_project_out)
 
     def equate_dims(
         self,
@@ -156,282 +135,81 @@ class _NamedIslSetLike(NamedIslObject[isl.Set, PublicSetLikeT_co], ABC):
         obj = self._obj
         for lhs_name, rhs_name in names:
             if lhs_name != rhs_name:
-                lhs_dim_id = self._name_to_dim[lhs_name]
-                rhs_dim_id = self._name_to_dim[rhs_name]
-                obj = obj.equate(
+                lhs_dim_id = self.sp.name_to_dim[lhs_name]
+                rhs_dim_id = self.sp.name_to_dim[rhs_name]
+                obj = cast("IslSetOrMapLikeT", obj.equate(
                     lhs_dim_id.dim_type.as_isl(),
                     lhs_dim_id.dim_index,
                     rhs_dim_id.dim_type.as_isl(),
                     rhs_dim_id.dim_index,
-                )
+                ))
 
-        return type(self)(
-            cast("InternalIslObjectT_co", obj),
-            _dimtype_to_names=self._dimtype_to_names,
-        )
+        return type(self)(obj, self.sp)
 
-    @overload
-    def gist(
-        self: BasicMap, context: _NamedIslSetLike[IslSetLike]
-    ) -> BasicMap | Map: ...
-
-    @overload
-    def gist(self: Map, context: _NamedIslSetLike[IslSetLike]) -> Map: ...
-
-    @overload
-    def gist(
-        self: BasicSet, context: _NamedIslSetLike[IslSetLike]
-    ) -> BasicSet | Set: ...
-
-    @overload
-    def gist(self: Set, context: _NamedIslSetLike[IslSetLike]) -> Set: ...
-
-    def gist(
-        self, context: _NamedIslSetLike[IslSetLike]
-    ) -> _NamedIslSetLike[IslSetLike]:
-        """
-        Simplify this object under the assumptions described by *context*.
-        """
-        self_aligned, context_aligned = _align_two(self, context)
-        result = self_aligned._obj.gist(context_aligned._obj)
-
-        if isinstance(self, BasicMap):
-            result_type = BasicMap if result.n_basic_set() == 1 else Map
-        elif isinstance(self, Map):
-            result_type = Map
-        elif isinstance(self, BasicSet):
-            result_type = BasicSet if result.n_basic_set() == 1 else Set
-        else:
-            result_type = Set
-
-        return result_type(
-            result,
-            _dimtype_to_names=self_aligned._dimtype_to_names,
-        )
-
-    def project_out(self: Self, names_to_project_out: str | Collection[str]) -> Self:
-        """
-        Return a copy with the named dimensions projected out.
-        """
-
-        if isinstance(names_to_project_out, str):
-            names_to_project_out = [names_to_project_out]
-
-        missing_names = [
-            name for name in names_to_project_out if name not in self.names
-        ]
-        if missing_names:
-            raise ValueError(f"unknown names: {', '.join(missing_names)}")
-
-        names_to_remove = set(names_to_project_out)
-
-        dims_to_remove = sorted(self._name_to_dim[name] for name in names_to_remove)
-
-        new_isl_obj = self._obj
-        contiguous_dim_chunks = _find_contiguous_dim_chunks(dims_to_remove)
-        for start in sorted(contiguous_dim_chunks, reverse=True):
-            new_isl_obj = new_isl_obj.project_out(
-                isl.dim_type.set, start, contiguous_dim_chunks[start]
-            )
-
-        new_name_to_dim: NameToDim = {}
-        for name, dim in self._name_to_dim.items():
-            if name in names_to_remove:
-                continue
-
-            shift = 0
-            for removed_dim in dims_to_remove:
-                if removed_dim < dim:
-                    shift += 1
-                else:
-                    break
-
-            new_name_to_dim[name] = dim - shift
-
-        new_type_to_names = constantdict({
-            dt: self._dimtype_to_names[dt] - frozenset(names_to_remove)
-            for dt in self._dimtype_to_names
-        })
-
-        return replace(
-            self,
-            _obj=new_isl_obj,
-            _name_to_dim=constantdict(new_name_to_dim),
-            _dimtype_to_names=new_type_to_names,
-        )
-
-    def project_out_except(
-        self: Self,
-        names_to_keep: str | Collection[str],
-    ) -> Self:
-        """
-        Project out every dimension except those named in *names_to_keep*.
-        """
-
-        if isinstance(names_to_keep, str):
-            names_to_keep = [names_to_keep] if names_to_keep else []
-
-        names_to_project_out = [
-            name for name in self._name_to_dim if name not in names_to_keep
-        ]
-
-        return self.project_out(names_to_project_out)
-
-    def dim_max(self, name: str) -> PwAff:
-        """
-        Return the parametric maximum of the named dimension.
-        """
-        obj, dim = self._dim_bound_object_and_dim(name)
-        return make_pw_aff(obj.dim_max(dim))
-
-    def dim_min(self, name: str) -> PwAff:
-        """
-        Return the parametric minimum of the named dimension.
-        """
-        obj, dim = self._dim_bound_object_and_dim(name)
-        return make_pw_aff(obj.dim_min(dim))
-
-    def _dim_bound_object_and_dim(
-        self, name: str
-    ) -> tuple[isl.BasicSet | isl.Set, int]:
-        if name not in self.names:
-            raise ValueError(f"unknown name: {name}")
-        if name in self.parameter_names:
-            raise ValueError(f"cannot compute a bound for parameter: {name}")
-
-        if isinstance(self, _NamedIslMapLike):
-            bound_set = self.domain() if name in self.input_names else self.range()
-            obj = bound_set._reconstruct_isl_object()
-            assert isinstance(obj, isl.BasicSet | isl.Set)
-            return obj, bound_set._name_to_dim[name]
-
-        obj = self._reconstruct_isl_object()
-        assert isinstance(obj, isl.BasicSet | isl.Set)
-        return obj, self._name_to_dim[name]
-
-    def is_empty(self) -> bool:
-        """
-        Return whether this object contains no integer points.
-        """
-        return bool(self._obj.is_empty())
-
-    def as_pw_multi_aff(self) -> isl.PwMultiAff:
+    def as_pw_multi_aff(self) -> PwMultiAff:
         """
         Reconstruct and convert this object to :class:`islpy.PwMultiAff`.
         """
-        obj = self._reconstruct_isl_object()
-        assert isinstance(obj, isl.Set | isl.Map)
-        return obj.as_pw_multi_aff()
+        return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
 
-    @override
-    def dim(self, dim_type: isl.dim_type) -> int:
-        if dim_type == isl.dim_type.out:
-            dim_type = isl.dim_type.set
-        return super().dim(dim_type)
+    def gist(self, context: Self) -> Self:
+        self_aligned, context_aligned = _align_two(self, context)
+        return type(self)(
+            self_aligned._obj.gist(context_aligned._obj),
+            self.sp,
+        )
 
-    @overload
-    def __and__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
+    def __and__(self, other: Self) -> Self:
+        return cast("Self", _align_and_apply_binary_op(self, other, operator.and_))
 
-    @overload
-    def __and__(self: Map, other: BasicMap | Map) -> Map: ...
+    def __or__(self, other: Self) -> Self:
+        return cast("Self", _align_and_apply_binary_op(self, other, operator.or_))
 
-    @overload
-    def __and__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
-
-    @overload
-    def __and__(self: Set, other: BasicSet | Set) -> Set: ...
-
-    def __and__(
-        self, other: _NamedIslSetLike[IslSetLike]
-    ) -> _NamedIslSetLike[IslSetLike]:
-        """
-        Return the intersection of two compatible named set-like objects.
-        """
-        return _apply_set_like_binary_op(self, other, _set_like_and)
-
-    @overload
-    def __or__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
-
-    @overload
-    def __or__(self: Map, other: BasicMap | Map) -> Map: ...
-
-    @overload
-    def __or__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
-
-    @overload
-    def __or__(self: Set, other: BasicSet | Set) -> Set: ...
-
-    def __or__(
-        self, other: _NamedIslSetLike[IslSetLike]
-    ) -> _NamedIslSetLike[IslSetLike]:
-        """
-        Return the union of two compatible named set-like objects.
-        """
-        return _apply_set_like_binary_op(self, other, _set_like_or)
-
-    @overload
-    def __sub__(self: BasicMap, other: BasicMap | Map) -> BasicMap | Map: ...
-
-    @overload
-    def __sub__(self: Map, other: BasicMap | Map) -> Map: ...
-
-    @overload
-    def __sub__(self: BasicSet, other: BasicSet | Set) -> BasicSet | Set: ...
-
-    @overload
-    def __sub__(self: Set, other: BasicSet | Set) -> Set: ...
-
-    def __sub__(
-        self, other: _NamedIslSetLike[IslSetLike]
-    ) -> _NamedIslSetLike[IslSetLike]:
-        """
-        Return the set difference with *other* removed.
-        """
-        return _align_and_apply_binary_op(self, other, operator.sub)
+    def __sub__(self, other: Self) -> Self:
+        return cast("Self", _align_and_apply_binary_op(self, other, operator.sub))
 
     @override
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, type(self)):
-            raise NotImplementedError("Objects are not of the same type")
+            return NotImplemented
 
         aligned_self, aligned_other = _align_two(self, other)
-
-        # FIXME: type checker complains because it's not clear whether the
-        # underlying object after alignment is an isl.Set
-        assert isinstance(aligned_self._obj, isl.Set)
-        assert isinstance(aligned_other._obj, isl.Set)
         return aligned_self._obj.plain_is_equal(aligned_other._obj)
 
-    def __lt__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
-        """
-        Return whether this object is a strict subset of *other*.
-        """
+    def __lt__(self, other: _NamedIslSetOrMapLike[IslSetOrMapLike]) -> bool:
         return _compare_set_like(self, other, isl.Set.is_strict_subset)
 
-    def __le__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
-        """
-        Return whether this object is a subset of *other*.
-        """
+    def __le__(self, other: _NamedIslSetOrMapLike[IslSetOrMapLike]) -> bool:
         return _compare_set_like(self, other, isl.Set.is_subset)
 
-    def __gt__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
-        """
-        Return whether this object is a strict superset of *other*.
-        """
-        return _compare_set_like(other, self, isl.Set.is_strict_subset)
 
-    def __ge__(self, other: _NamedIslSetLike[IslSetLike]) -> bool:
-        """
-        Return whether this object is a superset of *other*.
-        """
-        return _compare_set_like(other, self, isl.Set.is_subset)
+@dataclass(frozen=True, eq=False)
+class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT], ABC):
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({DimType.param, DimType.set})
+
+    def dim_max(self, name: str) -> PwAff:
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError("can only take max with respect to set dimensions")
+        return make_pw_aff(self.as_isl().dim_max(idx))
+
+    def dim_min(self, name: str) -> PwAff:
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError("can only take min with respect to set dimensions")
+        return make_pw_aff(self.as_isl().dim_min(idx))
 
 
-@final
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
-    pass
-    # TODO: add_constraint?
+    def complement(self):
+        return Set(self._obj.complement(), _dimtype_to_names=self._dimtype_to_names)
+
+    def convex_hull(self):
+        return self
+
+    def add_equality_constraint(self, name: str, aff: Aff) -> BasicSet:
+        pass
 
 
 @overload
@@ -447,12 +225,11 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
     Create a :class:`BasicSet` from isl syntax or an :class:`islpy.BasicSet`.
     """
     obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
-    set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(set_obj, isl.Set)
-    return BasicSet(set_obj, name_to_dim, dimtype_to_names)
+    return BasicSet(
+        obj,
+        Space(_dimtype_to_names(obj, BasicSet.active_dim_types)))
 
 
-@final
 @dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set]):
     """
@@ -461,78 +238,39 @@ class Set(_NamedIslSetLike[isl.Set]):
     Construct instances with :func:`make_set`.
     """
 
-    @override
-    def add_input_names(self, names_to_add: Collection[str]) -> Set:
-        raise NotImplementedError
+    def complement(self):
+        return Set(self._obj.complement(), self.sp)
 
-    @override
-    def _reconstruct_isl_object(self) -> isl.Set:
-        obj = super()._reconstruct_isl_object()
-        assert isinstance(obj, isl.Set)
-        return obj
+    def convex_hull(self):
+        return BasicSet(
+            self._obj.convex_hull(), self.sp)
 
     def get_basic_sets(self) -> Sequence[BasicSet]:
         """
         Return the basic-set pieces of this set.
         """
-        isl_obj = self._reconstruct_isl_object()
+        isl_obj = self.as_isl()
 
         bsets = isl_obj.get_basic_sets()
         return [make_basic_set(bset) for bset in bsets]
 
 
-def _compare_set_like(
-    lhs: _NamedIslSetLike[IslSetLike],
-    rhs: _NamedIslSetLike[IslSetLike],
-    op: Callable[[isl.Set, isl.Set], bool],
-) -> bool:
-    lhs_is_map = isinstance(lhs, _NamedIslMapLike)
-    rhs_is_map = isinstance(rhs, _NamedIslMapLike)
-    if lhs_is_map != rhs_is_map:
-        raise TypeError("Cannot compare set-like and map-like objects")
-
-    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
-
-    assert isinstance(aligned_lhs._obj, isl.Set)
-    assert isinstance(aligned_rhs._obj, isl.Set)
-    return op(aligned_lhs._obj, aligned_rhs._obj)
+@overload
+def make_set(src: str, ctx: isl.Context | None = None) -> Set: ...
 
 
-class _NamedIslMapLike(_NamedIslSetLike[PublicMapLikeT_co]):
-    @override
-    def _reconstruct_isl_object(self) -> PublicMapLikeT_co:
-        obj = super()._reconstruct_isl_object()
-        if isinstance(obj, isl.Set):
-            return cast(
-                "PublicMapLikeT_co",
-                isl.Map.from_domain_and_range(isl.Set("{ [] }"), obj),
-            )
-        assert isinstance(obj, isl.BasicMap | isl.Map)
-        return cast("PublicMapLikeT_co", obj)
+@overload
+def make_set(src: isl.Set) -> Set: ...
 
-    def _output_names(self) -> frozenset[str]:
-        return frozenset(self._name_to_dim) - self.input_names - self.parameter_names
 
-    def _map_obj(self) -> isl.BasicMap | isl.Map:
-        return self._reconstruct_isl_object()
+def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
+    obj = isl.Set(src, ctx) if isinstance(src, str) else src
+    return Set(obj, Space(_dimtype_to_names(obj, Set.active_dim_types)))
 
-    @staticmethod
-    def _wrap_map_result(result: isl.BasicMap | isl.Map) -> BasicMap | Map:
-        if isinstance(result, isl.BasicMap):
-            return make_basic_map(result)
-        return make_map(result)
 
-    def _map_with_universe(
-        self, dim_type: isl.dim_type, set_obj: isl.BasicSet | isl.Set
-    ) -> BasicMap | Map:
-        map_obj = self._map_obj()
-        if dim_type == isl.dim_type.in_:
-            universe = isl.Set.universe(map_obj.range().get_space())
-            return make_map(isl.Map.from_domain_and_range(set_obj, universe))
-        if dim_type == isl.dim_type.out:
-            universe = isl.Set.universe(map_obj.domain().get_space())
-            return make_map(isl.Map.from_domain_and_range(universe, set_obj))
-        raise ValueError(f"unsupported dim type: {dim_type}")
+class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
+        {DimType.param, DimType.in_, DimType.set})
 
     def _ordered_names(self, names: frozenset[str]) -> tuple[str, ...]:
         return tuple(sorted(names, key=self._name_to_dim.__getitem__))
@@ -688,25 +426,6 @@ class _NamedIslMapLike(_NamedIslSetLike[PublicMapLikeT_co]):
         return make_set(range_)
 
 
-@overload
-def make_set(src: str, ctx: isl.Context | None = None) -> Set: ...
-
-
-@overload
-def make_set(src: isl.Set) -> Set: ...
-
-
-def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
-    """
-    Create a :class:`Set` from isl syntax or an :class:`islpy.Set`.
-    """
-    obj = isl.Set(src, ctx) if isinstance(src, str) else src
-    set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(set_obj, isl.Set)
-    return Set(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
-
-
-@final
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     """
@@ -715,19 +434,11 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     Construct instances with :func:`make_basic_map`.
     """
 
-    @classmethod
-    def empty(cls, space: isl.Space) -> BasicMap:
-        """
-        Return an empty :class:`BasicMap` in *space*.
-        """
-        obj = isl.BasicMap.empty(space)
-        set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-        assert isinstance(set_obj, isl.Set)
-        return cls(  # pylint: disable=too-many-function-args
-            set_obj,
-            name_to_dim,
-            dimtype_to_names,
-        )
+    def complement(self):
+        return Map(self._obj.complement(), _dimtype_to_names=self._dimtype_to_names)
+
+    def convex_hull(self):
+        return self
 
     @override
     def _map_obj(self) -> isl.BasicMap:
@@ -772,21 +483,6 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
             return result
         return super().intersect_range(range_)
 
-    @override
-    def _reconstruct_isl_object(self) -> isl.BasicMap:
-        obj = super()._reconstruct_isl_object()
-
-        if isinstance(obj, isl.Map) and obj.is_empty():
-            return isl.BasicMap.empty(obj.get_space())
-
-        if not isinstance(obj, isl.Map) or obj.n_basic_map() != 1:
-            raise ValueError(
-                "Cannot reconstruct an isl.BasicMap from anything other than "
-                "an isl.Map containing only a single isl.BasicMap."
-            )
-
-        return obj.get_basic_maps()[0]
-
 
 @overload
 def make_basic_map(src: str, ctx: isl.Context | None = None) -> BasicMap: ...
@@ -801,23 +497,17 @@ def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> B
     Create a :class:`BasicMap` from isl syntax or an :class:`islpy.BasicMap`.
     """
     obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
-    set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(set_obj, isl.Set)
-    return BasicMap(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return BasicMap(
+        obj,
+        Space(_dimtype_to_names(obj, BasicSet.active_dim_types)))
 
 
 def make_map_from_domain_and_range(
     domain: BasicSet | Set, range_: BasicSet | Set
 ) -> BasicMap | Map:
-    """
-    Create a named map from a named *domain* and named *range_*.
-
-    A :class:`BasicMap` is returned when both inputs are basic sets; otherwise a
-    :class:`Map` is returned.
-    """
     if isinstance(domain, BasicSet) and isinstance(range_, BasicSet):
-        domain_obj = domain._reconstruct_isl_object()
-        range_obj = range_._reconstruct_isl_object()
+        domain_obj = domain.as_isl()
+        range_obj = range_.as_isl()
         assert isinstance(domain_obj, isl.BasicSet)
         assert isinstance(range_obj, isl.BasicSet)
         return make_basic_map(
@@ -827,8 +517,8 @@ def make_map_from_domain_and_range(
             )
         )
 
-    domain_obj = domain._reconstruct_isl_object()
-    range_obj = range_._reconstruct_isl_object()
+    domain_obj = domain.as_isl()
+    range_obj = range_.as_isl()
     assert isinstance(domain_obj, isl.BasicSet | isl.Set)
     assert isinstance(range_obj, isl.BasicSet | isl.Set)
     return make_map(
@@ -839,7 +529,6 @@ def make_map_from_domain_and_range(
     )
 
 
-@final
 @dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map]):
     """
@@ -848,18 +537,12 @@ class Map(_NamedIslMapLike[isl.Map]):
     Construct instances with :func:`make_map`.
     """
 
-    @classmethod
-    def empty(cls, space: isl.Space) -> Map:
-        """
-        Return an empty :class:`Map` in *space*.
-        """
-        return make_map(isl.Map.empty(space))
+    def complement(self):
+        return Map(self._obj.complement(), self.sp)
 
-    @override
-    def _reconstruct_isl_object(self) -> isl.Map:
-        obj = super()._reconstruct_isl_object()
-        assert isinstance(obj, isl.Map)
-        return obj
+    def convex_hull(self):
+        return BasicMap(
+            self._obj.convex_hull(), self.sp)
 
 
 @overload
@@ -871,10 +554,5 @@ def make_map(src: isl.Map) -> Map: ...
 
 
 def make_map(src: str | isl.Map, ctx: isl.Context | None = None) -> Map:
-    """
-    Create a :class:`Map` from isl syntax or an :class:`islpy.Map`.
-    """
     obj = isl.Map(src, ctx) if isinstance(src, str) else src
-    set_obj, name_to_dim, dimtype_to_names = _make_named_object_pieces(obj)
-    assert isinstance(set_obj, isl.Set)
-    return Map(set_obj, name_to_dim, dimtype_to_names)  # pylint: disable=too-many-function-args
+    return Map(obj, Space(_dimtype_to_names(obj, Map.active_dim_types)))

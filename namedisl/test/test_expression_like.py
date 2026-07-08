@@ -54,7 +54,7 @@ def test_aff_from_str():
     print(named_aff)
     print(aff)
 
-    assert aff == named_aff._reconstruct_isl_object()
+    assert aff == named_aff.as_isl()
 
 
 def test_aff_from_aff():
@@ -64,7 +64,7 @@ def test_aff_from_aff():
     print(named_aff)
     print(aff)
 
-    assert aff == named_aff._reconstruct_isl_object()
+    assert aff == named_aff.as_isl()
 
 
 def test_aff_binary_ops():
@@ -78,8 +78,8 @@ def test_aff_binary_ops():
     naff_p_naff = named_aff + named_aff
     naff_p_1 = named_aff + 1
 
-    assert naff_p_naff._reconstruct_isl_object() == aff_p_aff
-    assert naff_p_1._reconstruct_isl_object() == aff_p_1
+    assert naff_p_naff.as_isl() == aff_p_aff
+    assert naff_p_1.as_isl() == aff_p_1
 
     aff_s_aff = aff - aff
     aff_s_1 = aff - 1
@@ -87,13 +87,13 @@ def test_aff_binary_ops():
     naff_s_naff = named_aff - named_aff
     naff_s_1 = named_aff - 1
 
-    assert naff_s_naff._reconstruct_isl_object() == aff_s_aff
-    assert naff_s_1._reconstruct_isl_object() == aff_s_1
+    assert naff_s_naff.as_isl() == aff_s_aff
+    assert naff_s_1.as_isl() == aff_s_1
 
     aff_m_3 = aff * 3
     naff_m_3 = named_aff * 3
 
-    assert naff_m_3._reconstruct_isl_object() == aff_m_3
+    assert naff_m_3.as_isl() == aff_m_3
 
 # }}}
 
@@ -108,7 +108,7 @@ def test_pwaff_from_str():
     print(named_pwaff)
     print(pwaff)
 
-    assert pwaff == named_pwaff._reconstruct_isl_object()
+    assert pwaff == named_pwaff.as_isl()
 
 
 def test_pwaff_from_pwaff():
@@ -118,7 +118,7 @@ def test_pwaff_from_pwaff():
     print(named_pwaff)
     print(pwaff)
 
-    assert pwaff == named_pwaff._reconstruct_isl_object()
+    assert pwaff == named_pwaff.as_isl()
 
 
 def test_pwaff_binary_ops():
@@ -132,8 +132,8 @@ def test_pwaff_binary_ops():
     npwaff_p_npwaff = named_pwaff + named_pwaff
     npwaff_p_1 = named_pwaff + 1
 
-    assert npwaff_p_npwaff._reconstruct_isl_object() == pwaff_p_pwaff
-    assert npwaff_p_1._reconstruct_isl_object() == pwaff_p_1
+    assert npwaff_p_npwaff.as_isl() == pwaff_p_pwaff
+    assert npwaff_p_1.as_isl() == pwaff_p_1
 
     pwaff_s_pwaff = pwaff - pwaff
     pwaff_s_1 = pwaff - 1
@@ -141,13 +141,13 @@ def test_pwaff_binary_ops():
     npwaff_s_npwaff = named_pwaff - named_pwaff
     npwaff_s_1 = named_pwaff - 1
 
-    assert npwaff_s_npwaff._reconstruct_isl_object() == pwaff_s_pwaff
-    assert npwaff_s_1._reconstruct_isl_object() == pwaff_s_1
+    assert npwaff_s_npwaff.as_isl() == pwaff_s_pwaff
+    assert npwaff_s_1.as_isl() == pwaff_s_1
 
     pwaff_m_3 = pwaff * 3
     npwaff_m_3 = named_pwaff * 3
 
-    assert npwaff_m_3._reconstruct_isl_object() == pwaff_m_3
+    assert npwaff_m_3.as_isl() == pwaff_m_3
 
 
 def test_mixed_aff_and_pwaff_binary_op_promotes_to_pwaff() -> None:
@@ -157,8 +157,8 @@ def test_mixed_aff_and_pwaff_binary_op_promotes_to_pwaff() -> None:
     result = aff + pwaff
 
     assert isinstance(result, nisl.PwAff)
-    assert result._reconstruct_isl_object() == (
-        aff._reconstruct_isl_object().to_pw_aff() + pwaff._reconstruct_isl_object()
+    assert result.as_isl() == (
+        aff.as_isl().to_pw_aff() + pwaff.as_isl()
     )
 
 
@@ -172,45 +172,45 @@ def test_expression_equality_type_mismatch_raises_not_implemented_error() -> Non
 
 def test_reflected_integer_expression_ops() -> None:
     aff_expr = nisl.make_aff("{ [i] -> [i] }")
-    aff_obj = aff_expr._reconstruct_isl_object()
-    assert _is_zero_expression((1 + aff_expr)._reconstruct_isl_object() - (1 + aff_obj))
-    assert _is_zero_expression((1 - aff_expr)._reconstruct_isl_object() - (1 - aff_obj))
-    assert _is_zero_expression((2 * aff_expr)._reconstruct_isl_object() - (2 * aff_obj))
+    aff_obj = aff_expr.as_isl()
+    assert _is_zero_expression((1 + aff_expr).as_isl() - (1 + aff_obj))
+    assert _is_zero_expression((1 - aff_expr).as_isl() - (1 - aff_obj))
+    assert _is_zero_expression((2 * aff_expr).as_isl() - (2 * aff_obj))
 
     pw_aff_expr = nisl.make_pw_aff("{ [i] -> [i] }")
-    pw_aff_obj = pw_aff_expr._reconstruct_isl_object()
+    pw_aff_obj = pw_aff_expr.as_isl()
     assert _is_zero_expression(
-        (1 + pw_aff_expr)._reconstruct_isl_object() - (1 + pw_aff_obj)
+        (1 + pw_aff_expr).as_isl() - (1 + pw_aff_obj)
     )
     assert _is_zero_expression(
-        (1 - pw_aff_expr)._reconstruct_isl_object() - (1 - pw_aff_obj)
+        (1 - pw_aff_expr).as_isl() - (1 - pw_aff_obj)
     )
     assert _is_zero_expression(
-        (2 * pw_aff_expr)._reconstruct_isl_object() - (2 * pw_aff_obj)
+        (2 * pw_aff_expr).as_isl() - (2 * pw_aff_obj)
     )
 
     qpoly_expr = nisl.make_qpolynomial("{ [i] -> i }")
-    qpoly_obj = qpoly_expr._reconstruct_isl_object()
+    qpoly_obj = qpoly_expr.as_isl()
     assert _is_zero_expression(
-        (1 + qpoly_expr)._reconstruct_isl_object() - (1 + qpoly_obj)
+        (1 + qpoly_expr).as_isl() - (1 + qpoly_obj)
     )
     assert _is_zero_expression(
-        (1 - qpoly_expr)._reconstruct_isl_object() - (1 - qpoly_obj)
+        (1 - qpoly_expr).as_isl() - (1 - qpoly_obj)
     )
     assert _is_zero_expression(
-        (2 * qpoly_expr)._reconstruct_isl_object() - (2 * qpoly_obj)
+        (2 * qpoly_expr).as_isl() - (2 * qpoly_obj)
     )
 
     pw_qpoly_expr = nisl.make_pw_qpolynomial("{ [i] -> i }")
-    pw_qpoly_obj = pw_qpoly_expr._reconstruct_isl_object()
+    pw_qpoly_obj = pw_qpoly_expr.as_isl()
     assert _is_zero_expression(
-        (1 + pw_qpoly_expr)._reconstruct_isl_object() - (1 + pw_qpoly_obj)
+        (1 + pw_qpoly_expr).as_isl() - (1 + pw_qpoly_obj)
     )
     assert _is_zero_expression(
-        (1 - pw_qpoly_expr)._reconstruct_isl_object() - (1 - pw_qpoly_obj)
+        (1 - pw_qpoly_expr).as_isl() - (1 - pw_qpoly_obj)
     )
     assert _is_zero_expression(
-        (2 * pw_qpoly_expr)._reconstruct_isl_object() - (2 * pw_qpoly_obj)
+        (2 * pw_qpoly_expr).as_isl() - (2 * pw_qpoly_obj)
     )
 
 
@@ -240,7 +240,7 @@ def _assert_expression_equal(
     )
 
 
-def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:
+def as_isl() -> None:
     cases = (
         (
             nisl.make_aff("[n] -> { [i] -> [i + n] }"),
@@ -270,12 +270,12 @@ def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:
             1,
         )
 
-        _assert_expression_equal(moved._reconstruct_isl_object(), expected)
+        _assert_expression_equal(moved.as_isl(), expected)
         assert moved.input_names == frozenset({"i", "n"})
         assert moved.parameter_names == frozenset()
 
 
-def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
+def as_isl() -> None:
     cases = (
         (
             nisl.make_aff("[n] -> { [i] -> [i + n] }"),
@@ -305,7 +305,7 @@ def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
             1,
         )
 
-        _assert_expression_equal(moved._reconstruct_isl_object(), expected)
+        _assert_expression_equal(moved.as_isl(), expected)
         assert moved.input_names == frozenset()
         assert moved.parameter_names == frozenset({"n", "i"})
 
@@ -315,15 +315,15 @@ def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
 def test_multi_aff_get_at_uses_name() -> None:
     map_ = nisl.make_map("{ [i] -> [x = i, y = 2i] }")
     maff = nisl.make_multi_aff(
-        map_._reconstruct_isl_object().as_pw_multi_aff().as_multi_aff()
+        map_.as_isl().as_pw_multi_aff().as_multi_aff()
     )
-    assert maff.get_at("x")._reconstruct_isl_object() == isl.PwAff("{ [i] -> [(i)] }")
+    assert maff.get_at("x").as_isl() == isl.PwAff("{ [i] -> [(i)] }")
 
 
 def test_pw_multi_aff_get_at_uses_name() -> None:
     map_ = nisl.make_map("{ [i] -> [x = i, y = 2i] }")
     pmaff = nisl.make_pw_multi_aff(map_.as_pw_multi_aff())
-    assert pmaff.get_at("y")._reconstruct_isl_object() == isl.PwAff("{ [i] -> [(2i)] }")
+    assert pmaff.get_at("y").as_isl() == isl.PwAff("{ [i] -> [(2i)] }")
 
 
 def test_multi_aff_stores_pw_aff_parts() -> None:
@@ -339,7 +339,7 @@ def test_multi_aff_stores_pw_aff_parts() -> None:
     assert maff.output_names == frozenset(maff._obj)
     assert maff.input_names == maff.get_at("x").input_names
     assert maff.parameter_names == maff.get_at("x").parameter_names
-    assert maff._reconstruct_isl_object() == raw_maff
+    assert maff.as_isl() == raw_maff
 
 
 def test_pw_multi_aff_stores_pw_aff_parts() -> None:
@@ -355,7 +355,7 @@ def test_pw_multi_aff_stores_pw_aff_parts() -> None:
     assert pmaff.output_names == frozenset(pmaff._obj)
     assert pmaff.input_names == pmaff.get_at("x").input_names
     assert pmaff.parameter_names == pmaff.get_at("x").parameter_names
-    assert pmaff._reconstruct_isl_object() == raw_pmaff
+    assert pmaff.as_isl() == raw_pmaff
 
 
 # {{{ qpolynomials
@@ -368,7 +368,7 @@ def test_qpolynomial_from_str():
     print(named_qpolynomial)
     print(qpolynomial)
 
-    assert (named_qpolynomial._reconstruct_isl_object() - qpolynomial).is_zero()
+    assert (named_qpolynomial.as_isl() - qpolynomial).is_zero()
 
 
 def test_qpolynomial_from_qpolynomial():
@@ -379,7 +379,7 @@ def test_qpolynomial_from_qpolynomial():
     print(named_qpolynomial)
     print(qpolynomial)
 
-    assert (named_qpolynomial._reconstruct_isl_object() - qpolynomial).is_zero()
+    assert (named_qpolynomial.as_isl() - qpolynomial).is_zero()
 
 
 def test_qpolynomial_binary_ops():
@@ -394,12 +394,12 @@ def test_qpolynomial_binary_ops():
     nqpolynomial_p_1 = named_qpolynomial + 1
 
     assert (
-        nqpolynomial_p_nqpolynomial._reconstruct_isl_object()
+        nqpolynomial_p_nqpolynomial.as_isl()
         -
         qpolynomial_p_qpolynomial
     ).is_zero()
     assert (
-        nqpolynomial_p_1._reconstruct_isl_object()
+        nqpolynomial_p_1.as_isl()
         -
         qpolynomial_p_1
     ).is_zero()
@@ -411,12 +411,12 @@ def test_qpolynomial_binary_ops():
     nqpolynomial_s_1 = named_qpolynomial - 1
 
     assert (
-        nqpolynomial_s_nqpolynomial._reconstruct_isl_object()
+        nqpolynomial_s_nqpolynomial.as_isl()
         -
         qpolynomial_s_qpolynomial
     ).is_zero()
     assert (
-        nqpolynomial_s_1._reconstruct_isl_object()
+        nqpolynomial_s_1.as_isl()
         -
         qpolynomial_s_1
     ).is_zero()
@@ -425,7 +425,7 @@ def test_qpolynomial_binary_ops():
     nqpolynomial_m_3 = named_qpolynomial * 3
 
     assert (
-        nqpolynomial_m_3._reconstruct_isl_object()
+        nqpolynomial_m_3.as_isl()
         -
         qpolynomial_m_3
     ).is_zero()
@@ -442,7 +442,7 @@ def test_qpolynomial_permuted_is_zero():
 
     assert (
         named_qp - named_qp_perm
-    )._reconstruct_isl_object().is_zero()
+    ).as_isl().is_zero()
 
 # }}}
 
@@ -457,7 +457,7 @@ def test_pw_qp_from_str():
     print(named_pw_qp)
     print(pw_qp)
 
-    assert (named_pw_qp._reconstruct_isl_object() - pw_qp).is_zero()
+    assert (named_pw_qp.as_isl() - pw_qp).is_zero()
 
 
 def test_pw_qp_from_pw_qp():
@@ -468,7 +468,7 @@ def test_pw_qp_from_pw_qp():
     print(named_pw_qp)
     print(pw_qp)
 
-    assert (named_pw_qp._reconstruct_isl_object() - pw_qp).is_zero()
+    assert (named_pw_qp.as_isl() - pw_qp).is_zero()
 
 
 def test_pw_qp_binary_ops():
@@ -483,12 +483,12 @@ def test_pw_qp_binary_ops():
     npw_qp_p_1 = named_pw_qp + 1
 
     assert (
-        npw_qp_p_npw_qp._reconstruct_isl_object()
+        npw_qp_p_npw_qp.as_isl()
         -
         pw_qp_p_pw_qp
     ).is_zero()
     assert (
-        npw_qp_p_1._reconstruct_isl_object()
+        npw_qp_p_1.as_isl()
         -
         pw_qp_p_1
     ).is_zero()
@@ -500,12 +500,12 @@ def test_pw_qp_binary_ops():
     npw_qp_s_1 = named_pw_qp - 1
 
     assert (
-        npw_qp_s_npw_qp._reconstruct_isl_object()
+        npw_qp_s_npw_qp.as_isl()
         -
         pw_qp_s_pw_qp
     ).is_zero()
     assert (
-        npw_qp_s_1._reconstruct_isl_object()
+        npw_qp_s_1.as_isl()
         -
         pw_qp_s_1
     ).is_zero()
@@ -514,7 +514,7 @@ def test_pw_qp_binary_ops():
     npw_qp_m_3 = named_pw_qp * 3
 
     assert (
-        npw_qp_m_3._reconstruct_isl_object()
+        npw_qp_m_3.as_isl()
         -
         pw_qp_m_3
     ).is_zero()

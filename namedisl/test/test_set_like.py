@@ -31,7 +31,7 @@ import islpy as isl
 
 import namedisl as nisl
 from .utils_for_tests import generate_random_named_map, generate_random_named_set
-from namedisl.core import _align_two, _find_joint_name_to_dim
+from namedisl.core import _align_two, _find_joint_space
 
 
 # {{{ sets
@@ -130,7 +130,7 @@ def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
     param_with_n = nisl.make_set("[n] -> { [i] }")
 
     with pytest.raises(ValueError, match=r"duplicate|collision"):
-        _find_joint_name_to_dim(set_with_n, param_with_n)
+        _find_joint_space(set_with_n, param_with_n)
 
 
 def test_set_add_constraint_uses_named_dimensions() -> None:
@@ -628,7 +628,7 @@ def test_map_empty_from_space_preserves_names_and_is_empty() -> None:
         isl.DEFAULT_CONTEXT, params=["n"], in_=["i", "j"], out=["x", "y"]
     )
 
-    m = nisl.Map.empty(space)
+    m = nisl.Map._empty(space)
 
     assert m._reconstruct_isl_object().is_empty()
     assert m.input_names == frozenset({"i", "j"})
@@ -638,7 +638,7 @@ def test_map_empty_from_space_preserves_names_and_is_empty() -> None:
 def test_basic_map_empty_from_space_preserves_names_and_is_empty() -> None:
     space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT, in_=["i"], out=["x"])
 
-    m = nisl.BasicMap.empty(space)
+    m = nisl.BasicMap._empty(space)
 
     assert m._reconstruct_isl_object().is_empty()
     assert m.input_names == frozenset({"i"})
@@ -648,7 +648,7 @@ def test_basic_map_empty_from_space_preserves_names_and_is_empty() -> None:
 def test_map_empty_matches_existing_named_space() -> None:
     template = nisl.make_map("[n] -> { [i, k] -> [ii_s, io, ki_s, ko] }")
 
-    empty_map = nisl.Map.empty(template._get_space())
+    empty_map = nisl.Map._empty(template._get_space())
 
     assert empty_map._reconstruct_isl_object().is_empty()
     assert empty_map.input_names == template.input_names
@@ -658,7 +658,7 @@ def test_map_empty_matches_existing_named_space() -> None:
 
 def test_empty_map_is_identity_for_union() -> None:
     space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT, in_=["i"], out=["x"])
-    empty_map = nisl.Map.empty(space)
+    empty_map = nisl.Map._empty(space)
     nonempty_map = nisl.make_map("{ [i] -> [x] }")
 
     assert (empty_map | nonempty_map) == nonempty_map
