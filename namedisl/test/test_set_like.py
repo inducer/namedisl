@@ -598,80 +598,10 @@ def test_map_as_pw_multi_aff():
     o2 = nisl.make_pw_multi_aff("{ [i] -> [io = (floor((i)/32)), ii = ((i) mod 32)] }")
     assert o1 == o2
 
-
-# Maps have dim_min/max in isl, but what do those even do?
-#
-# @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
-# @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-# def test_map_dim_max(ndims_domain: int, ndims_range: int):
-#     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-#         ndims_domain, "x_in", None, ndims_range, "x_out", None
-#     )
-
-#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-#     in_upper_bound_pw_maffs = [
-#         isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
-#         for cond in in_conds.split("and")
-#     ]
-
-#     for i, name in enumerate(in_names.split(",")):
-#         # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
-#         assert m.dim_max(name) == (in_upper_bound_pw_maffs[i] - 1)
-
-#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-#     out_upper_bound_pw_maffs = [
-#         isl.PwAff(f"{{ [{int(cond.split('<')[2].strip(' '))}] }}")
-#         for cond in out_conds.split("and")
-#     ]
-
-#     for i, name in enumerate(out_names.split(",")):
-#         # NOTE: constructing PwAffs assumes starting index of 0, so subtract 1
-#         assert m.dim_max(name) == (out_upper_bound_pw_maffs[i] - 1)
-
-
-# @pytest.mark.parametrize("ndims_domain", [1, 2, 4, 8])
-# @pytest.mark.parametrize("ndims_range", [1, 2, 4, 8])
-# def test_map_dim_min(ndims_domain: int, ndims_range: int):
-#     m, (_, in_names, in_conds), (_, out_names, out_conds) = generate_random_named_map(
-#         ndims_domain, "x_in", None, ndims_range, "x_out", None
-#     )
-
-#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-#     in_lower_bound_pw_maffs = [
-#         isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
-#         for cond in in_conds.split("and")
-#     ]
-
-#     for i, name in enumerate(in_names.split(",")):
-#         assert m.dim_min(name) == in_lower_bound_pw_maffs[i]
-
-#     # dim_{min,max} return raw isl.PwAff objects on a zero-dimensional set space.
-#     out_lower_bound_pw_maffs = [
-#         isl.PwAff(f"{{ [{int(cond.split('<')[0].strip(' '))}] }}")
-#         for cond in out_conds.split("and")
-#     ]
-
-#     for i, name in enumerate(out_names.split(",")):
-#         assert m.dim_min(name) == out_lower_bound_pw_maffs[i]
-
-# def test_map_dim_bounds_reconstruct_parameter_metadata() -> None:
-#     map_ = nisl.make_map(
-#         "[n] -> { [i] -> [j] : 0 <= i < n and j = i + 1 }"
-#     ).rename_dims({
-#         "i": "k",
-#         "j": "l",
-#         "n": "m",
-#     })
-
-#     assert map_.dim_min("k") == isl.PwAff("[m] -> { [(0)] : m > 0 }")
-#     assert map_.dim_max("l") == isl.PwAff("[m] -> { [(m)] : m > 0 }")
-
-
 # }}}
 
 
 # {{{ basic{map, set}
-
 
 def test_basic_map_from_str() -> None:
     m = nisl.make_basic_map(
