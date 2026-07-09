@@ -89,19 +89,20 @@ def _apply_expression_binary_op(
 
         return type(lhs)(
             cast("IslScalarExpressionLikeT", op(lhs._obj, rhs)),
-            lhs.sp,
+            lhs.space,
         )
     if isinstance(lhs, int):
         return type(rhs)(
             cast("IslScalarExpressionLikeT", op(lhs, rhs._obj)),
-            rhs.sp,
+            rhs.space,
         )
 
     if type(lhs) is not type(rhs):
         return NotImplemented
 
     lhs, rhs = align_two(lhs, rhs)
-    return type(lhs)(cast("IslScalarExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.sp)
+    return type(lhs)(
+        cast("IslScalarExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.space)
 
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
@@ -166,7 +167,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return NotImplemented
         other = cast("Self", other)
 
-        if not self.sp.order_equal(other.sp):
+        if not self.space.order_equal(other.space):
             return False
 
         if isinstance(self._obj, (isl.QPolynomial, isl.PwQPolynomial)):
@@ -208,7 +209,7 @@ class Aff(_NamedExpressionLike[isl.Aff]):
         zero = Aff.zero_on_domain(space)
         result: dict[str | Literal[0], Aff] = {0: zero}
 
-        expr_space = zero.sp
+        expr_space = zero.space
         isl_zero = zero._obj
         for name, (dt, idx) in expr_space.name_to_dim.items():
             result[name] = Aff(
@@ -218,11 +219,11 @@ class Aff(_NamedExpressionLike[isl.Aff]):
         return result
 
     def set_coefficient(self, name: str, value: int) -> Aff:
-        dt, idx = self.sp.name_to_dim[name]
-        return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.sp)
+        dt, idx = self.space.name_to_dim[name]
+        return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
 
     def as_pw_aff(self) -> PwAff:
-        return PwAff(self._obj.to_pw_aff(), self.sp)
+        return PwAff(self._obj.to_pw_aff(), self.space)
 
 
 @overload
@@ -248,7 +249,7 @@ class PwAff(_NamedExpressionLike[isl.PwAff]):
     def gist(self, set: Set):
         self_a, set_a = align_two(self, set)
         result = self_a._obj.gist(set_a._obj)
-        return PwAff(result, self_a.sp)
+        return PwAff(result, self_a.space)
 
     @staticmethod
     def from_space(space: Space) -> dict[str | Literal[0], PwAff]:
@@ -256,7 +257,7 @@ class PwAff(_NamedExpressionLike[isl.PwAff]):
         zero = Aff.zero_on_domain(space)
         result: dict[str | Literal[0], PwAff] = {0: zero.as_pw_aff()}
 
-        expr_space = zero.sp
+        expr_space = zero.space
         isl_zero = zero._obj
         for name, (dt, idx) in expr_space.name_to_dim.items():
             result[name] = PwAff(
@@ -280,12 +281,12 @@ class PwAff(_NamedExpressionLike[isl.PwAff]):
     ) -> Set:
         func = self._op_to_func[op]
         if isinstance(rhs, int):
-            rhs = PwAff(isl.PwAff.zero_on_domain(self._obj.space) + rhs, self.sp)
+            rhs = PwAff(isl.PwAff.zero_on_domain(self._obj.space) + rhs, self.space)
         elif isinstance(rhs, Aff):
             rhs = rhs.as_pw_aff()
         self_a, rhs_a = align_two(self, rhs)
         from .set_like import Set
-        return Set(func(self_a._obj, rhs_a._obj), self_a.sp.as_set_space())
+        return Set(func(self_a._obj, rhs_a._obj), self_a.space.as_set_space())
 
 
 @overload
@@ -386,10 +387,10 @@ class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]
 @dataclass(frozen=True, eq=False)
 class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
     def __getitem__(self, name: str):
-        dt, idx = self.sp.name_to_dim[name]
+        dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
-        return Aff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.out))
+        return Aff(self._obj.get_at(idx), self.space.drop_dim_type(DimType.out))
 
 
 @overload
@@ -414,13 +415,13 @@ def make_multi_aff(
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
     def __getitem__(self, name: str):
-        dt, idx = self.sp.name_to_dim[name]
+        dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
-        return PwAff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.out))
+        return PwAff(self._obj.get_at(idx), self.space.drop_dim_type(DimType.out))
 
     def as_multi_aff(self):
-        return MultiAff(self._obj.as_multi_aff(), self.sp)
+        return MultiAff(self._obj.as_multi_aff(), self.space)
 
 
 @overload

@@ -46,25 +46,25 @@ def test_names(ndims: int, has_params: bool):
     if s_param:
         names = names | frozenset({s_param})
 
-    assert s.sp.names == names
+    assert s.space.names == names
 
 
 def test_public_dim_type_name_accessors() -> None:
     named_map = nisl.make_map("[n] -> { [i] -> [o] }")
 
-    assert named_map.sp.dim_names(DimType.in_) == {"i"}
-    assert named_map.sp.in_names == {"i"}
-    assert named_map.sp.dim_names(DimType.out) == {"o"}
-    assert named_map.sp.set_names == {"o"}
-    assert named_map.sp.dim_names(DimType.param) == {"n"}
-    assert named_map.sp.param_names == {"n"}
+    assert named_map.space.dim_names(DimType.in_) == {"i"}
+    assert named_map.space.in_names == {"i"}
+    assert named_map.space.dim_names(DimType.out) == {"o"}
+    assert named_map.space.set_names == {"o"}
+    assert named_map.space.dim_names(DimType.param) == {"n"}
+    assert named_map.space.param_names == {"n"}
 
 
 def test_public_dim_type_name_accessors_for_aff() -> None:
     named_aff = nisl.make_aff("[n] -> { [i] -> [i + n] }")
 
-    assert named_aff.sp.in_names == {"i"}
-    assert named_aff.sp.param_names == {"n"}
+    assert named_aff.space.in_names == {"i"}
+    assert named_aff.space.param_names == {"n"}
 
 
 def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
@@ -107,9 +107,9 @@ def test_add_dim_names_uses_dim_type() -> None:
         .add_dim_names(DimType.out, ["x"])
     )
 
-    assert named_map.sp.in_names == {"j", "i"}
-    assert named_map.sp.param_names == {"p"}
-    assert named_map.sp.set_names == {"x", "o"}
+    assert named_map.space.in_names == {"j", "i"}
+    assert named_map.space.param_names == {"p"}
+    assert named_map.space.set_names == {"x", "o"}
 
 
 def test_move_dims_set() -> None:
@@ -213,4 +213,4 @@ def test_ticked_names_are_distinct_names() -> None:
 
     named_set = nisl.make_set(isl.Set.universe(space))
 
-    assert named_set.sp.names == frozenset({"x", "x'"})
+    assert named_set.space.names == frozenset({"x", "x'"})

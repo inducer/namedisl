@@ -129,7 +129,7 @@ def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
     param_with_n = nisl.make_set("[n] -> { [i] }")
 
     with pytest.raises(ValueError, match=r"duplicate|collision"):
-        _find_joint_space(set_with_n.sp, param_with_n.sp)
+        _find_joint_space(set_with_n.space, param_with_n.space)
 
 
 def test_set_add_constraint_uses_named_dimensions() -> None:
@@ -210,7 +210,7 @@ def test_set_convex_hull_returns_basic_set() -> None:
     print(result == bs2)
     if result != bs2:
         print(result == bs2)
-        print(result.sp.order_equal(bs2.sp))
+        print(result.space.order_equal(bs2.space))
         print(result._obj)
         print(bs2._obj)
         print(result._obj.plain_is_equal(bs2._obj))
@@ -478,8 +478,8 @@ def test_map_apply_range_can_explicitly_rename_and_equate_collision() -> None:
 
     result = lhs.apply_range(rhs).equate_dims([("x", "x_out")])
 
-    assert result.sp.in_names == frozenset({"x"})
-    assert result.range().sp.names == frozenset({"x_out"})
+    assert result.space.in_names == frozenset({"x"})
+    assert result.range().space.names == frozenset({"x_out"})
     assert (
         result
         .intersect_domain(nisl.make_set("{ [x] : x = 3 }"))
@@ -527,8 +527,8 @@ def test_map_apply_domain_can_explicitly_rename_and_equate_collision() -> None:
 
     result = rhs.apply_domain(lhs).equate_dims([("x", "x_out")])
 
-    assert result.sp.in_names == frozenset({"x"})
-    assert result.range().sp.names == frozenset({"x_out"})
+    assert result.space.in_names == frozenset({"x"})
+    assert result.range().space.names == frozenset({"x_out"})
     assert (
         result
         .intersect_domain(nisl.make_set("{ [x] : x = 4 }"))

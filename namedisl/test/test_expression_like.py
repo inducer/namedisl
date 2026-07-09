@@ -216,8 +216,8 @@ def test_move_dims_expression_param_to_input_reconstructs_like_isl() -> None:
         )
 
         assert moved == to_named(expected)
-        assert moved.sp.in_names == frozenset({"i", "n"})
-        assert moved.sp.param_names == frozenset()
+        assert moved.space.in_names == frozenset({"i", "n"})
+        assert moved.space.param_names == frozenset()
 
 
 def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
@@ -251,8 +251,8 @@ def test_move_dims_expression_input_to_param_reconstructs_like_isl() -> None:
         )
 
         assert moved == to_named(expected)
-        assert moved.sp.in_names == frozenset()
-        assert moved.sp.param_names == frozenset({"n", "i"})
+        assert moved.space.in_names == frozenset()
+        assert moved.space.param_names == frozenset({"n", "i"})
 
 # }}}
 

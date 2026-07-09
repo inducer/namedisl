@@ -282,7 +282,7 @@ def align_obj(
     *, allow_cross_dim_type: bool = False,
 ) -> NamedIslObjectT:
     obj = named_obj._obj
-    running_name_to_dim_id = dict(named_obj.sp.name_to_dim)
+    running_name_to_dim_id = dict(named_obj.space.name_to_dim)
 
     if isinstance(obj, isl.PwMultiAff):
         raise NotImplementedError
@@ -351,10 +351,10 @@ def align_obj(
 def align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
-    if named_obj1.sp.order_equal(named_obj2.sp):
+    if named_obj1.space.order_equal(named_obj2.space):
         return named_obj1, named_obj2
 
-    space = _find_joint_space(named_obj1.sp, named_obj2.sp)
+    space = _find_joint_space(named_obj1.space, named_obj2.space)
 
     named_obj1 = align_obj(named_obj1, space)
     named_obj2 = align_obj(named_obj2, space)
@@ -369,12 +369,12 @@ def align_for_compostition(
     rhs_dt: DimType,
 ) -> tuple[NamedIslObject[IslObjectT], NamedIslObject[IslObjectT2]]:
     interface_names_set = {
-        *lhs.sp.dimtype_to_names[lhs_dt],
-        *rhs.sp.dimtype_to_names[rhs_dt],
+        *lhs.space.dimtype_to_names[lhs_dt],
+        *rhs.space.dimtype_to_names[rhs_dt],
     }
 
-    lhs_intersection = lhs.sp.names_except([lhs_dt]) & interface_names_set
-    rhs_intersection = rhs.sp.names_except([rhs_dt]) & interface_names_set
+    lhs_intersection = lhs.space.names_except([lhs_dt]) & interface_names_set
+    rhs_intersection = rhs.space.names_except([rhs_dt]) & interface_names_set
     if lhs_intersection:
         raise ValueError(
             f"LHS names intersect with interface: {', '.join(lhs_intersection)}")
@@ -382,26 +382,26 @@ def align_for_compostition(
         raise ValueError(
             f"RHS names intersect with interface: {', '.join(rhs_intersection)}")
     remaining_intersection = (
-        lhs.sp.names_except([lhs_dt, DimType.param])
-        & rhs.sp.names_except([rhs_dt, DimType.param])
+        lhs.space.names_except([lhs_dt, DimType.param])
+        & rhs.space.names_except([rhs_dt, DimType.param])
     )
     if remaining_intersection:
         raise ValueError(
             f"Uninvolved names intersect : {', '.join(remaining_intersection)}")
 
     param_names = tuple(sorted({
-        *lhs.sp.dimtype_to_names[DimType.param],
-        *rhs.sp.dimtype_to_names[DimType.param],
+        *lhs.space.dimtype_to_names[DimType.param],
+        *rhs.space.dimtype_to_names[DimType.param],
     }))
 
     interface_names = tuple(sorted(interface_names_set))
     lhs_sp = Space(constantdict({
-        **lhs.sp.dimtype_to_names,
+        **lhs.space.dimtype_to_names,
         DimType.param: param_names,
         lhs_dt: interface_names,
     }))
     rhs_sp = Space(constantdict({
-        **rhs.sp.dimtype_to_names,
+        **rhs.space.dimtype_to_names,
         DimType.param: param_names,
         rhs_dt: interface_names,
     }))
@@ -420,7 +420,7 @@ def _align_and_apply_binary_op(
 ) -> NamedIslObject[IslObject]:
     lhs, rhs = align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
-    return type(lhs)(result, lhs.sp)
+    return type(lhs)(result, lhs.space)
 
 
 @dataclass(frozen=True, eq=False)
@@ -615,35 +615,34 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
     # be considered authoritative. See as_isl().
     _obj: IslObjectT_co
 
-    # FIXME: Rename 'space'
-    sp: Space
+    space: Space
 
     active_dim_types: ClassVar[frozenset[DimType]]
 
     if __debug__:
         def __post_init__(self):
-            if frozenset(self.sp.dimtype_to_names) != self.active_dim_types:
+            if frozenset(self.space.dimtype_to_names) != self.active_dim_types:
                 raise ValueError(
                     f"space not suitable for '{type(self)}'")
 
     def add_dim_names(
         self, dt: DimType, names_to_add: Collection[str], /
     ) -> Self:
-        all_names = [*names_to_add, *self.sp.names]
+        all_names = [*names_to_add, *self.space.names]
         if len(set(all_names)) != len(all_names):
             raise ValueError("duplicate names after addition")
 
         new_dimtype_to_names = {
-            **self.sp.dimtype_to_names,
-            dt: (*self.sp.dimtype_to_names[dt], *names_to_add)
+            **self.space.dimtype_to_names,
+            dt: (*self.space.dimtype_to_names[dt], *names_to_add)
         }
 
         if isinstance(self._obj, isl.PwMultiAff):
             raise NotImplementedError
 
-        start_dim = self.sp.dim(dt)
+        start_dim = self.space.dim(dt)
         obj = cast("IslObjectT_co",
-                   self._obj.insert_dims(dt.as_isl(), self.sp.dim(dt),
+                   self._obj.insert_dims(dt.as_isl(), self.space.dim(dt),
                                          len(names_to_add)))
 
         if dt == DimType.param:
@@ -666,15 +665,15 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             raise TypeError("names_to_move may not be a plain string")
 
         new_dimtype_to_names = {
-            dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
+            dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
 
         obj = self._obj
 
         for source_dt, chunks in chunked_dims_by_type(
-                names, self.sp.name_to_dim).items():
+                names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
                 del new_dimtype_to_names[source_dt][start:start+count]
-                new_dimtype_to_names[dest_dt].extend(self.sp.dimtype_to_names[source_dt][start:start+count])
+                new_dimtype_to_names[dest_dt].extend(self.space.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
 
                 if isinstance(obj, isl.PwMultiAff):
@@ -696,7 +695,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             return self
 
         new_dimtype_to_names = {
-            dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
+            dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
 
         obj = self._obj
         for old_name, new_name in renaming.items():
@@ -704,11 +703,11 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
                 raise ValueError(
                     "renaming may not map to a name to be renamed: "
                     f"'{new_name}'")
-            if new_name in self.sp.names:
+            if new_name in self.space.names:
                 raise ValueError(
                     f"cannot rename to existing name: '{new_name}'")
 
-            dim_type, idx = self.sp.name_to_dim[old_name]
+            dim_type, idx = self.space.name_to_dim[old_name]
 
             # isl doesn't like unnamed param dimensions. Make it happy.
             obj = _set_dim_name(obj, dim_type, idx, new_name)
@@ -723,7 +722,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             })))
 
     def as_isl(self) -> IslObjectT_co:
-        return _restore_names(self._obj, self.sp.dimtype_to_names)
+        return _restore_names(self._obj, self.space.dimtype_to_names)
 
     @override
     def __str__(self) -> str:

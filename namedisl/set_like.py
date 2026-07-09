@@ -85,20 +85,20 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
     def eliminate(self: Self, names: Collection[str]) -> Self:
         obj = self._obj
         for dt, chunks in chunked_dims_by_type(
-                names, self.sp.name_to_dim).items():
+                names, self.space.name_to_dim).items():
             for start, count in chunks:
                 obj = cast("IslSetOrMapLikeT_co",
                     obj.eliminate(dt.as_isl(), start, count))
 
-        return type(self)(obj, self.sp)
+        return type(self)(obj, self.space)
 
     def project_out(self: Self, names: str | Collection[str]) -> Self:
         new_dimtype_to_names = {
-            dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
+            dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
         obj = self._obj
 
         for dt, chunks in chunked_dims_by_type(
-                names, self.sp.name_to_dim).items():
+                names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
                 del new_dimtype_to_names[dt][start:start+count]
                 obj = cast("IslSetOrMapLikeT_co",
@@ -117,7 +117,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
             raise TypeError("names_to_keep must be a collection of str")
 
         names_to_project_out = [
-            name for name in self.sp.name_to_dim if name not in names_to_keep
+            name for name in self.space.name_to_dim if name not in names_to_keep
         ]
 
         return self.project_out(names_to_project_out)
@@ -126,7 +126,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
         self_aligned, context_aligned = align_two(self, context)
         return type(self)(
             self_aligned._obj.gist(context_aligned._obj),
-            self.sp,
+            self.space,
         )
 
     def __and__(self, other: Self) -> Self:
@@ -144,7 +144,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
             return NotImplemented
         other = cast("Self", other)
 
-        if not self.sp.order_equal(other.sp):
+        if not self.space.order_equal(other.space):
             return False
         if isinstance(self._obj, (isl.BasicSet, isl.BasicMap)):
             # these don't have plain_is_equal
@@ -177,8 +177,8 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
         obj = self._obj
         for lhs_name, rhs_name in names:
             if lhs_name != rhs_name:
-                lhs_dim_id = self.sp.name_to_dim[lhs_name]
-                rhs_dim_id = self.sp.name_to_dim[rhs_name]
+                lhs_dim_id = self.space.name_to_dim[lhs_name]
+                rhs_dim_id = self.space.name_to_dim[rhs_name]
                 obj = cast("IslUnbasicT_co", obj.equate(
                     lhs_dim_id.dim_type.as_isl(),
                     lhs_dim_id.dim_index,
@@ -186,7 +186,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
                     rhs_dim_id.dim_index,
                 ))
 
-        return type(self)(obj, self.sp)
+        return type(self)(obj, self.space)
 
     def as_pw_multi_aff(self) -> PwMultiAff:
         return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
@@ -196,26 +196,26 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     def add_eq_constraint(self, aff: Aff) -> BasicSet:
         if __debug__:  # noqa: SIM102
-            if not self.sp.as_expr_space().order_equal(aff.sp):
+            if not self.space.as_expr_space().order_equal(aff.space):
                 raise ValueError("spaces don't match")
         return BasicSet(
             self._obj.add_constraint(isl.Constraint.equality_from_aff(aff._obj)),
-            self.sp)
+            self.space)
 
     def add_ineq_constraint(self, aff: Aff) -> BasicSet:
         if __debug__:  # noqa: SIM102
-            if not self.sp.as_expr_space().order_equal(aff.sp):
+            if not self.space.as_expr_space().order_equal(aff.space):
                 raise ValueError("spaces don't match")
         return BasicSet(
             self._obj.add_constraint(isl.Constraint.inequality_from_aff(aff._obj)),
-            self.sp)
+            self.space)
 
     def affs(self) -> dict[str | Literal[0], Aff]:
         from .expression_like import Aff
-        return Aff.from_space(self.sp)
+        return Aff.from_space(self.space)
 
     def as_set(self):
-        return Set(self._obj.to_set(), self.sp)
+        return Set(self._obj.to_set(), self.space)
 
 
 @overload
@@ -234,23 +234,23 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 @dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     def complement(self):
-        return Set(self._obj.complement(), self.sp)
+        return Set(self._obj.complement(), self.space)
 
     def convex_hull(self):
         return BasicSet(
-            self._obj.convex_hull(), self.sp)
+            self._obj.convex_hull(), self.space)
 
     def get_basic_sets(self):
-        return [BasicSet(bs, self.sp) for bs in self._obj.get_basic_sets()]
+        return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
 
     def dim_max(self, name: str):
-        dt, idx = self.sp.name_to_dim[name]
+        dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
         return make_pw_aff(self.as_isl().dim_max(idx))
 
     def dim_min(self, name: str):
-        dt, idx = self.sp.name_to_dim[name]
+        dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
         return make_pw_aff(self.as_isl().dim_min(idx))
@@ -276,26 +276,26 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
     def reverse(self) -> Self:
         return type(self)(
             cast("IslMapLikeT", self._obj.reverse()),
-            self.sp.swap_dim_types(DimType.in_, DimType.out))
+            self.space.swap_dim_types(DimType.in_, DimType.out))
 
 
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     def domain(self):
-        return BasicSet(self._obj.domain(), self.sp.drop_dim_type(DimType.out))
+        return BasicSet(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
     def range(self):
-        return BasicSet(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
+        return BasicSet(self._obj.range(), self.space.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: BasicSet) -> Self:
         self_a, domain_a = align_for_compostition(
             self, DimType.in_, domain, DimType.out)
-        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
+        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.space)
 
     def intersect_range(self, range: BasicSet) -> Self:
         self_a, range_a = align_for_compostition(
             self, DimType.out, range, DimType.out)
-        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
+        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.space)
 
 
 @overload
@@ -341,39 +341,39 @@ def make_map_from_domain_and_range(
 @dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def complement(self):
-        return Map(self._obj.complement(), self.sp)
+        return Map(self._obj.complement(), self.space)
 
     def convex_hull(self):
         return BasicMap(
-            self._obj.convex_hull(), self.sp)
+            self._obj.convex_hull(), self.space)
 
     def get_basic_maps(self):
-        return [BasicMap(bs, self.sp) for bs in self._obj.get_basic_maps()]
+        return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
 
     def domain(self):
-        return Set(self._obj.domain(), self.sp.drop_dim_type(DimType.out))
+        return Set(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
     def range(self):
-        return Set(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
+        return Set(self._obj.range(), self.space.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: Set) -> Self:
         self_a, domain_a = align_for_compostition(
             self, DimType.in_, domain, DimType.out)
-        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
+        return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.space)
 
     def intersect_range(self, range: Set) -> Self:
         self_a, range_a = align_for_compostition(
             self, DimType.out, range, DimType.out)
-        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
+        return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.space)
 
     def apply_range(self, other: Self) -> Self:
         self_a, other_a = align_for_compostition(self, DimType.out, other, DimType.in_)
         return type(self)(
             self._obj.apply_range(other_a._obj),
             Space(constantdict({
-                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
-                DimType.in_: self_a.sp.dimtype_to_names[DimType.in_],
-                DimType.out: other_a.sp.dimtype_to_names[DimType.out],
+                DimType.param: self_a.space.dimtype_to_names[DimType.param],
+                DimType.in_: self_a.space.dimtype_to_names[DimType.in_],
+                DimType.out: other_a.space.dimtype_to_names[DimType.out],
             })))
 
     def apply_domain(self, other: Self) -> Self:
@@ -381,9 +381,9 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
         return type(self)(
             self._obj.apply_domain(other_a._obj),
             Space(constantdict({
-                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
-                DimType.in_: other_a.sp.dimtype_to_names[DimType.in_],
-                DimType.out: self.sp.dimtype_to_names[DimType.out],
+                DimType.param: self_a.space.dimtype_to_names[DimType.param],
+                DimType.in_: other_a.space.dimtype_to_names[DimType.in_],
+                DimType.out: self.space.dimtype_to_names[DimType.out],
             })))
 
 
