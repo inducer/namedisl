@@ -279,6 +279,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_sets
+    .. automethod:: coalesce
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. automethod:: is_bounded
@@ -292,6 +293,9 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
 
     def get_basic_sets(self):
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
+
+    def coalesce(self) -> Self:
+        return type(self)(self._obj.coalesce(), self.space)
 
     def dim_max(self, name: str):
         dt, idx = self.space.name_to_dim[name]
