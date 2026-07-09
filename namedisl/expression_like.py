@@ -301,6 +301,8 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: le_set
     .. automethod:: gt_set
     .. automethod:: lt_set
+    .. automethod:: max
+    .. automethod:: min
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
     {_NamedAffLike.__doc__}
@@ -364,6 +366,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def le_set(self, rhs: int | PwAff): return self.where("<=", rhs)
     def gt_set(self, rhs: int | PwAff): return self.where(">", rhs)
     def lt_set(self, rhs: int | PwAff): return self.where("<", rhs)
+
+    def max(self, other: PwAff):
+        self_a, other_a = align_two(self, other)
+        return PwAff(isl.PwAff.max(self_a._obj, other_a._obj), self_a.space)
+
+    def min(self, other: PwAff):
+        self_a, other_a = align_two(self, other)
+        return PwAff(isl.PwAff.min(self_a._obj, other_a._obj), self_a.space)
 
     def get_pieces(self):
         set_space = self.space.as_set_space()
