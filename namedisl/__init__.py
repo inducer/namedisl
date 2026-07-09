@@ -40,7 +40,7 @@ THE SOFTWARE.
 
 from typing import overload
 
-from .core import IslObject, Space
+from .core import DimType, IslObject, Space
 from .expression_like import (
     Aff,
     MultiAff,
@@ -72,6 +72,7 @@ __all__ = [
     "Aff",
     "BasicMap",
     "BasicSet",
+    "DimType",
     "Map",
     "MultiAff",
     "PwAff",
