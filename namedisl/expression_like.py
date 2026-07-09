@@ -291,7 +291,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: from_space
     .. automethod:: where
     .. automethod:: get_pieces
-
+    .. automethod:: coalesce
     .. automethod:: eq_set
     .. automethod:: ne_set
     .. automethod:: ge_set
@@ -370,6 +370,9 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             (Set(set, set_space), Aff(aff, self.space))
             for set, aff in self._obj.get_pieces()
         ]
+
+    def coalesce(self):
+        return PwAff(self._obj.coalesce(), self.space)
 
     def get_aggregate_domain(self):
         from .set_like import Set
