@@ -234,6 +234,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     .. automethod:: as_set
     .. automethod:: is_bounded
     {_NamedIslSetLike.__doc__}
+    {_NamedIslSetOrMapLike.__doc__}
     """
 
     def add_eq_constraint(self, aff: Aff) -> BasicSet:
@@ -275,7 +276,7 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 
 @dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
-    """
+    __doc__ = f"""
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_sets
@@ -283,6 +284,8 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. automethod:: is_bounded
+    {_NamedIslSetLike.__doc__}
+    {_NamedIslSetOrMapLike.__doc__}
     """
     def complement(self):
         return Set(self._obj.complement(), self.space)
@@ -339,11 +342,13 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
 
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
-    """
+    __doc__ = f"""
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
+    {_NamedIslMapLike.__doc__}
+    {_NamedIslSetOrMapLike.__doc__}
     """
     def domain(self):
         return BasicSet(self._obj.domain(), self.space.drop_dim_type(DimType.out))
@@ -404,7 +409,7 @@ def make_map_from_domain_and_range(
 
 @dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
-    """
+    __doc__ = f"""
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_maps
@@ -414,6 +419,9 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: intersect_range
     .. automethod:: apply_range
     .. automethod:: apply_domain
+    {_NamedIslSetOrMapLike.__doc__}
+    {_NamedIslUnbasic.__doc__}
+    {_NamedIslMapLike.__doc__}
     """
     def complement(self):
         return Map(self._obj.complement(), self.space)

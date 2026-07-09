@@ -211,6 +211,11 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
+    """
+    .. automethod:: is_constant
+    .. automethod:: gist
+    .. automethod:: gist_params
+    """
     def is_constant(self):
         return self._obj.is_cst()
 
@@ -227,15 +232,16 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class Aff(_NamedAffLike[isl.Aff]):
-    """
+    __doc__ = f"""
     .. automethod:: zero_on_domain
     .. automethod:: from_space
     .. automethod:: set_coefficient
     .. automethod:: as_pw_aff
-    .. automethod:: is_constant
-    .. automethod:: gist
-    .. automethod:: gist_params
+    {_NamedAffLike.__doc__}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
     """
+
     @staticmethod
     def zero_on_domain(space: Space) -> Aff:
         return Aff(
@@ -276,16 +282,13 @@ def make_aff(src: isl.Aff) -> Aff:
 
 
 def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
-    """
-    Create an :class:`Aff` from isl syntax or an :class:`islpy.Aff`.
-    """
     obj = isl.Aff(src, ctx) if isinstance(src, str) else src
     return Aff(obj, Space.from_isl(obj, Aff.active_dim_types))
 
 
 @dataclass(frozen=True, eq=False)
 class PwAff(_NamedAffLike[isl.PwAff]):
-    """
+    __doc__ = f"""
     .. automethod:: from_piece_and_aff
     .. automethod:: like_var
     .. automethod:: from_space
@@ -298,12 +301,11 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: le_set
     .. automethod:: gt_set
     .. automethod:: lt_set
-
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
-    .. automethod:: is_constant
-    .. automethod:: gist
-    .. automethod:: gist_params
+    {_NamedAffLike.__doc__}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
     """
 
     @staticmethod
@@ -408,7 +410,11 @@ class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
-    pass
+    __doc__ = f"""
+    {_NamedPolynomialLike.__doc__ if hasattr(_NamedPolynomialLike, '__doc__') else ''}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
+    """
 
 
 @overload
@@ -439,8 +445,11 @@ def make_qpolynomial(
 
 @dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
-    """
+    __doc__ = f"""
     .. automethod:: get_pieces
+    {_NamedPolynomialLike.__doc__ if hasattr(_NamedPolynomialLike, '__doc__') else ''}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
     """
 
     def get_pieces(self):
@@ -493,8 +502,11 @@ class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]
 @final
 @dataclass(frozen=True, eq=False)
 class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
-    """
+    __doc__ = f"""
     .. automethod:: __getitem__
+    {_NamedMultiExpressionLike.__doc__}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
     """
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
@@ -524,9 +536,12 @@ def make_multi_aff(
 
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
-    """
+    __doc__ = f"""
     .. automethod:: __getitem__
     .. automethod:: as_multi_aff
+    {_NamedMultiExpressionLike.__doc__}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
     """
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
