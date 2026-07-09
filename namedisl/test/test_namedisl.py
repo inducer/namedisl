@@ -25,7 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TypeAlias, TypeVar
 
 import pytest
 
@@ -33,33 +32,8 @@ import islpy as isl
 
 import namedisl as nisl
 from .utils_for_tests import generate_random_named_set
-from namedisl.core import DimType, IslObject, NamedIslObject
-
-
-def _dim_names(
-        obj: IslObject,
-        dim_type: isl.dim_type
-    ) -> tuple[str | None, ...]:
-    return tuple(obj.space.get_dim_name(dim_type, i) for i in range(obj.dim(dim_type)))
-
-
-Alignable: TypeAlias = (
-    isl.Set | isl.Map
-    | isl.BasicSet | isl.BasicMap
-    | isl.Aff | isl.PwAff
-)
-AlignableT = TypeVar("AlignableT", bound=Alignable)
-
-
-def _isl_equal(obj1: NamedIslObject[AlignableT], obj2: AlignableT) -> bool:
-    obj1_isl, obj2 = isl.align_two(obj1.as_isl(), obj2)
-
-    for dt in obj1.active_dim_types:
-        assert obj1.sp.dim(dt) == obj2.dim(dt.as_isl())
-        if _dim_names(obj1_isl, dt.as_isl()) != _dim_names(obj2, dt.as_isl()):
-            return False
-
-    return obj1_isl.plain_is_equal(obj2)  # pyright: ignore[reportCallIssue, reportArgumentType]
+from namedisl import to_named
+from namedisl.core import DimType
 
 
 @pytest.mark.parametrize("ndims", [2, 3, 4, 5])
@@ -100,7 +74,7 @@ def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
         .add_dim_names(DimType.param, ["p"])
     )
     expected = isl.Set("[p] -> { [y, x] }")
-    assert _isl_equal(named_set, expected)
+    assert named_set.equals(to_named(expected))
 
 
 def test_add_output_input_and_parameter_names_reconstructs_expected_map() -> None:
@@ -112,7 +86,7 @@ def test_add_output_input_and_parameter_names_reconstructs_expected_map() -> Non
     )
     expected = isl.Map("[n] -> { [i2, i] -> [o2, o] }")
 
-    assert _isl_equal(named_map, expected)
+    assert named_map.equals(to_named(expected))
 
 
 def test_add_input_and_parameter_names_reconstructs_expected_aff() -> None:
@@ -122,7 +96,7 @@ def test_add_input_and_parameter_names_reconstructs_expected_aff() -> None:
         .add_dim_names(DimType.param, ["m"])
     )
     expected = isl.Aff("[m, n] -> { [j, i] -> [i + n] }")
-    assert _isl_equal(named_aff, expected)
+    assert named_aff.equals(to_named(expected))
 
 
 def test_add_dim_names_uses_dim_type() -> None:
@@ -152,7 +126,7 @@ def test_move_dims_set() -> None:
         isl.dim_type.set, 2, 1
     )
 
-    assert _isl_equal(moved, expected)
+    assert moved == to_named(expected)
 
 
 def test_move_dims_map() -> None:
@@ -166,7 +140,7 @@ def test_move_dims_map() -> None:
         "[p] -> { [i0, i1] -> [o0, o1, o2] : o0 = i0 and o1 = i1 and o2 = p }"
     ).move_dims(isl.dim_type.in_, 2, isl.dim_type.out, 2, 1)
 
-    assert _isl_equal(moved, expected)
+    assert moved == to_named(expected)
 
 
 def test_move_dims_multiple_names_preserves_relative_order() -> None:
@@ -182,7 +156,7 @@ def test_move_dims_multiple_names_preserves_relative_order() -> None:
     expected = expected.move_dims(isl.dim_type.in_, 2, isl.dim_type.out, 1, 1)
     expected = expected.move_dims(isl.dim_type.in_, 3, isl.dim_type.out, 1, 1)
 
-    assert _isl_equal(moved, expected)
+    assert moved == to_named(expected)
 
 
 def test_rename_dims_set() -> None:
@@ -193,7 +167,7 @@ def test_rename_dims_set() -> None:
     expected = isl.Set("[p] -> { [x, y] : x < p and y < p }")
     expected = expected.set_dim_name(isl.dim_type.set, 0, "x_new")
     expected = expected.set_dim_name(isl.dim_type.param, 0, "n")
-    assert _isl_equal(renamed, expected)
+    assert renamed == to_named(expected)
 
 
 def test_rename_dims_map() -> None:
@@ -209,7 +183,7 @@ def test_rename_dims_map() -> None:
     expected = expected.set_dim_name(isl.dim_type.in_, 1, "j")
     expected = expected.set_dim_name(isl.dim_type.out, 1, "x")
     expected = expected.set_dim_name(isl.dim_type.param, 0, "n")
-    assert _isl_equal(renamed, expected)
+    assert renamed == to_named(expected)
 
 
 def test_rename_dims_rejects_renaming_to_existing_name() -> None:

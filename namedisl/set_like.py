@@ -37,7 +37,7 @@ THE SOFTWARE.
 import operator
 from abc import ABC
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload
+from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
 from constantdict import constantdict
 from typing_extensions import Self, override
@@ -49,24 +49,22 @@ from .core import (
     IslMapLikeT,
     IslSetLikeT,
     IslSetOrMapLikeT,
+    IslSetOrMapLikeT_co,
+    IslUnbasicT_co,
     NamedIslObject,
     Space,
     _align_and_apply_binary_op,
-    _align_for_compostition,
-    _align_two,
+    align_for_compostition,
+    align_two,
     chunked_dims_by_type,
 )
-from .expression_like import PwAff, make_pw_aff, make_pw_multi_aff
+from .expression_like import make_pw_aff, make_pw_multi_aff
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Sequence
 
     from namedisl import Aff, PwMultiAff
-
-
-def _set_like_and(lhs: isl.Set, rhs: isl.Set) -> isl.Set:
-    return cast("isl.Set", cast("Any", operator.and_)(lhs, rhs))
 
 
 def _compare_set_or_map_like(
@@ -77,19 +75,19 @@ def _compare_set_or_map_like(
     if type(lhs) is not type(rhs):
         return NotImplemented
 
-    aligned_lhs, aligned_rhs = _align_two(lhs, rhs)
+    aligned_lhs, aligned_rhs = align_two(lhs, rhs)
 
     return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
+class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
     def eliminate(self: Self, names: Collection[str]) -> Self:
         obj = self._obj
         for dt, chunks in chunked_dims_by_type(
                 names, self.sp.name_to_dim).items():
             for start, count in chunks:
-                obj = cast("IslSetOrMapLikeT",
+                obj = cast("IslSetOrMapLikeT_co",
                     obj.eliminate(dt.as_isl(), start, count))
 
         return type(self)(obj, self.sp)
@@ -103,7 +101,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
                 names, self.sp.name_to_dim).items():
             for start, count in chunks[::-1]:
                 del new_dimtype_to_names[dt][start:start+count]
-                obj = cast("IslSetOrMapLikeT",
+                obj = cast("IslSetOrMapLikeT_co",
                     obj.project_out(dt.as_isl(), start, count))
 
         return type(self)(obj, Space(constantdict({
@@ -124,32 +122,8 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
 
         return self.project_out(names_to_project_out)
 
-    def equate_dims(
-        self,
-        names: Sequence[tuple[str, str]]
-    ) -> Self:
-        obj = self._obj
-        for lhs_name, rhs_name in names:
-            if lhs_name != rhs_name:
-                lhs_dim_id = self.sp.name_to_dim[lhs_name]
-                rhs_dim_id = self.sp.name_to_dim[rhs_name]
-                obj = cast("IslSetOrMapLikeT", obj.equate(
-                    lhs_dim_id.dim_type.as_isl(),
-                    lhs_dim_id.dim_index,
-                    rhs_dim_id.dim_type.as_isl(),
-                    rhs_dim_id.dim_index,
-                ))
-
-        return type(self)(obj, self.sp)
-
-    def as_pw_multi_aff(self) -> PwMultiAff:
-        """
-        Reconstruct and convert this object to :class:`islpy.PwMultiAff`.
-        """
-        return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
-
     def gist(self, context: Self) -> Self:
-        self_aligned, context_aligned = _align_two(self, context)
+        self_aligned, context_aligned = align_two(self, context)
         return type(self)(
             self_aligned._obj.gist(context_aligned._obj),
             self.sp,
@@ -170,12 +144,13 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
             return NotImplemented
         other = cast("Self", other)
 
-        # XXXX FIXME enable this version
-        # if not self.sp.order_equal(other.sp):
-        #     return False
-        aligned_lhs, aligned_rhs = _align_two(self, other)
+        if not self.sp.order_equal(other.sp):
+            return False
+        if isinstance(self._obj, (isl.BasicSet, isl.BasicMap)):
+            # these don't have plain_is_equal
+            return self._obj.is_equal(other._obj)
 
-        return aligned_lhs._obj.plain_is_equal(aligned_rhs._obj)
+        return self._obj.plain_is_equal(other._obj)
 
     def equals(self, other: Self) -> bool:
         return _compare_set_or_map_like(self, other, operator.eq)
@@ -188,31 +163,37 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT], ABC):
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT], ABC):
+class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.set})
 
-    def dim_max(self, name: str) -> PwAff:
-        dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
-            raise ValueError("can only take max with respect to set dimensions")
-        return make_pw_aff(self.as_isl().dim_max(idx))
 
-    def dim_min(self, name: str) -> PwAff:
-        dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
-            raise ValueError("can only take min with respect to set dimensions")
-        return make_pw_aff(self.as_isl().dim_min(idx))
+@dataclass(frozen=True, eq=False)
+class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
+    def equate_dims(
+        self,
+        names: Sequence[tuple[str, str]]
+    ) -> Self:
+        obj = self._obj
+        for lhs_name, rhs_name in names:
+            if lhs_name != rhs_name:
+                lhs_dim_id = self.sp.name_to_dim[lhs_name]
+                rhs_dim_id = self.sp.name_to_dim[rhs_name]
+                obj = cast("IslUnbasicT_co", obj.equate(
+                    lhs_dim_id.dim_type.as_isl(),
+                    lhs_dim_id.dim_index,
+                    rhs_dim_id.dim_type.as_isl(),
+                    rhs_dim_id.dim_index,
+                ))
+
+        return type(self)(obj, self.sp)
+
+    def as_pw_multi_aff(self) -> PwMultiAff:
+        return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
 
 
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
-    def complement(self):
-        return Set(self._obj.complement(), self.sp)
-
-    def convex_hull(self):
-        return self
-
     def add_eq_constraint(self, aff: Aff) -> BasicSet:
         if __debug__:  # noqa: SIM102
             if not self.sp.as_expr_space().order_equal(aff.sp):
@@ -251,13 +232,7 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 
 
 @dataclass(frozen=True, eq=False)
-class Set(_NamedIslSetLike[isl.Set]):
-    """
-    Name-aware wrapper around :class:`islpy.Set`.
-
-    Construct instances with :func:`make_set`.
-    """
-
+class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     def complement(self):
         return Set(self._obj.complement(), self.sp)
 
@@ -265,14 +240,20 @@ class Set(_NamedIslSetLike[isl.Set]):
         return BasicSet(
             self._obj.convex_hull(), self.sp)
 
-    def get_basic_sets(self) -> Sequence[BasicSet]:
-        """
-        Return the basic-set pieces of this set.
-        """
-        isl_obj = self.as_isl()
+    def get_basic_sets(self):
+        return [BasicSet(bs, self.sp) for bs in self._obj.get_basic_sets()]
 
-        bsets = isl_obj.get_basic_sets()
-        return [make_basic_set(bset) for bset in bsets]
+    def dim_max(self, name: str):
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError("can only take max with respect to set dimensions")
+        return make_pw_aff(self.as_isl().dim_max(idx))
+
+    def dim_min(self, name: str):
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError("can only take min with respect to set dimensions")
+        return make_pw_aff(self.as_isl().dim_min(idx))
 
 
 @overload
@@ -292,26 +273,6 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.set})
 
-    def apply_range(self, other: Self) -> Self:
-        self_a, other_a = _align_for_compostition(self, DimType.set, other, DimType.in_)
-        return type(self)(
-            cast("IslMapLikeT", self._obj.apply_range(other_a._obj)),
-            Space(constantdict({
-                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
-                DimType.in_: self_a.sp.dimtype_to_names[DimType.in_],
-                DimType.set: other_a.sp.dimtype_to_names[DimType.set],
-            })))
-
-    def apply_domain(self, other: Self) -> Self:
-        self_a, other_a = _align_for_compostition(self, DimType.in_, other, DimType.set)
-        return type(self)(
-            cast("IslMapLikeT", self._obj.apply_domain(other_a._obj)),
-            Space(constantdict({
-                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
-                DimType.in_: other_a.sp.dimtype_to_names[DimType.in_],
-                DimType.set: self.sp.dimtype_to_names[DimType.set],
-            })))
-
     def reverse(self) -> Self:
         return type(self)(
             cast("IslMapLikeT", self._obj.reverse()),
@@ -320,18 +281,6 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
 
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
-    """
-    Name-aware wrapper around :class:`islpy.BasicMap`.
-
-    Construct instances with :func:`make_basic_map`.
-    """
-
-    def complement(self):
-        return Map(self._obj.complement(), self.sp)
-
-    def convex_hull(self):
-        return self
-
     def domain(self):
         return BasicSet(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
 
@@ -339,12 +288,12 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
         return BasicSet(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: BasicSet) -> Self:
-        self_a, domain_a = _align_for_compostition(
+        self_a, domain_a = align_for_compostition(
             self, DimType.in_, domain, DimType.set)
         return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
 
     def intersect_range(self, range: BasicSet) -> Self:
-        self_a, range_a = _align_for_compostition(
+        self_a, range_a = align_for_compostition(
             self, DimType.set, range, DimType.set)
         return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
 
@@ -358,9 +307,6 @@ def make_basic_map(src: isl.BasicMap) -> BasicMap: ...
 
 
 def make_basic_map(src: str | isl.BasicMap, ctx: isl.Context | None = None) -> BasicMap:
-    """
-    Create a :class:`BasicMap` from isl syntax or an :class:`islpy.BasicMap`.
-    """
     obj = isl.BasicMap(src, ctx) if isinstance(src, str) else src
     return BasicMap(obj, Space.from_isl(obj, BasicMap.active_dim_types))
 
@@ -393,13 +339,16 @@ def make_map_from_domain_and_range(
 
 
 @dataclass(frozen=True, eq=False)
-class Map(_NamedIslMapLike[isl.Map]):
+class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def complement(self):
         return Map(self._obj.complement(), self.sp)
 
     def convex_hull(self):
         return BasicMap(
             self._obj.convex_hull(), self.sp)
+
+    def get_basic_maps(self):
+        return [BasicMap(bs, self.sp) for bs in self._obj.get_basic_maps()]
 
     def domain(self):
         return Set(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
@@ -408,14 +357,34 @@ class Map(_NamedIslMapLike[isl.Map]):
         return Set(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: Set) -> Self:
-        self_a, domain_a = _align_for_compostition(
+        self_a, domain_a = align_for_compostition(
             self, DimType.in_, domain, DimType.set)
         return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
 
     def intersect_range(self, range: Set) -> Self:
-        self_a, range_a = _align_for_compostition(
+        self_a, range_a = align_for_compostition(
             self, DimType.set, range, DimType.set)
         return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
+
+    def apply_range(self, other: Self) -> Self:
+        self_a, other_a = align_for_compostition(self, DimType.set, other, DimType.in_)
+        return type(self)(
+            self._obj.apply_range(other_a._obj),
+            Space(constantdict({
+                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
+                DimType.in_: self_a.sp.dimtype_to_names[DimType.in_],
+                DimType.set: other_a.sp.dimtype_to_names[DimType.set],
+            })))
+
+    def apply_domain(self, other: Self) -> Self:
+        self_a, other_a = align_for_compostition(self, DimType.in_, other, DimType.set)
+        return type(self)(
+            self._obj.apply_domain(other_a._obj),
+            Space(constantdict({
+                DimType.param: self_a.sp.dimtype_to_names[DimType.param],
+                DimType.in_: other_a.sp.dimtype_to_names[DimType.in_],
+                DimType.set: self.sp.dimtype_to_names[DimType.set],
+            })))
 
 
 @overload

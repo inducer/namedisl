@@ -38,7 +38,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from .core import Space
+from typing import overload
+
+from .core import IslObject, Space
 from .expression_like import (
     Aff,
     MultiAff,
@@ -90,3 +92,53 @@ __all__ = [
     "make_qpolynomial",
     "make_set",
 ]
+
+
+import islpy as isl
+
+
+_ISL_TO_NAMED = {
+    isl.Aff: Aff,
+    isl.QPolynomial: QPolynomial,
+    isl.PwAff: PwAff,
+    isl.PwQPolynomial: PwQPolynomial,
+    isl.MultiAff: MultiAff,
+    isl.PwMultiAff: PwMultiAff,
+    isl.BasicSet: BasicSet,
+    isl.Set: Set,
+    isl.BasicMap: BasicMap,
+    isl.Map: Map,
+}
+
+
+@overload
+def to_named(obj: isl.Aff) -> Aff: ...
+@overload
+def to_named(obj: isl.QPolynomial) -> QPolynomial: ...
+@overload
+def to_named(obj: isl.PwAff) -> PwAff: ...
+@overload
+def to_named(obj: isl.PwQPolynomial) -> PwQPolynomial: ...
+@overload
+def to_named(obj: isl.MultiAff) -> MultiAff: ...
+@overload
+def to_named(obj: isl.PwMultiAff) -> PwMultiAff: ...
+@overload
+def to_named(obj: isl.BasicSet) -> BasicSet: ...
+@overload
+def to_named(obj: isl.Set) -> Set: ...
+@overload
+def to_named(obj: isl.BasicMap) -> BasicMap: ...
+@overload
+def to_named(obj: isl.Map) -> Map: ...
+
+
+def to_named(obj: IslObject) -> (
+    Aff | QPolynomial
+    | PwAff | PwQPolynomial
+    | MultiAff | PwMultiAff
+    | BasicSet | Set
+    | BasicMap | Map
+):
+    result_type = _ISL_TO_NAMED[type(obj)]
+    return result_type(obj, Space.from_isl(obj, result_type.active_dim_types))  # pyright: ignore[reportArgumentType]

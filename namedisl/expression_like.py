@@ -35,71 +35,79 @@ THE SOFTWARE.
 
 import operator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar, cast, final, overload
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Literal,
+    TypeVar,
+    cast,
+    final,
+    overload,
+)
 
-from constantdict import constantdict
 from typing_extensions import Self, override
 
 import islpy as isl
 
 from .core import (
     DimType,
-    DimTypeToNames,
-    IslExpressionLike,
-    IslExpressionLikeT,
+    IslExpressionLikeT_co,
     IslMultiExpressionLikeT_co,
+    IslPolynomialLikeT_co,
+    IslScalarExpressionLike,
+    IslScalarExpressionLikeT,
     NamedIslObject,
-    NameToDim,
     Space,
-    _align_two,
+    align_two,
 )
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from namedisl.set_like import Set
 
 
 NamedExpressionLikeT_co = TypeVar(
     "NamedExpressionLikeT_co",
-    bound=IslExpressionLike,
+    bound=IslScalarExpressionLike,
     covariant=True,
 )
 
 
 def _apply_expression_binary_op(
-    lhs: _NamedExpressionLike[IslExpressionLikeT] | int,
-    rhs: _NamedExpressionLike[IslExpressionLikeT] | int,
+    lhs: _NamedExpressionLike[IslScalarExpressionLikeT] | int,
+    rhs: _NamedExpressionLike[IslScalarExpressionLikeT] | int,
     op: Callable[
-        [IslExpressionLikeT | int, IslExpressionLikeT | int],
-        IslExpressionLikeT | int,
+        [IslScalarExpressionLikeT | int, IslScalarExpressionLikeT | int],
+        IslScalarExpressionLikeT | int,
     ],
-) -> _NamedExpressionLike[IslExpressionLikeT]:
+) -> _NamedExpressionLike[IslScalarExpressionLikeT]:
     if isinstance(rhs, int):
         if isinstance(lhs, int):
             raise TypeError("both types are int")
 
         return type(lhs)(
-            op(lhs._obj, rhs),
+            cast("IslScalarExpressionLikeT", op(lhs._obj, rhs)),
             lhs.sp,
         )
     if isinstance(lhs, int):
         return type(rhs)(
-            op(lhs, rhs._obj),
+            cast("IslScalarExpressionLikeT", op(lhs, rhs._obj)),
             rhs.sp,
         )
 
-    lhs, rhs = _align_two(lhs, rhs)
-    return type(lhs)(cast("IslExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.sp)
+    if type(lhs) is not type(rhs):
+        return NotImplemented
+
+    lhs, rhs = align_two(lhs, rhs)
+    return type(lhs)(cast("IslScalarExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.sp)
 
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 @dataclass(frozen=True, eq=False)
-class _NamedExpressionLike(
-    NamedIslObject[IslExpressionLikeT]
-):
+class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_})
 
@@ -140,7 +148,17 @@ class _NamedExpressionLike(
         return cast("Self", _apply_expression_binary_op(other, self, operator.mul))
 
     def __bool__(self) -> bool:
-        return bool(self._obj.plain_is_zero())  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        if isinstance(self._obj,
+                      (isl.PwAff, isl.PwQPolynomial, isl.QPolynomial,
+                          isl.MultiAff, isl.PwMultiAff)):
+            raise NotImplementedError
+        return bool(self._obj.plain_is_zero())
+
+    def is_zero(self) -> bool:
+        if isinstance(self._obj,
+                      (isl.PwMultiAff, isl.MultiAff, isl.PwAff, isl.Aff)):
+            raise NotImplementedError
+        return bool(self._obj.is_zero())
 
     @override
     def __eq__(self, other: object) -> bool:
@@ -150,20 +168,30 @@ class _NamedExpressionLike(
 
         if not self.sp.order_equal(other.sp):
             return False
-        return self._obj.plain_is_equal(other._obj)
+
+        if isinstance(self._obj, (isl.QPolynomial, isl.PwQPolynomial)):
+            return (self._obj - other._obj).is_zero()
+        elif isinstance(self._obj, isl.MultiAff):
+            raise NotImplementedError()
+        elif isinstance(self._obj, isl.PwMultiAff):
+            return self._obj.is_equal(other._obj)
+        else:
+            return self._obj.plain_is_equal(other._obj)
 
     def equals(self, other: object) -> bool:
         if type(self) is not type(other):
             return NotImplemented
         other = cast("Self", other)
 
-        aligned_lhs, aligned_rhs = _align_two(self, other)
-        return aligned_lhs._obj.is_equal(aligned_rhs._obj)
+        aligned_lhs, aligned_rhs = align_two(self, other)
 
-
-@dataclass(frozen=True, eq=False)
-class _NamedPwExpressionLike(_NamedExpressionLike[NamedExpressionLikeT_co]):
-    ...
+        if isinstance(aligned_lhs._obj, (isl.QPolynomial, isl.PwQPolynomial)):
+            return (aligned_lhs._obj - aligned_rhs._obj).is_zero()
+        elif isinstance(aligned_lhs._obj, (isl.Aff, isl.MultiAff)):
+            # FIXME: I *think* plain should be exact for Aff? It does not have is_equal.
+            return aligned_lhs._obj.plain_is_equal(aligned_rhs._obj)
+        else:
+            return aligned_lhs._obj.is_equal(aligned_rhs._obj)
 
 
 @dataclass(frozen=True, eq=False)
@@ -216,9 +244,9 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 
 
 @dataclass(frozen=True, eq=False)
-class PwAff(_NamedPwExpressionLike[isl.PwAff]):
+class PwAff(_NamedExpressionLike[isl.PwAff]):
     def gist(self, set: Set):
-        self_a, set_a = _align_two(self, set)
+        self_a, set_a = align_two(self, set)
         result = self_a._obj.gist(set_a._obj)
         return PwAff(result, self_a.sp)
 
@@ -255,7 +283,7 @@ class PwAff(_NamedPwExpressionLike[isl.PwAff]):
             rhs = PwAff(isl.PwAff.zero_on_domain(self._obj.space) + rhs, self.sp)
         elif isinstance(rhs, Aff):
             rhs = rhs.as_pw_aff()
-        self_a, rhs_a = _align_two(self, rhs)
+        self_a, rhs_a = align_two(self, rhs)
         from .set_like import Set
         return Set(func(self_a._obj, rhs_a._obj), self_a.sp.as_set_space())
 
@@ -279,12 +307,13 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 
 
 @dataclass(frozen=True, eq=False)
-class QPolynomial(_NamedExpressionLike[isl.QPolynomial]):
-    """
-    Name-aware wrapper around :class:`islpy.QPolynomial`.
+class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
+    pass
 
-    Construct instances with :func:`make_qpolynomial`.
-    """
+
+@dataclass(frozen=True, eq=False)
+class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
+    pass
 
 
 @overload
@@ -314,7 +343,7 @@ def make_qpolynomial(
 
 
 @dataclass(frozen=True, eq=False)
-class PwQPolynomial(_NamedPwExpressionLike[isl.PwQPolynomial]):
+class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     pass
 
 
@@ -348,155 +377,19 @@ def make_pw_qpolynomial(
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
 @dataclass(frozen=True, eq=False)
-class _NamedMultiExpressionLike(NamedIslObject[IslMultiExpressionLikeT_co]):
-    pass
-
-
-def _ordered_multi_dim_names(
-    obj: isl.MultiAff | isl.PwMultiAff, dim_type: isl.dim_type
-) -> tuple[str, ...]:
-    space = obj.get_space()
-    names: list[str] = []
-    for dim in range(obj.dim(dim_type)):
-        name = space.get_dim_name(dim_type, dim)
-        if name is None:
-            raise ValueError("duplicate or unnamed dimension found")
-        names.append(name)
-    return tuple(names)
-
-
-def _make_multi_expression_parts(
-    obj: isl.MultiAff | isl.PwMultiAff,
-) -> tuple[Mapping[str, PwAff], NameToDim, DimTypeToNames]:
-    output_names = _ordered_multi_dim_names(obj, isl.dim_type.out)
-
-    parts: Mapping[str, PwAff] = constantdict({
-        name: make_pw_aff(
-            obj.get_at(dim).to_pw_aff()
-            if isinstance(obj, isl.MultiAff)
-            else obj.get_at(dim)
-        )
-        for dim, name in enumerate(output_names)
-    })
-
-    if parts:
-        input_names = _ordered_part_dim_names(parts, isl.dim_type.in_)
-        parameter_names = _ordered_part_dim_names(parts, isl.dim_type.param)
-    else:
-        input_names = _ordered_multi_dim_names(obj, isl.dim_type.in_)
-        parameter_names = _ordered_multi_dim_names(obj, isl.dim_type.param)
-
-    seen_names: set[str] = set()
-    for name in (*output_names, *input_names, *parameter_names):
-        if name in seen_names:
-            raise ValueError(f"duplicate dimension name found: {name}")
-        seen_names.add(name)
-
-    all_names = [*output_names, *input_names, *parameter_names]
-    name_to_dim: NameToDim = constantdict({
-        name: dim for dim, name in enumerate(all_names)
-    })
-
-    dimtype_to_names: dict[isl.dim_type, frozenset[str]] = {}
-    if input_names:
-        dimtype_to_names[isl.dim_type.in_] = frozenset(input_names)
-    if parameter_names:
-        dimtype_to_names[isl.dim_type.param] = frozenset(parameter_names)
-
-    return parts, name_to_dim, constantdict(dimtype_to_names)
-
-
-def _ordered_part_dim_names(
-    parts: Mapping[str, PwAff],
-    dim_type: isl.dim_type,
-) -> tuple[str, ...]:
-    part_iter = iter(parts.items())
-    _, first_part = next(part_iter)
-    ordered_names = first_part.ordered_dim_names(dim_type)
-
-    for output_name, part in part_iter:
-        part_ordered_names = part.ordered_dim_names(dim_type)
-        if part_ordered_names != ordered_names:
-            raise ValueError(
-                f"multi expression part '{output_name}' has inconsistent "
-                f"{dim_type.name} dimension names"
-            )
-
-    return ordered_names
-
-
-@dataclass(frozen=True, eq=False)
-class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
-
-    def get_at(self, name: str) -> PwAff:
-        """
-        Return the output component named *name*.
-        """
-        if name not in self._names_for_dim_type(isl.dim_type.set):
-            raise ValueError(f"unknown output name: {name}")
-        return self._obj[name]
-
-    @override
-    def _reconstruct_isl_object(self) -> isl.PwMultiAff:
-        space = self._multi_expression_space()
-        if not self._obj:
-            return isl.PwMultiAff.zero(space)
-
-        pw_aff_list = isl.PwAffList.alloc(
-            self._multi_expression_context(),
-            len(self._obj),
-        )
-        for part in self._ordered_pw_aff_parts():
-            pw_aff_list = pw_aff_list.add(part)
-
-        return isl.PwMultiAff.from_multi_pw_aff(
-            isl.MultiPwAff.from_pw_aff_list(space, pw_aff_list)
-        )
-
-
-@overload
-def make_pw_multi_aff(src: str, ctx: isl.Context | None = None) -> PwMultiAff:
-    ...
-
-
-@overload
-def make_pw_multi_aff(src: isl.PwMultiAff) -> PwMultiAff:
-    ...
-
-
-def make_pw_multi_aff(
-        src: str | isl.PwMultiAff,
-        ctx: isl.Context | None = None
-    ) -> PwMultiAff:
-    obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
-    return PwMultiAff(obj, Space.from_isl(obj, PwMultiAff.active_dim_types))
+class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]):
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
+        DimType.param, DimType.in_, DimType.set})
 
 
 @final
 @dataclass(frozen=True, eq=False)
 class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
-    def get_at(self, name: str) -> PwAff:
-        """
-        Return the output component named *name*.
-        """
-        if name not in self._names_for_dim_type(isl.dim_type.set):
-            raise ValueError(f"unknown output name: {name}")
-        return self._obj[name]
-
-    @override
-    def _reconstruct_isl_object(self) -> isl.MultiAff:
-        space = self._multi_expression_space()
-        if not self._obj:
-            return isl.MultiAff.zero(space)
-
-        aff_list = isl.AffList.alloc(
-            self._multi_expression_context(),
-            len(self._obj),
-        )
-        for part in self._ordered_pw_aff_parts():
-            aff_list = aff_list.add(part.as_aff())
-
-        return isl.MultiAff.from_aff_list(space, aff_list)
+    def __getitem__(self, name: str):
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError(f"'{name}' does not name an output dimension")
+        return Aff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.set))
 
 
 @overload
@@ -516,5 +409,35 @@ def make_multi_aff(
     """
     obj = isl.MultiAff(src, ctx) if isinstance(src, str) else src
     return MultiAff(obj, Space.from_isl(obj, MultiAff.active_dim_types))
+
+
+@dataclass(frozen=True, eq=False)
+class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
+    def __getitem__(self, name: str):
+        dt, idx = self.sp.name_to_dim[name]
+        if dt != DimType.set:
+            raise ValueError(f"'{name}' does not name an output dimension")
+        return PwAff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.set))
+
+    def as_multi_aff(self):
+        return MultiAff(self._obj.as_multi_aff(), self.sp)
+
+
+@overload
+def make_pw_multi_aff(src: str, ctx: isl.Context | None = None) -> PwMultiAff:
+    ...
+
+
+@overload
+def make_pw_multi_aff(src: isl.PwMultiAff) -> PwMultiAff:
+    ...
+
+
+def make_pw_multi_aff(
+        src: str | isl.PwMultiAff,
+        ctx: isl.Context | None = None
+    ) -> PwMultiAff:
+    obj = isl.PwMultiAff(src, ctx) if isinstance(src, str) else src
+    return PwMultiAff(obj, Space.from_isl(obj, PwMultiAff.active_dim_types))
 
 # }}}

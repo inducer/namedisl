@@ -54,21 +54,24 @@ import islpy as isl
 class DimType(enum.IntEnum):
     param = isl.dim_type.param
     in_ = isl.dim_type.in_
+    # FIXME: Maybe rename 'out'?
     set = isl.dim_type.set
 
     def as_isl(self):
         return isl.dim_type(self)
 
 
-IslBaseExpressionLike = isl.Aff | isl.QPolynomial
-IslPwExpressionLike = isl.PwAff | isl.PwQPolynomial
-IslExpressionLike = IslBaseExpressionLike | IslPwExpressionLike
+IslAffLike = isl.Aff | isl.PwAff
+IslPolynomialLike = isl.QPolynomial | isl.PwQPolynomial
+IslScalarExpressionLike = IslAffLike | IslPolynomialLike
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
+IslExpressionLike = IslScalarExpressionLike | IslMultiExpressionLike
 
 IslSetLike = isl.BasicSet | isl.Set
 IslMapLike = isl.BasicMap | isl.Map
+IslUnbasic = isl.Set | isl.Map
 IslSetOrMapLike = IslSetLike | IslMapLike
-IslObject = IslSetOrMapLike | IslExpressionLike | IslMultiExpressionLike
+IslObject = IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike
 
 IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 IslObjectT2 = TypeVar("IslObjectT2", bound=IslObject)
@@ -80,6 +83,11 @@ IslSetOrMapLikeT = TypeVar(
     "IslSetOrMapLikeT",
     bound=IslSetOrMapLike,
 )
+IslSetOrMapLikeT_co = TypeVar(
+    "IslSetOrMapLikeT_co",
+    bound=IslSetOrMapLike,
+    covariant=True
+)
 IslSetLikeT = TypeVar(
     "IslSetLikeT",
     bound=IslSetLike,
@@ -88,18 +96,33 @@ IslMapLikeT = TypeVar(
     "IslMapLikeT",
     bound=IslMapLike,
 )
-IslExpressionLikeT = TypeVar(
-    "IslExpressionLikeT",
-    bound=IslExpressionLike,
+IslUnbasicT_co = TypeVar(
+    "IslUnbasicT_co",
+    bound=IslUnbasic,
+    covariant=True
 )
-IslMultiExpressionLikeT = TypeVar(
-    "IslMultiExpressionLikeT",
-    bound=IslMultiExpressionLike,
+IslScalarExpressionLikeT = TypeVar(
+    "IslScalarExpressionLikeT",
+    bound=IslScalarExpressionLike,
 )
 IslMultiExpressionLikeT_co = TypeVar(
     "IslMultiExpressionLikeT_co",
     bound=IslMultiExpressionLike,
     covariant=True
+)
+IslExpressionLikeT = TypeVar(
+    "IslExpressionLikeT",
+    bound=IslExpressionLike,
+)
+IslPolynomialLikeT_co = TypeVar(
+    "IslPolynomialLikeT_co",
+    bound=IslPolynomialLike,
+    covariant=True,
+)
+IslExpressionLikeT_co = TypeVar(
+    "IslExpressionLikeT_co",
+    bound=IslExpressionLike,
+    covariant=True,
 )
 
 NamedIslObjectT = TypeVar(
@@ -128,8 +151,8 @@ VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
 
 __all__ = [
     "_align_and_apply_binary_op",
-    "_align_two",
     "_restore_names",
+    "align_two",
     "chunk_indices",
 ]
 
@@ -152,12 +175,24 @@ def _dimtype_to_names(
         for dt in active_dim_types}
 
 
+def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjectT:
+    # Ick, annoying. PwAff doesn't have native set_dim_name, but the Id's
+    # are not considered equal to 'plain' names. As such, a situation
+    # can arise where [n] -> ... and [n] -> ... will not be considered
+    # equal, and arithmetic
+
+    if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
+        return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx, isl.Id(name)))
+    else:
+        return cast("IslObjectT", obj.set_dim_name(dt.as_isl(), idx, name))
+
+
 def _restore_names(
     obj: IslObjectT, dimtype_to_names: DimTypeToNames,
 ) -> IslObjectT:
     for dt, names in dimtype_to_names.items():
         for name, dim in zip(names, range(obj.dim(dt.as_isl())), strict=True):
-            obj = cast("IslObjectT", obj.set_dim_name(dt.as_isl(), dim, name))
+            obj = _set_dim_name(obj, dt, dim, name)
 
     return obj
 
@@ -242,7 +277,7 @@ def _find_joint_space(
     }))
 
 
-def _align_obj(
+def align_obj(
     named_obj: NamedIslObjectT,
     space: Space,
     *, allow_cross_dim_type: bool = False,
@@ -262,7 +297,7 @@ def _align_obj(
                 obj = obj.insert_dims(target_dt.as_isl(), target_dim, 1)
                 if target_dt == DimType.param:
                     # isl doesn't seem to like unnamed param dimensions. Make it happy.
-                    obj = obj.set_dim_name(target_dt.as_isl(), target_dim, name)
+                    obj = _set_dim_name(obj, target_dt, target_dim, name)
 
                     # ban spooky islpy upcasts
                     assert not isinstance(obj, isl.UnionPwAff)
@@ -274,7 +309,11 @@ def _align_obj(
                 if old_dim_id.dim_type == target_dim_id.dim_type:
                     another_dim_type = DimType.param
                     if another_dim_type == old_dim_id.dim_type:
-                        another_dim_type = DimType.set
+                        # determine a safe 'alternate' dim type
+                        if isinstance(obj, (isl.Set, isl.BasicSet)):
+                            another_dim_type = DimType.set
+                        else:
+                            another_dim_type = DimType.in_
 
                     obj = obj.move_dims(
                         another_dim_type.as_isl(), 0,
@@ -310,7 +349,7 @@ def _align_obj(
     return type(named_obj)(obj, space)
 
 
-def _align_two(
+def align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
     if named_obj1.sp.order_equal(named_obj2.sp):
@@ -318,13 +357,13 @@ def _align_two(
 
     space = _find_joint_space(named_obj1.sp, named_obj2.sp)
 
-    named_obj1 = _align_obj(named_obj1, space)
-    named_obj2 = _align_obj(named_obj2, space)
+    named_obj1 = align_obj(named_obj1, space)
+    named_obj2 = align_obj(named_obj2, space)
 
     return named_obj1, named_obj2
 
 
-def _align_for_compostition(
+def align_for_compostition(
     lhs: NamedIslObject[IslObjectT],
     lhs_dt: DimType,
     rhs: NamedIslObject[IslObjectT2],
@@ -368,8 +407,8 @@ def _align_for_compostition(
         rhs_dt: interface_names,
     }))
 
-    lhs = _align_obj(lhs, lhs_sp)
-    rhs = _align_obj(rhs, rhs_sp)
+    lhs = align_obj(lhs, lhs_sp)
+    rhs = align_obj(rhs, rhs_sp)
     return lhs, rhs
 
 
@@ -380,7 +419,7 @@ def _align_and_apply_binary_op(
         [IslObjectT, IslObjectT], IslObjectT
     ],
 ) -> NamedIslObject[IslObject]:
-    lhs, rhs = _align_two(lhs, rhs)
+    lhs, rhs = align_two(lhs, rhs)
     result = op(lhs._obj, rhs._obj)
     return type(lhs)(result, lhs.sp)
 
@@ -420,11 +459,10 @@ class Space:
 
     @override
     def __eq__(self, other: object):
-        raise RuntimeError("use .order_equal or .semantically_equal")
-
-        # FIXME: Reenable for consistency with hash
         if not isinstance(other, Space):
             return False
+        # - consistent with hash
+        # - the strictest/cheapest possible check
         return self.order_equal(other)
 
     def order_equal(self, other: Space):
@@ -578,6 +616,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
     # be considered authoritative. See as_isl().
     _obj: IslObjectT_co
 
+    # FIXME: Rename 'space'
     sp: Space
 
     active_dim_types: ClassVar[frozenset[DimType]]
@@ -603,10 +642,18 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
         if isinstance(self._obj, isl.PwMultiAff):
             raise NotImplementedError
 
+        start_dim = self.sp.dim(dt)
         obj = cast("IslObjectT_co",
-            self._obj.insert_dims(dt.as_isl(), self.sp.dim(dt), len(names_to_add)))
+                   self._obj.insert_dims(dt.as_isl(), self.sp.dim(dt),
+                                         len(names_to_add)))
 
-        return type(self)(obj, Space(constantdict(new_dimtype_to_names)))
+        if dt == DimType.param:
+            # isl doesn't like unnamed param dimensions. Make it happy.
+            for idx, name in enumerate(names_to_add):
+                obj = _set_dim_name(obj, dt, start_dim+idx, name)
+
+        return type(self)(obj,
+                          Space(constantdict(new_dimtype_to_names)))
 
     def move_dims(
         self,
@@ -652,6 +699,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
         new_dimtype_to_names = {
             dt: list(names) for dt, names in self.sp.dimtype_to_names.items()}
 
+        obj = self._obj
         for old_name, new_name in renaming.items():
             if new_name in renaming:
                 raise ValueError(
@@ -662,12 +710,18 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
                     f"cannot rename to existing name: '{new_name}'")
 
             dim_type, idx = self.sp.name_to_dim[old_name]
+
+            # isl doesn't like unnamed param dimensions. Make it happy.
+            obj = _set_dim_name(obj, dim_type, idx, new_name)
+
             new_dimtype_to_names[dim_type][idx] = new_name
 
-        return type(self)(self._obj, Space(constantdict({
-            dt: tuple(names)
-            for dt, names in new_dimtype_to_names.items()
-        })))
+        return type(self)(
+            obj,
+            Space(constantdict({
+                dt: tuple(names)
+                for dt, names in new_dimtype_to_names.items()
+            })))
 
     def as_isl(self) -> IslObjectT_co:
         return _restore_names(self._obj, self.sp.dimtype_to_names)
