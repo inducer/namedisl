@@ -52,6 +52,9 @@ import islpy as isl
 
 @final
 class DimType(enum.IntEnum):
+    """
+    .. automethod:: as_isl
+    """
     param = isl.dim_type.param
     in_ = isl.dim_type.in_
     out = isl.dim_type.set
@@ -135,6 +138,10 @@ NamedIslObjectT2 = TypeVar(
 
 
 class DimId(NamedTuple):
+    """
+    .. autoattribute:: dim_type
+    .. autoattribute:: dim_index
+    """
     dim_type: DimType
     dim_index: int
 
@@ -197,6 +204,10 @@ def _restore_names(
 
 
 class IndexChunk(NamedTuple):
+    """
+    .. autoattribute:: start
+    .. autoattribute:: cnt
+    """
     start: int
     cnt: int
 
@@ -425,6 +436,31 @@ def _align_and_apply_binary_op(
 
 @dataclass(frozen=True, eq=False)
 class Space:
+    """
+    .. autoattribute:: dimtype_to_names
+    .. automethod:: from_names
+    .. automethod:: from_isl
+    .. automethod:: __eq__
+    .. automethod:: order_equal
+    .. automethod:: semantically_equal
+    .. automethod:: __hash__
+    .. automethod:: name_to_dim
+    .. automethod:: dimtype_to_name_sets
+    .. automethod:: names
+    .. automethod:: dim_names
+    .. automethod:: param_names
+    .. automethod:: in_names
+    .. automethod:: set_names
+    .. automethod:: dim
+    .. automethod:: names_except
+    .. automethod:: move_dim_type
+    .. automethod:: swap_dim_types
+    .. automethod:: drop_dim_type
+    .. automethod:: as_expr_space
+    .. automethod:: as_set_space
+    .. automethod:: as_isl
+    .. automethod:: as_isl_set_space
+    """
     dimtype_to_names: DimTypeToNames
 
     if __debug__:
@@ -611,6 +647,16 @@ class Space:
 
 @dataclass(frozen=True, eq=False)
 class NamedIslObject(ABC, Generic[IslObjectT_co]):
+    """
+    .. autoattribute:: _obj
+    .. autoattribute:: space
+    .. autoattribute:: active_dim_types
+    .. automethod:: add_dim_names
+    .. automethod:: move_dims
+    .. automethod:: rename_dims
+    .. automethod:: as_isl
+    .. automethod:: __str__
+    """
     # NOTE: _obj holds names, but they are not kept up to date and should not
     # be considered authoritative. See as_isl().
     _obj: IslObjectT_co

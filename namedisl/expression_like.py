@@ -109,6 +109,19 @@ def _apply_expression_binary_op(
 
 @dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
+    """
+    .. autoattribute:: active_dim_types
+    .. automethod:: __add__
+    .. automethod:: __radd__
+    .. automethod:: __sub__
+    .. automethod:: __rsub__
+    .. automethod:: __mul__
+    .. automethod:: __rmul__
+    .. automethod:: __bool__
+    .. automethod:: is_zero
+    .. automethod:: __eq__
+    .. automethod:: equals
+    """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_})
 
@@ -197,6 +210,12 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class Aff(_NamedExpressionLike[isl.Aff]):
+    """
+    .. automethod:: zero_on_domain
+    .. automethod:: from_space
+    .. automethod:: set_coefficient
+    .. automethod:: as_pw_aff
+    """
     @staticmethod
     def zero_on_domain(space: Space) -> Aff:
         return Aff(
@@ -246,6 +265,11 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 
 @dataclass(frozen=True, eq=False)
 class PwAff(_NamedExpressionLike[isl.PwAff]):
+    """
+    .. automethod:: gist
+    .. automethod:: from_space
+    .. automethod:: where
+    """
     def gist(self, set: Set):
         self_a, set_a = align_two(self, set)
         result = self_a._obj.gist(set_a._obj)
@@ -309,11 +333,15 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 
 @dataclass(frozen=True, eq=False)
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
+    """
+    """
     pass
 
 
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
+    """
+    """
     pass
 
 
@@ -345,6 +373,8 @@ def make_qpolynomial(
 
 @dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
+    """
+    """
     pass
 
 
@@ -379,6 +409,9 @@ def make_pw_qpolynomial(
 
 @dataclass(frozen=True, eq=False)
 class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]):
+    """
+    .. autoattribute:: active_dim_types
+    """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
 
@@ -386,6 +419,9 @@ class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]
 @final
 @dataclass(frozen=True, eq=False)
 class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
+    """
+    .. automethod:: __getitem__
+    """
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
@@ -414,6 +450,10 @@ def make_multi_aff(
 
 @dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
+    """
+    .. automethod:: __getitem__
+    .. automethod:: as_multi_aff
+    """
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:

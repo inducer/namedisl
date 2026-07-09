@@ -82,6 +82,19 @@ def _compare_set_or_map_like(
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
+    """
+    .. automethod:: eliminate
+    .. automethod:: project_out
+    .. automethod:: project_out_except
+    .. automethod:: gist
+    .. automethod:: __and__
+    .. automethod:: __or__
+    .. automethod:: __sub__
+    .. automethod:: __eq__
+    .. automethod:: equals
+    .. automethod:: __lt__
+    .. automethod:: __le__
+    """
     def eliminate(self: Self, names: Collection[str]) -> Self:
         obj = self._obj
         for dt, chunks in chunked_dims_by_type(
@@ -164,12 +177,19 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
+    """
+    .. autoattribute:: active_dim_types
+    """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.out})
 
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
+    """
+    .. automethod:: equate_dims
+    .. automethod:: as_pw_multi_aff
+    """
     def equate_dims(
         self,
         names: Sequence[tuple[str, str]]
@@ -194,6 +214,12 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
+    """
+    .. automethod:: add_eq_constraint
+    .. automethod:: add_ineq_constraint
+    .. automethod:: affs
+    .. automethod:: as_set
+    """
     def add_eq_constraint(self, aff: Aff) -> BasicSet:
         if __debug__:  # noqa: SIM102
             if not self.space.as_expr_space().order_equal(aff.space):
@@ -233,6 +259,13 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 
 @dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
+    """
+    .. automethod:: complement
+    .. automethod:: convex_hull
+    .. automethod:: get_basic_sets
+    .. automethod:: dim_max
+    .. automethod:: dim_min
+    """
     def complement(self):
         return Set(self._obj.complement(), self.space)
 
@@ -270,6 +303,10 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
 
 
 class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
+    """
+    .. autoattribute:: active_dim_types
+    .. automethod:: reverse
+    """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.out})
 
@@ -281,6 +318,12 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
 
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
+    """
+    .. automethod:: domain
+    .. automethod:: range
+    .. automethod:: intersect_domain
+    .. automethod:: intersect_range
+    """
     def domain(self):
         return BasicSet(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
@@ -340,6 +383,17 @@ def make_map_from_domain_and_range(
 
 @dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
+    """
+    .. automethod:: complement
+    .. automethod:: convex_hull
+    .. automethod:: get_basic_maps
+    .. automethod:: domain
+    .. automethod:: range
+    .. automethod:: intersect_domain
+    .. automethod:: intersect_range
+    .. automethod:: apply_range
+    .. automethod:: apply_domain
+    """
     def complement(self):
         return Map(self._obj.complement(), self.space)
 
