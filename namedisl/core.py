@@ -38,7 +38,7 @@ THE SOFTWARE.
 import enum
 import re
 from abc import ABC
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from importlib import metadata
@@ -737,7 +737,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             for dt, names in new_dimtype_to_names.items()
         })))
 
-    def rename_dims(self, renaming: Mapping[str, str]) -> Self:
+    def rename_dims(self, renaming: Iterable[tuple[str, str]]) -> Self:
         if not renaming:
             return self
 
@@ -745,11 +745,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
 
         obj = self._obj
-        for old_name, new_name in renaming.items():
-            if new_name in renaming:
-                raise ValueError(
-                    "renaming may not map to a name to be renamed: "
-                    f"'{new_name}'")
+        for old_name, new_name in renaming:
             if new_name in self.space.names:
                 raise ValueError(
                     f"cannot rename to existing name: '{new_name}'")

@@ -162,7 +162,7 @@ def test_move_dims_multiple_names_preserves_relative_order() -> None:
 def test_rename_dims_set() -> None:
     named_set = nisl.make_set("[p] -> { [x, y] : x < p and y < p }")
 
-    renamed = named_set.rename_dims({"x": "x_new", "p": "n"})
+    renamed = named_set.rename_dims({"x": "x_new", "p": "n"}.items())
 
     expected = isl.Set("[p] -> { [x, y] : x < p and y < p }")
     expected = expected.set_dim_name(isl.dim_type.set, 0, "x_new")
@@ -175,7 +175,7 @@ def test_rename_dims_map() -> None:
         "[p] -> { [i0, i1] -> [o0, o1] : o0 = i0 and o1 = p + i1 }"
     )
 
-    renamed = named_map.rename_dims({"i1": "j", "o1": "x", "p": "n"})
+    renamed = named_map.rename_dims({"i1": "j", "o1": "x", "p": "n"}.items())
 
     expected = isl.Map(
         "[p] -> { [i0, i1] -> [o0, o1] : o0 = i0 and o1 = p + i1 }"
@@ -190,14 +190,14 @@ def test_rename_dims_rejects_renaming_to_existing_name() -> None:
     named_map = nisl.make_map("{ [i] -> [o] }")
 
     with pytest.raises(ValueError, match="existing name"):
-        _ = named_map.rename_dims({"i": "o"})
+        _ = named_map.rename_dims({"i": "o"}.items())
 
 
 def test_rename_dims_rejects_unknown_name() -> None:
     named_set = nisl.make_set("{ [x] }")
 
     with pytest.raises(KeyError, match="y"):
-        _ = named_set.rename_dims({"y": "z"})
+        _ = named_set.rename_dims({"y": "z"}.items())
 
 
 def test_duplicate_set_names_are_rejected() -> None:

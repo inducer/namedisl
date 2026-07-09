@@ -279,7 +279,7 @@ def test_set_dim_bounds_reconstruct_parameter_metadata() -> None:
     set_ = nisl.make_set("[n] -> { [i] : 0 <= i < n }").rename_dims({
         "i": "j",
         "n": "m",
-    })
+    }.items())
 
     assert set_.dim_min("j") == nisl.make_pw_aff("[m] -> { [(0)] : m > 0 }")
     assert set_.dim_max("j") == nisl.make_pw_aff("[m] -> { [(-1 + m)] : m > 0 }")
@@ -474,7 +474,7 @@ def test_map_apply_range_rejects_surviving_name_collisions() -> None:
 
 def test_map_apply_range_can_explicitly_rename_and_equate_collision() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
-    rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"})
+    rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"}.items())
 
     result = lhs.apply_range(rhs).equate_dims([("x", "x_out")])
 
@@ -494,7 +494,7 @@ def test_map_apply_range_can_equate_renamed_collisions_from_mapping() -> None:
     rhs = nisl.make_map("{ [y] -> [x, z] }").rename_dims({
         "x": "x_out",
         "z": "z_out",
-    })
+    }.items())
 
     result = lhs.apply_range(rhs).equate_dims([
         ("x", "x_out"),
@@ -523,7 +523,7 @@ def test_map_apply_domain_rejects_surviving_name_collisions() -> None:
 
 def test_map_apply_domain_can_explicitly_rename_and_equate_collision() -> None:
     lhs = nisl.make_map("{ [x] -> [y] }")
-    rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"})
+    rhs = nisl.make_map("{ [y] -> [x] }").rename_dims({"x": "x_out"}.items())
 
     result = rhs.apply_domain(lhs).equate_dims([("x", "x_out")])
 
