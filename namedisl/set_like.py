@@ -87,6 +87,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
     .. automethod:: project_out
     .. automethod:: project_out_except
     .. automethod:: gist
+    .. automethod:: is_bounded
     .. automethod:: __and__
     .. automethod:: __or__
     .. automethod:: __sub__
@@ -95,6 +96,13 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
     .. automethod:: __lt__
     .. automethod:: __le__
     """
+
+    def is_empty(self):
+        return self._obj.is_empty()
+
+    def plain_is_empty(self):
+        return self._obj.plain_is_empty()
+
     def eliminate(self: Self, names: Collection[str]) -> Self:
         obj = self._obj
         for dt, chunks in chunked_dims_by_type(
@@ -178,18 +186,23 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     """
-    .. autoattribute:: active_dim_types
+    .. automethod:: is_bounded
     """
+
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.out})
+
+    def is_bounded(self):
+        return self._obj.is_bounded()
 
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
-    """
+    __doc__ = """
     .. automethod:: equate_dims
     .. automethod:: as_pw_multi_aff
     """
+
     def equate_dims(
         self,
         names: Sequence[tuple[str, str]]
@@ -214,12 +227,15 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
 @dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet]):
-    """
+    __doc__ = f"""
     .. automethod:: add_eq_constraint
     .. automethod:: add_ineq_constraint
     .. automethod:: affs
     .. automethod:: as_set
+    .. automethod:: is_bounded
+    {_NamedIslSetLike.__doc__}
     """
+
     def add_eq_constraint(self, aff: Aff) -> BasicSet:
         if __debug__:  # noqa: SIM102
             if not self.space.as_expr_space().order_equal(aff.space):
@@ -265,6 +281,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: get_basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
+    .. automethod:: is_bounded
     """
     def complement(self):
         return Set(self._obj.complement(), self.space)

@@ -51,6 +51,7 @@ import islpy as isl
 
 from .core import (
     DimType,
+    IslAffLikeT_co,
     IslExpressionLikeT_co,
     IslMultiExpressionLikeT_co,
     IslPolynomialLikeT_co,
@@ -209,12 +210,31 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
 
 @dataclass(frozen=True, eq=False)
-class Aff(_NamedExpressionLike[isl.Aff]):
+class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
+    def is_constant(self):
+        return self._obj.is_cst()
+
+    def gist(self, set: Set):
+        self_a, set_a = align_two(self, set)
+        return type(self)(
+            cast("IslAffLikeT_co", self._obj.gist(set_a._obj)), self_a.space)
+
+    def gist_params(self, set: Set):
+        self_a, set_a = align_two(self, set)
+        return type(self)(
+            cast("IslAffLikeT_co", self._obj.gist_params(set_a._obj)), self_a.space)
+
+
+@dataclass(frozen=True, eq=False)
+class Aff(_NamedAffLike[isl.Aff]):
     """
     .. automethod:: zero_on_domain
     .. automethod:: from_space
     .. automethod:: set_coefficient
     .. automethod:: as_pw_aff
+    .. automethod:: is_constant
+    .. automethod:: gist
+    .. automethod:: gist_params
     """
     @staticmethod
     def zero_on_domain(space: Space) -> Aff:
@@ -264,16 +284,42 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 
 
 @dataclass(frozen=True, eq=False)
-class PwAff(_NamedExpressionLike[isl.PwAff]):
+class PwAff(_NamedAffLike[isl.PwAff]):
     """
-    .. automethod:: gist
+    .. automethod:: from_piece_and_aff
+    .. automethod:: like_var
     .. automethod:: from_space
     .. automethod:: where
+    .. automethod:: get_pieces
+
+    .. automethod:: eq_set
+    .. automethod:: ne_set
+    .. automethod:: ge_set
+    .. automethod:: le_set
+    .. automethod:: gt_set
+    .. automethod:: lt_set
+
+    .. automethod:: get_aggregate_domain
+    .. automethod:: union_max
+    .. automethod:: is_constant
+    .. automethod:: gist
+    .. automethod:: gist_params
     """
-    def gist(self, set: Set):
-        self_a, set_a = align_two(self, set)
-        result = self_a._obj.gist(set_a._obj)
-        return PwAff(result, self_a.space)
+
+    @staticmethod
+    def from_piece_and_aff(piece: Set, aff: Aff):
+        if not piece.space.order_equal(aff.space.as_set_space()):
+            raise ValueError("spaces don't match")
+
+        return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
+
+    def like_var(self: PwAff, name: str):
+        """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
+
+        dt, idx = self.space.name_to_dim[name]
+        return PwAff(
+            isl.PwAff.var_on_domain(self._obj.space, dt.as_isl(), idx),
+            self.space)
 
     @staticmethod
     def from_space(space: Space) -> dict[str | Literal[0], PwAff]:
@@ -301,16 +347,37 @@ class PwAff(_NamedExpressionLike[isl.PwAff]):
 
     def where(self,
         op: Literal["<", "<=", "=", "!=", ">=", ">"],
-        rhs: int | Aff | PwAff
+        rhs: int | PwAff
     ) -> Set:
         func = self._op_to_func[op]
         if isinstance(rhs, int):
             rhs = PwAff(isl.PwAff.zero_on_domain(self._obj.space) + rhs, self.space)
-        elif isinstance(rhs, Aff):
-            rhs = rhs.as_pw_aff()
         self_a, rhs_a = align_two(self, rhs)
         from .set_like import Set
         return Set(func(self_a._obj, rhs_a._obj), self_a.space.as_set_space())
+
+    def eq_set(self, rhs: int | PwAff): return self.where("=", rhs)
+    def ne_set(self, rhs: int | PwAff): return self.where("!=", rhs)
+    def ge_set(self, rhs: int | PwAff): return self.where(">=", rhs)
+    def le_set(self, rhs: int | PwAff): return self.where("<=", rhs)
+    def gt_set(self, rhs: int | PwAff): return self.where(">", rhs)
+    def lt_set(self, rhs: int | PwAff): return self.where("<", rhs)
+
+    def get_pieces(self):
+        set_space = self.space.as_set_space()
+        from .set_like import Set
+        return [
+            (Set(set, set_space), Aff(aff, self.space))
+            for set, aff in self._obj.get_pieces()
+        ]
+
+    def get_aggregate_domain(self):
+        from .set_like import Set
+        return Set(self._obj.get_aggregate_domain(), self.space.as_set_space())
+
+    def union_max(self, other: PwAff):
+        self_a, other_a = align_two(self, other)
+        return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
 
 
 @overload
@@ -333,15 +400,11 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 
 @dataclass(frozen=True, eq=False)
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
-    """
-    """
     pass
 
 
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
-    """
-    """
     pass
 
 
@@ -374,8 +437,16 @@ def make_qpolynomial(
 @dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     """
+    .. automethod:: get_pieces
     """
-    pass
+
+    def get_pieces(self):
+        set_space = self.space.as_set_space()
+        from .set_like import Set
+        return [
+            (Set(set, set_space), QPolynomial(qp, self.space))
+            for set, qp in self._obj.get_pieces()
+        ]
 
 
 @overload

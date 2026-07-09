@@ -116,6 +116,11 @@ IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     bound=IslExpressionLike,
 )
+IslAffLikeT_co = TypeVar(
+    "IslAffLikeT_co",
+    bound=IslAffLike,
+    covariant=True,
+)
 IslPolynomialLikeT_co = TypeVar(
     "IslPolynomialLikeT_co",
     bound=IslPolynomialLike,
