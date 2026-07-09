@@ -54,7 +54,7 @@ def test_public_dim_type_name_accessors() -> None:
 
     assert named_map.sp.dim_names(DimType.in_) == {"i"}
     assert named_map.sp.in_names == {"i"}
-    assert named_map.sp.dim_names(DimType.set) == {"o"}
+    assert named_map.sp.dim_names(DimType.out) == {"o"}
     assert named_map.sp.set_names == {"o"}
     assert named_map.sp.dim_names(DimType.param) == {"n"}
     assert named_map.sp.param_names == {"n"}
@@ -70,7 +70,7 @@ def test_public_dim_type_name_accessors_for_aff() -> None:
 def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
     named_set = (
         nisl.make_set("{ [x] }")
-        .add_dim_names(DimType.set, ["y"])
+        .add_dim_names(DimType.out, ["y"])
         .add_dim_names(DimType.param, ["p"])
     )
     expected = isl.Set("[p] -> { [y, x] }")
@@ -80,7 +80,7 @@ def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
 def test_add_output_input_and_parameter_names_reconstructs_expected_map() -> None:
     named_map = (
         nisl.make_map("{ [i] -> [o] }")
-        .add_dim_names(DimType.set, ["o2"])
+        .add_dim_names(DimType.out, ["o2"])
         .add_dim_names(DimType.in_, ["i2"])
         .add_dim_names(DimType.param, ["n"])
     )
@@ -104,7 +104,7 @@ def test_add_dim_names_uses_dim_type() -> None:
         nisl.make_map("{ [i] -> [o] }")
         .add_dim_names(DimType.in_, ["j"])
         .add_dim_names(DimType.param, ["p"])
-        .add_dim_names(DimType.set, ["x"])
+        .add_dim_names(DimType.out, ["x"])
     )
 
     assert named_map.sp.in_names == {"j", "i"}

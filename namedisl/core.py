@@ -54,8 +54,7 @@ import islpy as isl
 class DimType(enum.IntEnum):
     param = isl.dim_type.param
     in_ = isl.dim_type.in_
-    # FIXME: Maybe rename 'out'?
-    set = isl.dim_type.set
+    out = isl.dim_type.set
 
     def as_isl(self):
         return isl.dim_type(self)
@@ -311,7 +310,7 @@ def align_obj(
                     if another_dim_type == old_dim_id.dim_type:
                         # determine a safe 'alternate' dim type
                         if isinstance(obj, (isl.Set, isl.BasicSet)):
-                            another_dim_type = DimType.set
+                            another_dim_type = DimType.out
                         else:
                             another_dim_type = DimType.in_
 
@@ -450,7 +449,7 @@ class Space:
         if in_ is not None:
             dim_type_to_names[DimType.in_] = tuple(in_)
         if set is not None:
-            dim_type_to_names[DimType.set] = tuple(set)
+            dim_type_to_names[DimType.out] = tuple(set)
         return Space(constantdict(dim_type_to_names))
 
     @staticmethod
@@ -523,7 +522,7 @@ class Space:
 
     @property
     def set_names(self) -> frozenset[str]:
-        return self.dimtype_to_name_sets[DimType.set]
+        return self.dimtype_to_name_sets[DimType.out]
 
     def dim(self, dim_type: DimType) -> int:
         return len(self.dimtype_to_names[dim_type])
@@ -560,7 +559,7 @@ class Space:
             pass
 
         # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
-        result = self.move_dim_type(DimType.set, DimType.in_)
+        result = self.move_dim_type(DimType.out, DimType.in_)
         object.__setattr__(self, "_expr_space_cache", result)
         return result
 
@@ -571,7 +570,7 @@ class Space:
             pass
 
         # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
-        result = self.move_dim_type(DimType.in_, DimType.set)
+        result = self.move_dim_type(DimType.in_, DimType.out)
         object.__setattr__(self, "_set_space_cache", result)
         return result
 
@@ -582,7 +581,7 @@ class Space:
             ctx,
             nparam=len(self.dimtype_to_names.get(DimType.param, ())),
             n_in=len(self.dimtype_to_names.get(DimType.in_, ())),
-            n_out=len(self.dimtype_to_names.get(DimType.set, ())),
+            n_out=len(self.dimtype_to_names.get(DimType.out, ())),
         )
 
         for dim_type, names in self.dimtype_to_names.items():
@@ -600,7 +599,7 @@ class Space:
         result = isl.Space.set_alloc(
             ctx,
             nparam=len(self.dimtype_to_names.get(DimType.param, ())),
-            dim=len(self.dimtype_to_names.get(DimType.set, ())),
+            dim=len(self.dimtype_to_names.get(DimType.out, ())),
         )
 
         for dim_type, names in self.dimtype_to_names.items():

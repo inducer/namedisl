@@ -165,7 +165,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
-        {DimType.param, DimType.set})
+        {DimType.param, DimType.out})
 
 
 @dataclass(frozen=True, eq=False)
@@ -245,13 +245,13 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
 
     def dim_max(self, name: str):
         dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
+        if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
         return make_pw_aff(self.as_isl().dim_max(idx))
 
     def dim_min(self, name: str):
         dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
+        if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
         return make_pw_aff(self.as_isl().dim_min(idx))
 
@@ -271,30 +271,30 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
 
 class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
-        {DimType.param, DimType.in_, DimType.set})
+        {DimType.param, DimType.in_, DimType.out})
 
     def reverse(self) -> Self:
         return type(self)(
             cast("IslMapLikeT", self._obj.reverse()),
-            self.sp.swap_dim_types(DimType.in_, DimType.set))
+            self.sp.swap_dim_types(DimType.in_, DimType.out))
 
 
 @dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     def domain(self):
-        return BasicSet(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
+        return BasicSet(self._obj.domain(), self.sp.drop_dim_type(DimType.out))
 
     def range(self):
         return BasicSet(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: BasicSet) -> Self:
         self_a, domain_a = align_for_compostition(
-            self, DimType.in_, domain, DimType.set)
+            self, DimType.in_, domain, DimType.out)
         return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
 
     def intersect_range(self, range: BasicSet) -> Self:
         self_a, range_a = align_for_compostition(
-            self, DimType.set, range, DimType.set)
+            self, DimType.out, range, DimType.out)
         return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
 
 
@@ -351,39 +351,39 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
         return [BasicMap(bs, self.sp) for bs in self._obj.get_basic_maps()]
 
     def domain(self):
-        return Set(self._obj.domain(), self.sp.drop_dim_type(DimType.set))
+        return Set(self._obj.domain(), self.sp.drop_dim_type(DimType.out))
 
     def range(self):
         return Set(self._obj.range(), self.sp.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: Set) -> Self:
         self_a, domain_a = align_for_compostition(
-            self, DimType.in_, domain, DimType.set)
+            self, DimType.in_, domain, DimType.out)
         return type(self)(self_a._obj.intersect_domain(domain_a._obj), self_a.sp)
 
     def intersect_range(self, range: Set) -> Self:
         self_a, range_a = align_for_compostition(
-            self, DimType.set, range, DimType.set)
+            self, DimType.out, range, DimType.out)
         return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.sp)
 
     def apply_range(self, other: Self) -> Self:
-        self_a, other_a = align_for_compostition(self, DimType.set, other, DimType.in_)
+        self_a, other_a = align_for_compostition(self, DimType.out, other, DimType.in_)
         return type(self)(
             self._obj.apply_range(other_a._obj),
             Space(constantdict({
                 DimType.param: self_a.sp.dimtype_to_names[DimType.param],
                 DimType.in_: self_a.sp.dimtype_to_names[DimType.in_],
-                DimType.set: other_a.sp.dimtype_to_names[DimType.set],
+                DimType.out: other_a.sp.dimtype_to_names[DimType.out],
             })))
 
     def apply_domain(self, other: Self) -> Self:
-        self_a, other_a = align_for_compostition(self, DimType.in_, other, DimType.set)
+        self_a, other_a = align_for_compostition(self, DimType.in_, other, DimType.out)
         return type(self)(
             self._obj.apply_domain(other_a._obj),
             Space(constantdict({
                 DimType.param: self_a.sp.dimtype_to_names[DimType.param],
                 DimType.in_: other_a.sp.dimtype_to_names[DimType.in_],
-                DimType.set: self.sp.dimtype_to_names[DimType.set],
+                DimType.out: self.sp.dimtype_to_names[DimType.out],
             })))
 
 

@@ -379,7 +379,7 @@ def make_pw_qpolynomial(
 @dataclass(frozen=True, eq=False)
 class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
-        DimType.param, DimType.in_, DimType.set})
+        DimType.param, DimType.in_, DimType.out})
 
 
 @final
@@ -387,9 +387,9 @@ class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]
 class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
     def __getitem__(self, name: str):
         dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
+        if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
-        return Aff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.set))
+        return Aff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.out))
 
 
 @overload
@@ -415,9 +415,9 @@ def make_multi_aff(
 class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
     def __getitem__(self, name: str):
         dt, idx = self.sp.name_to_dim[name]
-        if dt != DimType.set:
+        if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
-        return PwAff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.set))
+        return PwAff(self._obj.get_at(idx), self.sp.drop_dim_type(DimType.out))
 
     def as_multi_aff(self):
         return MultiAff(self._obj.as_multi_aff(), self.sp)
