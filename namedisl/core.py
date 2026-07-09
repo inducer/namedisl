@@ -188,7 +188,8 @@ def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjec
     # equal, and arithmetic
 
     if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
-        return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx, isl.Id(name)))
+        return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx,
+            isl.Id.read_from_str(obj.get_ctx(), name)))
     else:
         return cast("IslObjectT", obj.set_dim_name(dt.as_isl(), idx, name))
 
