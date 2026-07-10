@@ -37,7 +37,6 @@ THE SOFTWARE.
 
 import enum
 import re
-from abc import ABC
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -73,7 +72,8 @@ IslSetLike = isl.BasicSet | isl.Set
 IslMapLike = isl.BasicMap | isl.Map
 IslUnbasic = isl.Set | isl.Map
 IslSetOrMapLike = IslSetLike | IslMapLike
-IslObject = IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike
+IslObject = (
+    IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike | isl.Constraint)
 
 IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 IslObjectT2 = TypeVar("IslObjectT2", bound=IslObject)
@@ -192,7 +192,9 @@ def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjec
     # can arise where [n] -> ... and [n] -> ... will not be considered
     # equal, and arithmetic
 
-    if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
+    if isinstance(obj, (isl.PwAff, isl.PwMultiAff, isl.Constraint)):
+        raise NotImplementedError("setting dim names on constraints")
+    elif isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
         return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx,
             isl.Id.read_from_str(obj.get_ctx(), name)))
     else:
@@ -301,7 +303,7 @@ def align_obj(
     obj = named_obj._obj
     running_name_to_dim_id = dict(named_obj.space.name_to_dim)
 
-    if isinstance(obj, isl.PwMultiAff):
+    if isinstance(obj, (isl.PwMultiAff, isl.Constraint)):
         raise NotImplementedError
 
     for target_dt, names in space.dimtype_to_names.items():
@@ -652,7 +654,7 @@ class Space:
 
 
 @dataclass(frozen=True, eq=False)
-class NamedIslObject(ABC, Generic[IslObjectT_co]):
+class NamedIslObject(Generic[IslObjectT_co]):
     """
     .. autoattribute:: _obj
     .. autoattribute:: space
@@ -689,7 +691,7 @@ class NamedIslObject(ABC, Generic[IslObjectT_co]):
             dt: (*self.space.dimtype_to_names[dt], *names_to_add)
         }
 
-        if isinstance(self._obj, isl.PwMultiAff):
+        if isinstance(self._obj, (isl.PwMultiAff, isl.Constraint)):
             raise NotImplementedError
 
         start_dim = self.space.dim(dt)

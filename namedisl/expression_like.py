@@ -527,6 +527,7 @@ class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
@@ -562,6 +563,7 @@ class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:

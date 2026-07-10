@@ -35,7 +35,6 @@ THE SOFTWARE.
 """
 
 import operator
-from abc import ABC
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
@@ -81,7 +80,17 @@ def _compare_set_or_map_like(
 
 
 @dataclass(frozen=True, eq=False)
-class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co], ABC):
+class Constraint(NamedIslObject[isl.Constraint]):
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
+        {DimType.param, DimType.in_, DimType.out})
+
+
+def make_constraint(obj: isl.Constraint) -> Constraint:
+    return Constraint(obj, Space.from_isl(obj, Constraint.active_dim_types))
+
+
+@dataclass(frozen=True, eq=False)
+class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     """
     .. automethod:: eliminate
     .. automethod:: project_out
@@ -287,6 +296,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
+
     def complement(self):
         return Set(self._obj.complement(), self.space)
 
@@ -350,6 +360,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     {_NamedIslMapLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
+
     def domain(self):
         return BasicSet(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
@@ -423,6 +434,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     {_NamedIslUnbasic.__doc__}
     {_NamedIslMapLike.__doc__}
     """
+
     def complement(self):
         return Map(self._obj.complement(), self.space)
 

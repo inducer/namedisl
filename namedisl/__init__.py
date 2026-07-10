@@ -58,10 +58,12 @@ from .expression_like import (
 from .set_like import (
     BasicMap,
     BasicSet,
+    Constraint,
     Map,
     Set,
     make_basic_map,
     make_basic_set,
+    make_constraint,
     make_map,
     make_map_from_domain_and_range,
     make_set,
@@ -72,6 +74,7 @@ __all__ = [
     "Aff",
     "BasicMap",
     "BasicSet",
+    "Constraint",
     "DimType",
     "Map",
     "MultiAff",
@@ -84,6 +87,7 @@ __all__ = [
     "make_aff",
     "make_basic_map",
     "make_basic_set",
+    "make_constraint",
     "make_map",
     "make_map_from_domain_and_range",
     "make_multi_aff",
@@ -98,17 +102,17 @@ __all__ = [
 import islpy as isl
 
 
-_ISL_TO_NAMED = {
-    isl.Aff: Aff,
-    isl.QPolynomial: QPolynomial,
-    isl.PwAff: PwAff,
-    isl.PwQPolynomial: PwQPolynomial,
-    isl.MultiAff: MultiAff,
-    isl.PwMultiAff: PwMultiAff,
-    isl.BasicSet: BasicSet,
-    isl.Set: Set,
-    isl.BasicMap: BasicMap,
-    isl.Map: Map,
+_ISL_TYPE_TO_CONSTRUCTOR = {
+    isl.Aff: make_aff,
+    isl.QPolynomial: make_qpolynomial,
+    isl.PwAff: make_pw_aff,
+    isl.PwQPolynomial: make_pw_qpolynomial,
+    isl.MultiAff: make_multi_aff,
+    isl.PwMultiAff: make_pw_multi_aff,
+    isl.BasicSet: make_basic_set,
+    isl.Set: make_set,
+    isl.BasicMap: make_basic_map,
+    isl.Map: make_map,
 }
 
 
@@ -132,6 +136,8 @@ def to_named(obj: isl.Set) -> Set: ...
 def to_named(obj: isl.BasicMap) -> BasicMap: ...
 @overload
 def to_named(obj: isl.Map) -> Map: ...
+@overload
+def to_named(obj: isl.Constraint) -> Constraint: ...
 
 
 def to_named(obj: IslObject) -> (
@@ -140,6 +146,6 @@ def to_named(obj: IslObject) -> (
     | MultiAff | PwMultiAff
     | BasicSet | Set
     | BasicMap | Map
+    | Constraint
 ):
-    result_type = _ISL_TO_NAMED[type(obj)]
-    return result_type(obj, Space.from_isl(obj, result_type.active_dim_types))  # pyright: ignore[reportArgumentType]
+    return _ISL_TYPE_TO_CONSTRUCTOR[type(obj)](obj)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
