@@ -304,6 +304,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: max
     .. automethod:: min
     .. automethod:: div
+    .. automethod:: floor
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
     {_NamedAffLike.__doc__}
@@ -379,6 +380,9 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def div(self, other: PwAff):
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.div(other_a._obj), self_a.space)
+
+    def floor(self):
+        return PwAff(self._obj.floor(), self.space)
 
     def get_pieces(self):
         set_space = self.space.as_set_space()
