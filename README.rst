@@ -22,20 +22,4 @@ not matter: isl considers ``{[i]: 0<=i<10}`` and ``{[j]: 0<=j<10}`` the same set
 Relatedly, isl's  (and hence islpy's) interface is based around dimension indices
 rather than names. Meanwhile, namedisl's interface uses names to identify axes.
 
-Supported operations on sets include
-
-* intersection, union, set difference,
-* emptiness check,
-* convex hull,
-* (integer) affine hull,
-* integer projection,
-* computing the lexicographic minimum using parametric integer programming,
-* coalescing, and
-* parametric vertex enumeration.
-
-It also includes an ILP solver based on generalized basis reduction, transitive
-closures on maps (which may encode infinite graphs), dependence analysis and
-bounds on piecewise step-polynomials.
-
 namedisl comes with comprehensive `documentation <http://documen.tician.de/namedisl>`_.
-
