@@ -495,9 +495,10 @@ class Space:
     .. automethod:: from_names
     .. automethod:: from_isl
     .. automethod:: __eq__
+    .. automethod:: __hash__
     .. automethod:: order_equal
     .. automethod:: semantically_equal
-    .. automethod:: __hash__
+    .. automethod:: __contains__
     .. autoattribute:: name_to_dim
     .. autoattribute:: dimtype_to_name_sets
     .. autoattribute:: names
@@ -556,6 +557,10 @@ class Space:
         # - the strictest/cheapest possible check
         return self.order_equal(other)
 
+    @override
+    def __hash__(self) -> int:
+        return hash((type(self), self.dimtype_to_names))
+
     def order_equal(self, other: Space) -> bool:
         if self is other:
             return True
@@ -572,9 +577,8 @@ class Space:
 
         return self.dimtype_to_name_sets == other.dimtype_to_name_sets
 
-    @override
-    def __hash__(self) -> int:
-        return hash((type(self), self.dimtype_to_names))
+    def __contains__(self, name: str) -> bool:
+        return name in self.name_to_dim
 
     @property
     def name_to_dim(self) -> NameToDim:
