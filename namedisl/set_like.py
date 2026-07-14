@@ -100,6 +100,8 @@ def _compare_set_or_map_like(
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     __doc__ = """
+    .. automethod:: is_empty
+    .. automethod:: plain_is_empty
     .. automethod:: eliminate
     .. automethod:: project_out
     .. automethod:: project_out_except
