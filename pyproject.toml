@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "namedisl"
-version = "2025.1"
-description = ''
+version = "2026.1"
+description = 'Name-oriented polyhedral operations'
 readme = "README.rst"
 requires-python = ">=3.10"
 license = "MIT"
@@ -21,7 +21,7 @@ classifiers = [
 dependencies = [
     "constantdict",
     "islpy",
-    "typing-extensions>=4.5",
+    "typing-extensions>=4.10",
 ]
 
 [project.urls]
@@ -57,6 +57,10 @@ extend-ignore = [
     "UP032", # use f-strings instead of .format
     "RUF067", # __init__ should contain no code
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"pytools/test/*.py" = ["S102"]
+"doc/conf.py" = ["S102"]
 
 [tool.ruff.lint.flake8-quotes]
 docstring-quotes = "double"
@@ -106,5 +110,5 @@ exclude = [
     "doc",
     ".conda-root",
     ".env",
+    ".venv",
 ]
-

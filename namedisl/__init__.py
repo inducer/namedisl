@@ -1,10 +1,3 @@
-"""
-.. autoclass:: BasicSet
-
-.. autofunction:: make_basic_set
-"""
-
-
 from __future__ import annotations
 
 
@@ -31,74 +24,113 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import re
-from collections.abc import Mapping
-from dataclasses import dataclass
-from importlib import metadata
-from typing import TypeAlias, TypeVar, overload
 
-from constantdict import constantdict
-from typing_extensions import override
+from typing import overload
+
+from .core import Cache, DimType, IslObject, Space
+from .expression_like import (
+    Aff,
+    MultiAff,
+    PwAff,
+    PwMultiAff,
+    PwQPolynomial,
+    QPolynomial,
+    affs_from_domain_space,
+    make_aff,
+    make_multi_aff,
+    make_pw_aff,
+    make_pw_multi_aff,
+    make_pw_qpolynomial,
+    make_qpolynomial,
+    pw_affs_from_domain_space,
+)
+from .set_like import (
+    BasicMap,
+    BasicSet,
+    Map,
+    Set,
+    make_basic_map,
+    make_basic_set,
+    make_map,
+    make_map_from_domain_and_range,
+    make_set,
+)
+
+
+__all__ = [
+    "Aff",
+    "BasicMap",
+    "BasicSet",
+    "Cache",
+    "DimType",
+    "Map",
+    "MultiAff",
+    "PwAff",
+    "PwMultiAff",
+    "PwQPolynomial",
+    "QPolynomial",
+    "Set",
+    "Space",
+    "affs_from_domain_space",
+    "make_aff",
+    "make_basic_map",
+    "make_basic_set",
+    "make_map",
+    "make_map_from_domain_and_range",
+    "make_multi_aff",
+    "make_pw_aff",
+    "make_pw_multi_aff",
+    "make_pw_qpolynomial",
+    "make_qpolynomial",
+    "make_set",
+    "pw_affs_from_domain_space",
+]
+
 
 import islpy as isl
 
 
-__version__ = metadata.version("namedisl")
-_match = re.match(r"^([0-9.]+)([a-z0-9]*?)$", __version__)
-assert _match
-VERSION = tuple(int(nr) for nr in _match.group(1).split("."))
-
-
-IslObject = TypeVar("IslObject", isl.BasicSet, isl.Set)
-NameToDim: TypeAlias = Mapping[str, tuple[isl.dim_type, int]]
-
-
-def _strip_names(obj: IslObject) -> tuple[IslObject, NameToDim]:
-    name_to_dim: dict[str, tuple[isl.dim_type, int]] = {}
-    for tp in isl._CHECK_DIM_TYPES:
-        for i in range(obj.dim(tp)):
-            name = obj.get_dim_name(tp, i)
-            if name is None:
-                raise ValueError("unnamed dimension found")
-            if name in name_to_dim:
-                raise ValueError(f"non-unique dim name: {name}")
-            name_to_dim[name] = (tp, i)
-
-            # FIXME: Enable, to avoid misunderstandings
-            # obj = obj.set_dim_id(tp, i, None)
-
-    return obj, constantdict(name_to_dim)
-
-
-def _restore_names(obj: IslObject, name_to_dim: NameToDim) -> IslObject:
-    for name, (dt, i) in name_to_dim.items():
-        obj = obj.set_dim_name(dt, i, name)
-
-    return obj
-
-
-@dataclass(frozen=True)
-class BasicSet:
-    _obj: isl.BasicSet
-    _name_to_dim: NameToDim
-
-    @override
-    def __str__(self) -> str:
-        return str(_restore_names(self._obj, self._name_to_dim))
+_ISL_TYPE_TO_CONSTRUCTOR = {
+    isl.Aff: make_aff,
+    isl.QPolynomial: make_qpolynomial,
+    isl.PwAff: make_pw_aff,
+    isl.PwQPolynomial: make_pw_qpolynomial,
+    isl.MultiAff: make_multi_aff,
+    isl.PwMultiAff: make_pw_multi_aff,
+    isl.BasicSet: make_basic_set,
+    isl.Set: make_set,
+    isl.BasicMap: make_basic_map,
+    isl.Map: make_map,
+}
 
 
 @overload
-def make_basic_set(src: str, ctx: isl.Context | None = None) -> BasicSet:
-    ...
-
-
+def to_named(obj: isl.Aff) -> Aff: ...
 @overload
-def make_basic_set(src: isl.BasicSet) -> BasicSet:
-    ...
+def to_named(obj: isl.QPolynomial) -> QPolynomial: ...
+@overload
+def to_named(obj: isl.PwAff) -> PwAff: ...
+@overload
+def to_named(obj: isl.PwQPolynomial) -> PwQPolynomial: ...
+@overload
+def to_named(obj: isl.MultiAff) -> MultiAff: ...
+@overload
+def to_named(obj: isl.PwMultiAff) -> PwMultiAff: ...
+@overload
+def to_named(obj: isl.BasicSet) -> BasicSet: ...
+@overload
+def to_named(obj: isl.Set) -> Set: ...
+@overload
+def to_named(obj: isl.BasicMap) -> BasicMap: ...
+@overload
+def to_named(obj: isl.Map) -> Map: ...
 
 
-def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
-    obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
-
-    obj, name_to_dim = _strip_names(obj)
-    return BasicSet(obj, name_to_dim)
+def to_named(obj: IslObject) -> (
+    Aff | QPolynomial
+    | PwAff | PwQPolynomial
+    | MultiAff | PwMultiAff
+    | BasicSet | Set
+    | BasicMap | Map
+):
+    return _ISL_TYPE_TO_CONSTRUCTOR[type(obj)](obj)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]

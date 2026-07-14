@@ -17,3 +17,5 @@ distribute*tar.gz
 
 .pylintrc.yml
 .run-pylint.py
+
+.codex

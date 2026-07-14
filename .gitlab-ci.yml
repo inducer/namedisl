@@ -31,15 +31,6 @@ basedpyright:
   except:
   - tags
 
-Pylint:
-  script:
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
-  - . ./prepare-and-run-pylint.sh "$CI_PROJECT_NAME"
-  tags:
-  - python3
-  except:
-  - tags
-
 Documentation:
   script:
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-docs.sh
