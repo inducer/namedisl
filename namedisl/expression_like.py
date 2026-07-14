@@ -280,18 +280,18 @@ class Aff(_NamedAffLike[isl.Aff]):
     def get_div(self, index: int) -> Aff:
         return Aff(self._obj.get_div(index), self.space)
 
-    def get_div_coefficient(self, index: int) -> int:
-        return self._obj.get_coefficient_val(isl.dim_type.div, index).to_python()
+    def get_div_coefficient(self, index: int) -> isl.Val:
+        return self._obj.get_coefficient_val(isl.dim_type.div, index)
 
-    def get_coefficient(self, name: str) -> int:
+    def get_coefficient(self, name: str) -> isl.Val:
         dt, idx = self.space.name_to_dim[name]
-        return self._obj.get_coefficient_val(dt.as_isl(), idx).to_python()
+        return self._obj.get_coefficient_val(dt.as_isl(), idx)
 
-    def get_constant(self) -> int:
-        return self._obj.get_constant_val().to_python()
+    def get_constant(self) -> isl.Val:
+        return self._obj.get_constant_val()
 
-    def get_denominator(self) -> int:
-        return self._obj.get_denominator_val().to_python()
+    def get_denominator(self) -> isl.Val:
+        return self._obj.get_denominator_val()
 
 
 @overload
