@@ -135,7 +135,7 @@ def test_set_intersection_rejects_name_collision_across_dim_types() -> None:
 def test_set_add_constraint_uses_named_dimensions() -> None:
     bset = nisl.make_basic_set("[m,n,p] -> { [j, i] }")
 
-    v = bset.affs()
+    v = bset.affs
     constrained = bset.add_eq_constraint(v["i"] - v["j"] + 1)
 
     assert constrained.as_set().equals(nisl.make_set("{ [j, i] : i = j - 1 }"))

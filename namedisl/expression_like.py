@@ -62,6 +62,7 @@ THE SOFTWARE.
 """
 
 import operator
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
@@ -73,7 +74,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 import islpy as isl
 
@@ -308,18 +309,36 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
     return Aff(obj, Space.from_isl(obj, Aff.active_dim_types))
 
 
-def affs_from_domain_space(space: Space) -> dict[str | Literal[0], Aff]:
+@dataclass(frozen=True)
+class _AffMapping(Mapping[str | Literal[0], Aff]):
+    expr_space: Space
+    isl_zero: isl.Aff
+
+    @override
+    def __len__(self):
+        return len(self.expr_space.name_to_dim) + 1
+
+    @override
+    def __iter__(self):
+        yield 0
+        yield from self.expr_space.name_to_dim.keys()
+
+    @override
+    def __getitem__(self, name: str | Literal[0]) -> Aff:
+        if name == 0:
+            return Aff(
+            self.isl_zero,
+            self.expr_space)
+
+        dt, idx = self.expr_space.name_to_dim[name]
+        return Aff(
+            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
+            self.expr_space)
+
+
+def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
     zero = Aff.zero_on_domain(space)
-    result: dict[str | Literal[0], Aff] = {0: zero}
-
-    expr_space = zero.space
-    isl_zero = zero._obj
-    for name, (dt, idx) in expr_space.name_to_dim.items():
-        result[name] = Aff(
-            isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
-            expr_space)
-
-    return result
+    return _AffMapping(zero.space, zero._obj)
 
 
 @dataclass(frozen=True, eq=False)
@@ -383,7 +402,9 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     ) -> Set:
         func = self._op_to_func[op]
         if isinstance(rhs, int):
-            rhs = PwAff(isl.PwAff.zero_on_domain(self._obj.space) + rhs, self.space)
+            rhs = PwAff(
+                isl.PwAff.zero_on_domain(self._obj.get_domain_space()) + rhs,
+                self.space)
         self_a, rhs_a = align_two(self, rhs)
         from .set_like import Set
         return Set(func(self_a._obj, rhs_a._obj), self_a.space.as_set_space())
@@ -448,18 +469,39 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
     return PwAff(obj, Space.from_isl(obj, PwAff. active_dim_types))
 
 
-def pw_affs_from_domain_space(space: Space) -> dict[str | Literal[0], PwAff]:
+@dataclass(frozen=True)
+class _PwAffMapping(Mapping[str | Literal[0], PwAff]):
+    expr_space: Space
+    isl_zero: isl.Aff
+
+    @override
+    def __len__(self):
+        return len(self.expr_space.name_to_dim) + 1
+
+    @override
+    def __iter__(self):
+        yield 0
+        yield from self.expr_space.name_to_dim.keys()
+
+    @override
+    def __getitem__(self, name: str | Literal[0]) -> PwAff:
+        if name == 0:
+            return PwAff(
+            self.isl_zero.to_pw_aff(),
+            self.expr_space)
+
+        dt, idx = self.expr_space.name_to_dim[name]
+        return PwAff(
+            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
+            self.expr_space)
+
+
+def pw_affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], PwAff]:
+    """This creates a lazily-evaluated mapping, i.e. you do not pay for the creation
+    of unused dimensions.
+    """
     zero = Aff.zero_on_domain(space)
-    result: dict[str | Literal[0], PwAff] = {0: zero.as_pw_aff()}
-
-    expr_space = zero.space
-    isl_zero = zero._obj
-    for name, (dt, idx) in expr_space.name_to_dim.items():
-        result[name] = PwAff(
-            isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
-            expr_space)
-
-    return result
+    return _PwAffMapping(zero.space, zero._obj)
 
 
 @dataclass(frozen=True, eq=False)
