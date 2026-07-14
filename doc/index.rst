@@ -11,7 +11,6 @@ piecewise affine expressions.
     :caption: Contents:
 
     ref
-    internals
 
     🚀 Github <https://github.com/inducer/namedisl>
     💾 Download Releases <https://pypi.org/project/namedisl>

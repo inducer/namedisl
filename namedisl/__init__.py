@@ -9,6 +9,10 @@ with islpy or downstream libraries.
 
 Most users should construct objects through the ``make_*`` functions exported
 from this module.
+
+.. automodule:: namedisl.core
+.. automodule:: namedisl.set_like
+.. automodule:: namedisl.expression_like
 """
 
 from __future__ import annotations
@@ -40,7 +44,7 @@ THE SOFTWARE.
 
 from typing import overload
 
-from .core import DimType, IslObject, Space
+from .core import Cache, DimType, IslObject, Space
 from .expression_like import (
     Aff,
     MultiAff,
@@ -48,22 +52,22 @@ from .expression_like import (
     PwMultiAff,
     PwQPolynomial,
     QPolynomial,
+    affs_from_domain_space,
     make_aff,
     make_multi_aff,
     make_pw_aff,
     make_pw_multi_aff,
     make_pw_qpolynomial,
     make_qpolynomial,
+    pw_affs_from_domain_space,
 )
 from .set_like import (
     BasicMap,
     BasicSet,
-    Constraint,
     Map,
     Set,
     make_basic_map,
     make_basic_set,
-    make_constraint,
     make_map,
     make_map_from_domain_and_range,
     make_set,
@@ -74,7 +78,7 @@ __all__ = [
     "Aff",
     "BasicMap",
     "BasicSet",
-    "Constraint",
+    "Cache",
     "DimType",
     "Map",
     "MultiAff",
@@ -84,10 +88,10 @@ __all__ = [
     "QPolynomial",
     "Set",
     "Space",
+    "affs_from_domain_space",
     "make_aff",
     "make_basic_map",
     "make_basic_set",
-    "make_constraint",
     "make_map",
     "make_map_from_domain_and_range",
     "make_multi_aff",
@@ -96,6 +100,7 @@ __all__ = [
     "make_pw_qpolynomial",
     "make_qpolynomial",
     "make_set",
+    "pw_affs_from_domain_space",
 ]
 
 
@@ -136,8 +141,6 @@ def to_named(obj: isl.Set) -> Set: ...
 def to_named(obj: isl.BasicMap) -> BasicMap: ...
 @overload
 def to_named(obj: isl.Map) -> Map: ...
-@overload
-def to_named(obj: isl.Constraint) -> Constraint: ...
 
 
 def to_named(obj: IslObject) -> (
@@ -146,6 +149,5 @@ def to_named(obj: IslObject) -> (
     | MultiAff | PwMultiAff
     | BasicSet | Set
     | BasicMap | Map
-    | Constraint
 ):
     return _ISL_TYPE_TO_CONSTRUCTOR[type(obj)](obj)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]

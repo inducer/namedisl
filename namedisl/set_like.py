@@ -5,6 +5,17 @@ The classes in this module wrap :mod:`islpy` sets and maps while making
 dimension names the primary way to address axes.  Internally, maps and sets are
 stored as set-like isl objects with metadata that distinguishes output, input,
 and parameter dimensions.
+
+.. currentmodule:: namedisl
+
+.. autoclass:: BasicSet
+.. autofunction:: make_basic_set
+.. autoclass:: Set
+.. autofunction:: make_set
+.. autoclass:: BasicMap
+.. autofunction:: make_basic_map
+.. autoclass:: Map
+.. autofunction:: make_map
 """
 
 from __future__ import annotations
@@ -39,11 +50,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
 from constantdict import constantdict
-from typing_extensions import Self, override
+from typing_extensions import Self
 
 import islpy as isl
 
 from .core import (
+    Cache,
     DimType,
     IslMapLikeT,
     IslSetLikeT,
@@ -56,8 +68,9 @@ from .core import (
     align_for_compostition,
     align_two,
     chunked_dims_by_type,
+    with_cache,
 )
-from .expression_like import make_pw_aff, make_pw_multi_aff
+from .expression_like import PwAff, make_pw_multi_aff
 
 
 if TYPE_CHECKING:
@@ -80,23 +93,12 @@ def _compare_set_or_map_like(
 
 
 @dataclass(frozen=True, eq=False)
-class Constraint(NamedIslObject[isl.Constraint]):
-    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
-        {DimType.param, DimType.in_, DimType.out})
-
-
-def make_constraint(obj: isl.Constraint) -> Constraint:
-    return Constraint(obj, Space.from_isl(obj, Constraint.active_dim_types))
-
-
-@dataclass(frozen=True, eq=False)
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
-    """
+    __doc__ = """
     .. automethod:: eliminate
     .. automethod:: project_out
     .. automethod:: project_out_except
     .. automethod:: gist
-    .. automethod:: is_bounded
     .. automethod:: __and__
     .. automethod:: __or__
     .. automethod:: __sub__
@@ -168,20 +170,6 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     def __sub__(self, other: Self) -> Self:
         return cast("Self", _align_and_apply_binary_op(self, other, operator.sub))
 
-    @override
-    def __eq__(self, other: object) -> bool:
-        if type(self) is not type(other):
-            return NotImplemented
-        other = cast("Self", other)
-
-        if not self.space.order_equal(other.space):
-            return False
-        if isinstance(self._obj, (isl.BasicSet, isl.BasicMap)):
-            # these don't have plain_is_equal
-            return self._obj.is_equal(other._obj)
-
-        return self._obj.plain_is_equal(other._obj)
-
     def equals(self, other: Self) -> bool:
         return _compare_set_or_map_like(self, other, operator.eq)
 
@@ -194,7 +182,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
-    """
+    __doc__ = """
     .. automethod:: is_bounded
     """
 
@@ -241,7 +229,6 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     .. automethod:: add_ineq_constraint
     .. automethod:: affs
     .. automethod:: as_set
-    .. automethod:: is_bounded
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
@@ -263,8 +250,8 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
             self.space)
 
     def affs(self) -> dict[str | Literal[0], Aff]:
-        from .expression_like import Aff
-        return Aff.from_space(self.space)
+        from .expression_like import affs_from_domain_space
+        return affs_from_domain_space(self.space)
 
     def as_set(self):
         return Set(self._obj.to_set(), self.space)
@@ -292,7 +279,8 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: coalesce
     .. automethod:: dim_max
     .. automethod:: dim_min
-    .. automethod:: is_bounded
+    .. automethod:: pw_affs
+    .. automethod:: as_map
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
@@ -310,17 +298,32 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     def coalesce(self) -> Self:
         return type(self)(self._obj.coalesce(), self.space)
 
-    def dim_max(self, name: str):
+    def dim_max(self, name: str, *, cache: Cache | None = None):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
-        return make_pw_aff(self.as_isl().dim_max(idx))
+        return PwAff(with_cache(cache, isl.Set.dim_max, self._obj, idx),
+            self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
-    def dim_min(self, name: str):
+    def dim_min(self, name: str, *, cache: Cache | None = None):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
-        return make_pw_aff(self.as_isl().dim_min(idx))
+        return PwAff(with_cache(cache, isl.Set.dim_min, self._obj, idx),
+            self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
+
+    def pw_affs(self) -> dict[str | Literal[0], PwAff]:
+        from .expression_like import pw_affs_from_domain_space
+        return pw_affs_from_domain_space(self.space)
+
+    def as_map(self, in_names: Collection[str]) -> Map:
+        result = isl.Map.universe(self._obj.space)
+        result = result.intersect_range(self._obj)
+        named_map = Map(result, Space(dimtype_to_names=constantdict({
+            **self.space.dimtype_to_names,
+            DimType.in_: ()
+        })))
+        return named_map.move_dims(in_names, DimType.in_)
 
 
 @overload
@@ -337,7 +340,7 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
 
 
 class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
-    """
+    __doc__ = """
     .. autoattribute:: active_dim_types
     .. automethod:: reverse
     """

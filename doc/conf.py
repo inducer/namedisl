@@ -18,9 +18,6 @@ extensions = [
     "sphinx.ext.linkcode",
 ]
 
-autodoc_member_order = "bysource"
-autodoc_typehints = "none"
-
 project = "namedisl"
 copyright = "2025- University of Illinois Board of Trustees"
 author = "Andreas Kloeckner"
@@ -33,5 +30,11 @@ intersphinx_mapping = {
     "constantdict": ("https://matthiasdiener.github.io/constantdict/", None),
     "python": ("https://docs.python.org/3", None),
 }
+
+nitpick_ignore_regex = [
+    ["py:class", r"IslObjectT.*"],
+    ["py:class", r"namedisl\.core\.IslObjectT.*"],
+    ["py:class", r"namedisl\.core\.NamedIslObjectT.*"],
+]
 
 nitpicky = True

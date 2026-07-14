@@ -4,6 +4,23 @@ Name-aware affine and polynomial expression wrappers.
 The wrappers in this module provide a small arithmetic interface around isl
 expression objects while preserving named dimension metadata across alignment
 and reconstruction.
+
+.. currentmodule:: namedisl
+
+.. autoclass:: Aff
+.. autofunction:: make_aff
+.. autofunction:: affs_from_domain_space
+.. autoclass:: PwAff
+.. autofunction:: make_pw_aff
+.. autofunction:: pw_affs_from_domain_space
+.. autoclass:: QPolynomial
+.. autofunction:: make_qpolynomial
+.. autoclass:: PwQPolynomial
+.. autofunction:: make_pw_qpolynomial
+.. autoclass:: MultiAff
+.. autofunction:: make_multi_aff
+.. autoclass:: PwMultiAff
+.. autofunction:: make_pw_multi_aff
 """
 
 from __future__ import annotations
@@ -45,7 +62,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self, override
+from typing_extensions import Self
 
 import islpy as isl
 
@@ -53,7 +70,6 @@ from .core import (
     DimType,
     IslAffLikeT_co,
     IslExpressionLikeT_co,
-    IslMultiExpressionLikeT_co,
     IslPolynomialLikeT_co,
     IslScalarExpressionLike,
     IslScalarExpressionLikeT,
@@ -110,8 +126,7 @@ def _apply_expression_binary_op(
 
 @dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
-    """
-    .. autoattribute:: active_dim_types
+    __doc__ = """
     .. automethod:: __add__
     .. automethod:: __radd__
     .. automethod:: __sub__
@@ -120,9 +135,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     .. automethod:: __rmul__
     .. automethod:: __bool__
     .. automethod:: is_zero
-    .. automethod:: __eq__
     .. automethod:: equals
     """
+
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_})
 
@@ -175,24 +190,6 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             raise NotImplementedError
         return bool(self._obj.is_zero())
 
-    @override
-    def __eq__(self, other: object) -> bool:
-        if type(self) is not type(other):
-            return NotImplemented
-        other = cast("Self", other)
-
-        if not self.space.order_equal(other.space):
-            return False
-
-        if isinstance(self._obj, (isl.QPolynomial, isl.PwQPolynomial)):
-            return (self._obj - other._obj).is_zero()
-        elif isinstance(self._obj, isl.MultiAff):
-            raise NotImplementedError()
-        elif isinstance(self._obj, isl.PwMultiAff):
-            return self._obj.is_equal(other._obj)
-        else:
-            return self._obj.plain_is_equal(other._obj)
-
     def equals(self, other: object) -> bool:
         if type(self) is not type(other):
             return NotImplemented
@@ -211,11 +208,12 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
 @dataclass(frozen=True, eq=False)
 class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
-    """
+    __doc__ = """
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
     """
+
     def is_constant(self):
         return self._obj.is_cst()
 
@@ -234,9 +232,16 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
 class Aff(_NamedAffLike[isl.Aff]):
     __doc__ = f"""
     .. automethod:: zero_on_domain
-    .. automethod:: from_space
     .. automethod:: set_coefficient
     .. automethod:: as_pw_aff
+
+    .. autoattribute:: num_divs
+    .. automethod:: get_div
+    .. automethod:: get_div_coefficient
+
+    .. automethod:: get_constant
+    .. automethod:: get_denominator
+
     {_NamedAffLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
@@ -248,27 +253,32 @@ class Aff(_NamedAffLike[isl.Aff]):
             isl.Aff.zero_on_domain(isl.LocalSpace.from_space(space.as_isl_set_space())),
             space.as_expr_space())
 
-    @staticmethod
-    def from_space(space: Space) -> dict[str | Literal[0], Aff]:
-        """*space* is assumed to be a set-like space."""
-        zero = Aff.zero_on_domain(space)
-        result: dict[str | Literal[0], Aff] = {0: zero}
-
-        expr_space = zero.space
-        isl_zero = zero._obj
-        for name, (dt, idx) in expr_space.name_to_dim.items():
-            result[name] = Aff(
-                isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
-                expr_space)
-
-        return result
-
     def set_coefficient(self, name: str, value: int) -> Aff:
         dt, idx = self.space.name_to_dim[name]
         return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
 
     def as_pw_aff(self) -> PwAff:
         return PwAff(self._obj.to_pw_aff(), self.space)
+
+    @property
+    def num_divs(self) -> int:
+        return self._obj.dim(isl.dim_type.div)
+
+    def get_div(self, index: int):
+        return Aff(self._obj.get_div(index), self.space)
+
+    def get_div_coefficient(self, index: int):
+        return self._obj.get_coefficient_val(isl.dim_type.div, index).to_python()
+
+    def get_coefficient(self, name: str):
+        dt, idx = self.space.name_to_dim[name]
+        return self._obj.get_coefficient_val(dt.as_isl(), idx).to_python()
+
+    def get_constant(self):
+        return self._obj.get_constant_val().to_python()
+
+    def get_denominator(self):
+        return self._obj.get_denominator_val().to_python()
 
 
 @overload
@@ -286,12 +296,25 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
     return Aff(obj, Space.from_isl(obj, Aff.active_dim_types))
 
 
+def affs_from_domain_space(space: Space) -> dict[str | Literal[0], Aff]:
+    zero = Aff.zero_on_domain(space)
+    result: dict[str | Literal[0], Aff] = {0: zero}
+
+    expr_space = zero.space
+    isl_zero = zero._obj
+    for name, (dt, idx) in expr_space.name_to_dim.items():
+        result[name] = Aff(
+            isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
+            expr_space)
+
+    return result
+
+
 @dataclass(frozen=True, eq=False)
 class PwAff(_NamedAffLike[isl.PwAff]):
     __doc__ = f"""
     .. automethod:: from_piece_and_aff
     .. automethod:: like_var
-    .. automethod:: from_space
     .. automethod:: where
     .. automethod:: get_pieces
     .. automethod:: coalesce
@@ -313,6 +336,12 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     """
 
     @staticmethod
+    def zero_on_domain(space: Space) -> PwAff:
+        return PwAff(
+            isl.PwAff.zero_on_domain(isl.LocalSpace.from_space(space.as_isl_set_space())),
+            space.as_expr_space())
+
+    @staticmethod
     def from_piece_and_aff(piece: Set, aff: Aff):
         if not piece.space.order_equal(aff.space.as_set_space()):
             raise ValueError("spaces don't match")
@@ -326,21 +355,6 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         return PwAff(
             isl.PwAff.var_on_domain(self._obj.space, dt.as_isl(), idx),
             self.space)
-
-    @staticmethod
-    def from_space(space: Space) -> dict[str | Literal[0], PwAff]:
-        """*space* is assumed to be a set-like space."""
-        zero = Aff.zero_on_domain(space)
-        result: dict[str | Literal[0], PwAff] = {0: zero.as_pw_aff()}
-
-        expr_space = zero.space
-        isl_zero = zero._obj
-        for name, (dt, idx) in expr_space.name_to_dim.items():
-            result[name] = PwAff(
-                isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
-                expr_space)
-
-        return result
 
     _op_to_func: ClassVar[dict[str, Callable[[isl.PwAff, isl.PwAff], isl.Set]]] = {
         "<": isl.PwAff.lt_set,
@@ -422,15 +436,34 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
     return PwAff(obj, Space.from_isl(obj, PwAff. active_dim_types))
 
 
+def pw_affs_from_domain_space(space: Space) -> dict[str | Literal[0], PwAff]:
+    zero = Aff.zero_on_domain(space)
+    result: dict[str | Literal[0], PwAff] = {0: zero.as_pw_aff()}
+
+    expr_space = zero.space
+    isl_zero = zero._obj
+    for name, (dt, idx) in expr_space.name_to_dim.items():
+        result[name] = PwAff(
+            isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
+            expr_space)
+
+    return result
+
+
 @dataclass(frozen=True, eq=False)
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
-    pass
+    __doc__ = """
+    .. automethod:: __pow__
+    """
+
+    def __pow__(self, other: int):
+        return type(self)(cast("IslPolynomialLikeT_co", self._obj ** other), self.space)
 
 
 @dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
     __doc__ = f"""
-    {_NamedPolynomialLike.__doc__ if hasattr(_NamedPolynomialLike, '__doc__') else ''}
+    {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
@@ -466,7 +499,7 @@ def make_qpolynomial(
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
     .. automethod:: get_pieces
-    {_NamedPolynomialLike.__doc__ if hasattr(_NamedPolynomialLike, '__doc__') else ''}
+    {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
@@ -509,24 +542,16 @@ def make_pw_qpolynomial(
 
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
-@dataclass(frozen=True, eq=False)
-class _NamedMultiExpressionLike(_NamedExpressionLike[IslMultiExpressionLikeT_co]):
-    """
-    .. autoattribute:: active_dim_types
-    """
-    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
-        DimType.param, DimType.in_, DimType.out})
-
-
 @final
 @dataclass(frozen=True, eq=False)
-class MultiAff(_NamedMultiExpressionLike[isl.MultiAff]):
+class MultiAff(_NamedExpressionLike[isl.MultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__
-    {_NamedMultiExpressionLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
+        DimType.param, DimType.in_, DimType.out})
 
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]
@@ -555,14 +580,16 @@ def make_multi_aff(
 
 
 @dataclass(frozen=True, eq=False)
-class PwMultiAff(_NamedMultiExpressionLike[isl.PwMultiAff]):
+class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__
     .. automethod:: as_multi_aff
-    {_NamedMultiExpressionLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
+        DimType.param, DimType.in_, DimType.out})
 
     def __getitem__(self, name: str):
         dt, idx = self.space.name_to_dim[name]

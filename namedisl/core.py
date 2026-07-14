@@ -1,11 +1,10 @@
 """
-Core metadata machinery for name-aware isl wrappers.
+.. autofunction:: align_two
 
-The public set-like and expression-like classes store an isl object together
-with metadata that records which semantic name belongs to each internal
-dimension.  This module
-contains the alignment, reconstruction, and metadata-manipulation helpers used
-to keep that invariant intact.
+.. currentmodule:: namedisl
+.. autoclass:: DimType
+.. autoclass:: Space
+.. autoclass:: Cache
 """
 
 from __future__ import annotations
@@ -37,11 +36,20 @@ THE SOFTWARE.
 
 import enum
 import re
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from importlib import metadata
-from typing import ClassVar, Generic, TypeAlias, TypeVar, cast, final
+from typing import (
+    ClassVar,
+    Concatenate,
+    Generic,
+    ParamSpec,
+    TypeAlias,
+    TypeVar,
+    cast,
+    final,
+)
 
 from constantdict import constantdict
 from typing_extensions import NamedTuple, Self, override
@@ -52,6 +60,10 @@ import islpy as isl
 @final
 class DimType(enum.IntEnum):
     """
+    .. autoattribute:: param
+    .. autoattribute:: in_
+    .. autoattribute:: out
+
     .. automethod:: as_isl
     """
     param = isl.dim_type.param
@@ -73,13 +85,15 @@ IslMapLike = isl.BasicMap | isl.Map
 IslUnbasic = isl.Set | isl.Map
 IslSetOrMapLike = IslSetLike | IslMapLike
 IslObject = (
-    IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike | isl.Constraint)
+    IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike)
 
 IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 IslObjectT2 = TypeVar("IslObjectT2", bound=IslObject)
 IslObjectT_co = TypeVar("IslObjectT_co", bound=IslObject, covariant=True)
 
 T = TypeVar("T")
+P  = ParamSpec("P")
+R = TypeVar("R")
 
 IslSetOrMapLikeT = TypeVar(
     "IslSetOrMapLikeT",
@@ -192,9 +206,7 @@ def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjec
     # can arise where [n] -> ... and [n] -> ... will not be considered
     # equal, and arithmetic
 
-    if isinstance(obj, (isl.PwAff, isl.PwMultiAff, isl.Constraint)):
-        raise NotImplementedError("setting dim names on constraints")
-    elif isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
+    if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
         return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx,
             isl.Id.read_from_str(obj.get_ctx(), name)))
     else:
@@ -430,6 +442,22 @@ def align_for_compostition(
     return lhs, rhs
 
 
+def plain_is_equal(lhs: IslObjectT, rhs: IslObjectT) -> bool:
+    # Expose the cheapest/strictest equality test for all isl object types.
+    if isinstance(lhs, (isl.Set, isl.Map, isl.PwAff, isl.Aff, isl.MultiAff)):
+        return lhs.plain_is_equal(rhs)
+    if isinstance(lhs, (isl.BasicSet, isl.BasicMap)):
+        # these don't have plain_is_equal
+        return lhs.is_equal(rhs)
+
+    elif isinstance(lhs, (isl.QPolynomial, isl.PwQPolynomial)):
+        return (lhs - rhs).is_zero()
+    elif isinstance(lhs, isl.PwMultiAff):
+        return lhs.is_equal(rhs)
+    else:
+        raise NotImplementedError()
+
+
 def _align_and_apply_binary_op(
     lhs: NamedIslObject[IslObjectT],
     rhs: NamedIslObject[IslObjectT],
@@ -452,18 +480,20 @@ class Space:
     .. automethod:: order_equal
     .. automethod:: semantically_equal
     .. automethod:: __hash__
-    .. automethod:: name_to_dim
-    .. automethod:: dimtype_to_name_sets
-    .. automethod:: names
+    .. autoattribute:: name_to_dim
+    .. autoattribute:: dimtype_to_name_sets
+    .. autoattribute:: names
     .. automethod:: dim_names
-    .. automethod:: param_names
-    .. automethod:: in_names
-    .. automethod:: set_names
+    .. autoattribute:: param_names
+    .. autoattribute:: in_names
+    .. autoattribute:: set_names
+    .. autoattribute:: out_names
     .. automethod:: dim
     .. automethod:: names_except
     .. automethod:: move_dim_type
     .. automethod:: swap_dim_types
     .. automethod:: drop_dim_type
+    .. automethod:: with_empty_dim_type
     .. automethod:: as_expr_space
     .. automethod:: as_set_space
     .. automethod:: as_isl
@@ -568,6 +598,10 @@ class Space:
     def set_names(self) -> frozenset[str]:
         return self.dimtype_to_name_sets[DimType.out]
 
+    @property
+    def out_names(self) -> frozenset[str]:
+        return self.dimtype_to_name_sets[DimType.out]
+
     def dim(self, dim_type: DimType) -> int:
         return len(self.dimtype_to_names[dim_type])
 
@@ -594,6 +628,13 @@ class Space:
     def drop_dim_type(self, dt: DimType) -> Space:
         new_dim_type_to_names = dict(self.dimtype_to_names)
         del new_dim_type_to_names[dt]
+        return Space(constantdict(new_dim_type_to_names))
+
+    def with_empty_dim_type(self, dt: DimType) -> Space:
+        new_dim_type_to_names = dict(self.dimtype_to_names)
+        if dt in new_dim_type_to_names:
+            raise ValueError(f"dim type {dt} already exists")
+        new_dim_type_to_names[dt] = ()
         return Space(constantdict(new_dim_type_to_names))
 
     def as_expr_space(self) -> Space:
@@ -655,7 +696,9 @@ class Space:
 
 @dataclass(frozen=True, eq=False)
 class NamedIslObject(Generic[IslObjectT_co]):
-    """
+    # NB: Assigning to __doc__ is goofy, but it allows for compatibility with
+    # the docstring pasting scheme used in subclasses.
+    __doc__ = """
     .. autoattribute:: _obj
     .. autoattribute:: space
     .. autoattribute:: active_dim_types
@@ -663,6 +706,8 @@ class NamedIslObject(Generic[IslObjectT_co]):
     .. automethod:: move_dims
     .. automethod:: rename_dims
     .. automethod:: as_isl
+    .. automethod:: __hash__
+    .. automethod:: __eq__
     .. automethod:: __str__
     """
     # NOTE: _obj holds names, but they are not kept up to date and should not
@@ -775,5 +820,63 @@ class NamedIslObject(Generic[IslObjectT_co]):
         return _restore_names(self._obj, self.space.dimtype_to_names)
 
     @override
+    def __hash__(self) -> int:
+        return hash(self._obj)
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        """This is intended to be cheap and strict, suitable mainly for hashing.
+        Some subclasses (e.g. :class:`namedisl.Set`) may provide a different,
+        'mathematically exact' notion of equality as a different method
+        that is more expensive to check for.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+        other = cast("Self", other)
+
+        if not self.space.order_equal(other.space):
+            return False
+
+        return plain_is_equal(self._obj, other._obj)
+
+    @override
     def __str__(self) -> str:
         return str(self.as_isl())
+
+
+class Cache:
+    _cache: dict[Hashable, list[tuple[IslObject, object]]]
+
+    def __init__(self):
+        self._cache = {}
+
+
+def with_cache(
+    cache: Cache | None,
+    f: Callable[Concatenate[IslObjectT, P], R],
+    obj: IslObjectT,
+    *args: P.args,
+    **kwargs: P.kwargs
+) -> R:
+    if cache is None:
+        return f(obj, *args, **kwargs)
+
+    # This is so complicated because islpy's __eq__ doesn't route to plain_is_equal,
+    # but may instead use expensive forms of equality.
+    obj_hash = hash(obj)
+    key = (f, obj_hash, tuple(args), constantdict(kwargs))
+    try:
+        candidates = cast("list[tuple[IslObjectT, R]]", cache._cache[key])
+    except KeyError:
+        pass
+    else:
+        for cand_obj, result in candidates:
+            if plain_is_equal(obj, cand_obj):
+                return result
+
+    result = f(obj, *args, **kwargs)
+    cast(
+        "list[tuple[IslObjectT, R]]",
+        cache._cache.setdefault(key, [])
+    ).append((obj, result))
+    return result
