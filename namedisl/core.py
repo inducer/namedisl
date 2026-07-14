@@ -735,8 +735,8 @@ class NamedIslObject(Generic[IslObjectT_co]):
     # NOTE: _obj holds names, but they are not kept up to date and should not
     # be considered authoritative. See as_isl().
     _obj: IslObjectT_co
-
     space: Space
+    _isl_names_ok: bool = False
 
     active_dim_types: ClassVar[frozenset[DimType]]
 
@@ -839,7 +839,13 @@ class NamedIslObject(Generic[IslObjectT_co]):
             })))
 
     def as_isl(self) -> IslObjectT_co:
-        return _restore_names(self._obj, self.space.dimtype_to_names)
+        if self._isl_names_ok:
+            return self._obj
+
+        res = _restore_names(self._obj, self.space.dimtype_to_names)
+        object.__setattr__(self, "_obj", res)
+        object.__setattr__(self, "_isl_names_ok", True)
+        return res
 
     @override
     def __hash__(self) -> int:
