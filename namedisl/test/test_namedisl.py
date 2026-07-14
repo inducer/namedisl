@@ -70,8 +70,8 @@ def test_public_dim_type_name_accessors_for_aff() -> None:
 def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
     named_set = (
         nisl.make_set("{ [x] }")
-        .add_dim_names(DimType.out, ["y"])
-        .add_dim_names(DimType.param, ["p"])
+        .add_dims(DimType.out, ["y"])
+        .add_dims(DimType.param, ["p"])
     )
     expected = isl.Set("[p] -> { [y, x] }")
     assert named_set.equals(to_named(expected))
@@ -80,9 +80,9 @@ def test_add_set_and_parameter_names_reconstructs_expected_set() -> None:
 def test_add_output_input_and_parameter_names_reconstructs_expected_map() -> None:
     named_map = (
         nisl.make_map("{ [i] -> [o] }")
-        .add_dim_names(DimType.out, ["o2"])
-        .add_dim_names(DimType.in_, ["i2"])
-        .add_dim_names(DimType.param, ["n"])
+        .add_dims(DimType.out, ["o2"])
+        .add_dims(DimType.in_, ["i2"])
+        .add_dims(DimType.param, ["n"])
     )
     expected = isl.Map("[n] -> { [i2, i] -> [o2, o] }")
 
@@ -92,19 +92,19 @@ def test_add_output_input_and_parameter_names_reconstructs_expected_map() -> Non
 def test_add_input_and_parameter_names_reconstructs_expected_aff() -> None:
     named_aff = (
         nisl.make_aff("[n] -> { [i] -> [i + n] }")
-        .add_dim_names(DimType.in_, ["j"])
-        .add_dim_names(DimType.param, ["m"])
+        .add_dims(DimType.in_, ["j"])
+        .add_dims(DimType.param, ["m"])
     )
     expected = isl.Aff("[m, n] -> { [j, i] -> [i + n] }")
     assert named_aff.equals(to_named(expected))
 
 
-def test_add_dim_names_uses_dim_type() -> None:
+def test_add_dims_uses_dim_type() -> None:
     named_map = (
         nisl.make_map("{ [i] -> [o] }")
-        .add_dim_names(DimType.in_, ["j"])
-        .add_dim_names(DimType.param, ["p"])
-        .add_dim_names(DimType.out, ["x"])
+        .add_dims(DimType.in_, ["j"])
+        .add_dims(DimType.param, ["p"])
+        .add_dims(DimType.out, ["x"])
     )
 
     assert named_map.space.in_names == {"j", "i"}
