@@ -724,7 +724,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
     .. autoattribute:: _obj
     .. autoattribute:: space
     .. autoattribute:: active_dim_types
-    .. automethod:: add_dim_names
+    .. automethod:: add_dims
     .. automethod:: move_dims
     .. automethod:: rename_dims
     .. automethod:: as_isl
@@ -746,7 +746,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
                 raise ValueError(
                     f"space not suitable for '{type(self)}'")
 
-    def add_dim_names(
+    def add_dims(
         self, dt: DimType, names_to_add: Collection[str], /
     ) -> Self:
         all_names = [*names_to_add, *self.space.names]
