@@ -1,19 +1,23 @@
 """
-Name-aware set and map wrappers.
-
-The classes in this module wrap :mod:`islpy` sets and maps while making
-dimension names the primary way to address axes.  Internally, maps and sets are
-stored as set-like isl objects with metadata that distinguishes output, input,
-and parameter dimensions.
-
 .. currentmodule:: namedisl
 
+Quasiconvex set
+^^^^^^^^^^^^^^^
 .. autoclass:: BasicSet
 .. autofunction:: make_basic_set
+
+General set
+^^^^^^^^^^^
 .. autoclass:: Set
 .. autofunction:: make_set
+
+Quasiconvex map
+^^^^^^^^^^^^^^^
 .. autoclass:: BasicMap
 .. autofunction:: make_basic_map
+
+General map
+^^^^^^^^^^^
 .. autoclass:: Map
 .. autofunction:: make_map
 """

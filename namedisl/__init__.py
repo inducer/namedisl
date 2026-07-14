@@ -1,20 +1,3 @@
-"""
-Name-aware wrappers for :mod:`islpy` objects.
-
-namedisl offers small Python wrappers around isl sets, maps, and expression
-objects.  The wrappers keep a separate mapping from dimension names to isl
-dimension positions, align operands by name before applying binary operations,
-and reconstruct ordinary :mod:`islpy` objects when callers need to interoperate
-with islpy or downstream libraries.
-
-Most users should construct objects through the ``make_*`` functions exported
-from this module.
-
-.. automodule:: namedisl.core
-.. automodule:: namedisl.set_like
-.. automodule:: namedisl.expression_like
-"""
-
 from __future__ import annotations
 
 

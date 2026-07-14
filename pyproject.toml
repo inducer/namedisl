@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "namedisl"
-version = "2025.1"
-description = ''
+version = "2026.1"
+description = 'Name-oriented polyhedral operations'
 readme = "README.rst"
 requires-python = ">=3.10"
 license = "MIT"

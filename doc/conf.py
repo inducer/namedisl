@@ -12,15 +12,7 @@ _conf_url = "https://tiker.net/sphinxconfig-v0.py"
 with urlopen(_conf_url) as _inf:
     exec(compile(_inf.read(), _conf_url, "exec"), globals())
 
-extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.linkcode",
-]
-
-project = "namedisl"
 copyright = "2025- University of Illinois Board of Trustees"
-author = "Andreas Kloeckner"
 
 release = metadata.version("namedisl")
 version = ".".join(release.split(".")[:2])

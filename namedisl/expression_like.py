@@ -1,24 +1,35 @@
 """
-Name-aware affine and polynomial expression wrappers.
-
-The wrappers in this module provide a small arithmetic interface around isl
-expression objects while preserving named dimension metadata across alignment
-and reconstruction.
-
 .. currentmodule:: namedisl
 
+Quasi-affine expression
+-----------------------
 .. autoclass:: Aff
 .. autofunction:: make_aff
 .. autofunction:: affs_from_domain_space
+
+Piecewise quasi-affine expression
+---------------------------------
 .. autoclass:: PwAff
 .. autofunction:: make_pw_aff
 .. autofunction:: pw_affs_from_domain_space
+
+Quasipolynomial
+---------------
 .. autoclass:: QPolynomial
 .. autofunction:: make_qpolynomial
+
+Piecewise quasipolynomial
+-------------------------
 .. autoclass:: PwQPolynomial
 .. autofunction:: make_pw_qpolynomial
+
+Vector-valued quasi-affine expression
+-------------------------------------
 .. autoclass:: MultiAff
 .. autofunction:: make_multi_aff
+
+Piecewise vector-valued quasi-affine expression
+-----------------------------------------------
 .. autoclass:: PwMultiAff
 .. autofunction:: make_pw_multi_aff
 """
