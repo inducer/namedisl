@@ -108,10 +108,10 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: __le__
     """
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return self._obj.is_empty()
 
-    def plain_is_empty(self):
+    def plain_is_empty(self) -> bool:
         return self._obj.plain_is_empty()
 
     def eliminate(self: Self, names: Collection[str]) -> Self:
@@ -189,7 +189,7 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.out})
 
-    def is_bounded(self):
+    def is_bounded(self) -> bool:
         return self._obj.is_bounded()
 
 
@@ -253,7 +253,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
         from .expression_like import affs_from_domain_space
         return affs_from_domain_space(self.space)
 
-    def as_set(self):
+    def as_set(self) -> Set:
         return Set(self._obj.to_set(), self.space)
 
 
@@ -285,27 +285,27 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
-    def complement(self):
+    def complement(self) -> Set:
         return Set(self._obj.complement(), self.space)
 
-    def convex_hull(self):
+    def convex_hull(self) -> BasicSet:
         return BasicSet(
             self._obj.convex_hull(), self.space)
 
-    def get_basic_sets(self):
+    def get_basic_sets(self) -> list[BasicSet]:
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
 
     def coalesce(self) -> Self:
         return type(self)(self._obj.coalesce(), self.space)
 
-    def dim_max(self, name: str, *, cache: Cache | None = None):
+    def dim_max(self, name: str, *, cache: Cache | None = None) -> PwAff:
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
         return PwAff(with_cache(cache, isl.Set.dim_max, self._obj, idx),
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
-    def dim_min(self, name: str, *, cache: Cache | None = None):
+    def dim_min(self, name: str, *, cache: Cache | None = None) -> PwAff:
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
@@ -364,10 +364,10 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
-    def domain(self):
+    def domain(self) -> BasicSet:
         return BasicSet(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
-    def range(self):
+    def range(self) -> BasicSet:
         return BasicSet(self._obj.range(), self.space.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: BasicSet) -> Self:
@@ -438,20 +438,20 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     {_NamedIslMapLike.__doc__}
     """
 
-    def complement(self):
+    def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)
 
-    def convex_hull(self):
+    def convex_hull(self) -> BasicMap:
         return BasicMap(
             self._obj.convex_hull(), self.space)
 
-    def get_basic_maps(self):
+    def get_basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
 
-    def domain(self):
+    def domain(self) -> Set:
         return Set(self._obj.domain(), self.space.drop_dim_type(DimType.out))
 
-    def range(self):
+    def range(self) -> Set:
         return Set(self._obj.range(), self.space.drop_dim_type(DimType.in_))
 
     def intersect_domain(self, domain: Set) -> Self:

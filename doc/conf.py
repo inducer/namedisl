@@ -37,4 +37,10 @@ nitpick_ignore_regex = [
     ["py:class", r"namedisl\.core\.NamedIslObjectT.*"],
 ]
 
-nitpicky = True
+sphinxconfig_missing_reference_aliases = {
+    "dim_type": "class:islpy.dim_type",
+}
+
+
+def setup(app):
+    app.connect("missing-reference", process_autodoc_missing_reference)  # noqa: F821

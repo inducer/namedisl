@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from importlib import metadata
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Concatenate,
     Generic,
@@ -57,6 +58,10 @@ from typing_extensions import NamedTuple, Self, override
 import islpy as isl
 
 
+if TYPE_CHECKING:
+    from islpy._isl import dim_type
+
+
 @final
 class DimType(enum.IntEnum):
     """
@@ -70,7 +75,7 @@ class DimType(enum.IntEnum):
     in_ = isl.dim_type.in_
     out = isl.dim_type.set
 
-    def as_isl(self):
+    def as_isl(self) -> dim_type:
         return isl.dim_type(self)
 
 
@@ -255,7 +260,9 @@ def chunk_indices(dims: Sequence[int]) -> list[IndexChunk]:
     return chunks
 
 
-def chunked_dims_by_type(names: Collection[str], name_to_dim: NameToDim):
+def chunked_dims_by_type(
+    names: Collection[str], name_to_dim: NameToDim
+) -> dict[DimType, list[IndexChunk]]:
     """
     Chunks are guaranteed to be returned in ascending order
     """
@@ -502,7 +509,7 @@ class Space:
     dimtype_to_names: DimTypeToNames
 
     if __debug__:
-        def __post_init__(self):
+        def __post_init__(self) -> None:
             hash(self.dimtype_to_names)
 
             all_names: list[str] = []
@@ -516,7 +523,7 @@ class Space:
         param: Sequence[str] | None = None,
         in_: Sequence[str] | None = None,
         set: Sequence[str] | None = None,
-    ):
+    ) -> Space:
         dim_type_to_names: dict[DimType, tuple[str, ...]] = {}
         if param is not None:
             dim_type_to_names[DimType.param] = tuple(param)
@@ -527,24 +534,24 @@ class Space:
         return Space(constantdict(dim_type_to_names))
 
     @staticmethod
-    def from_isl(obj: IslObject, dim_types: Collection[DimType]):
+    def from_isl(obj: IslObject, dim_types: Collection[DimType]) -> Space:
         return Space(constantdict(_dimtype_to_names(obj, dim_types)))
 
     @override
-    def __eq__(self, other: object):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Space):
             return False
         # - consistent with hash
         # - the strictest/cheapest possible check
         return self.order_equal(other)
 
-    def order_equal(self, other: Space):
+    def order_equal(self, other: Space) -> bool:
         if self is other:
             return True
 
         return self.dimtype_to_names == other.dimtype_to_names
 
-    def semantically_equal(self, other: Space):
+    def semantically_equal(self, other: Space) -> bool:
         if self is other:
             return True
         if not isinstance(other, Space):
@@ -555,7 +562,7 @@ class Space:
         return self.dimtype_to_name_sets == other.dimtype_to_name_sets
 
     @override
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((type(self), self.dimtype_to_names))
 
     @property
@@ -605,7 +612,7 @@ class Space:
     def dim(self, dim_type: DimType) -> int:
         return len(self.dimtype_to_names[dim_type])
 
-    def names_except(self, dim_type: Collection[DimType]):
+    def names_except(self, dim_type: Collection[DimType]) -> set[str]:
         return {name
             for dt, names in self.dimtype_to_names.items()
             if dt not in dim_type
@@ -659,7 +666,7 @@ class Space:
         object.__setattr__(self, "_set_space_cache", result)
         return result
 
-    def as_isl(self, ctx: isl.Context | None = None):
+    def as_isl(self, ctx: isl.Context | None = None) -> isl.Space:
         if ctx is None:
             ctx = isl.DEFAULT_CONTEXT
         result = isl.Space.alloc(
@@ -675,7 +682,7 @@ class Space:
 
         return result
 
-    def as_isl_set_space(self, ctx: isl.Context | None = None):
+    def as_isl_set_space(self, ctx: isl.Context | None = None) -> isl.Space:
         if self.dimtype_to_names.get(DimType.in_, []):
             raise ValueError("in-dimensions not allowed")
 
@@ -719,7 +726,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
     active_dim_types: ClassVar[frozenset[DimType]]
 
     if __debug__:
-        def __post_init__(self):
+        def __post_init__(self) -> None:
             if frozenset(self.space.dimtype_to_names) != self.active_dim_types:
                 raise ValueError(
                     f"space not suitable for '{type(self)}'")
@@ -847,7 +854,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
 class Cache:
     _cache: dict[Hashable, list[tuple[IslObject, object]]]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._cache = {}
 
 

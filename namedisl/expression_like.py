@@ -214,15 +214,15 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
     .. automethod:: gist_params
     """
 
-    def is_constant(self):
+    def is_constant(self) -> bool:
         return self._obj.is_cst()
 
-    def gist(self, set: Set):
+    def gist(self, set: Set) -> Self:
         self_a, set_a = align_two(self, set)
         return type(self)(
             cast("IslAffLikeT_co", self._obj.gist(set_a._obj)), self_a.space)
 
-    def gist_params(self, set: Set):
+    def gist_params(self, set: Set) -> Self:
         self_a, set_a = align_two(self, set)
         return type(self)(
             cast("IslAffLikeT_co", self._obj.gist_params(set_a._obj)), self_a.space)
@@ -264,20 +264,20 @@ class Aff(_NamedAffLike[isl.Aff]):
     def num_divs(self) -> int:
         return self._obj.dim(isl.dim_type.div)
 
-    def get_div(self, index: int):
+    def get_div(self, index: int) -> Aff:
         return Aff(self._obj.get_div(index), self.space)
 
-    def get_div_coefficient(self, index: int):
+    def get_div_coefficient(self, index: int) -> int:
         return self._obj.get_coefficient_val(isl.dim_type.div, index).to_python()
 
-    def get_coefficient(self, name: str):
+    def get_coefficient(self, name: str) -> int:
         dt, idx = self.space.name_to_dim[name]
         return self._obj.get_coefficient_val(dt.as_isl(), idx).to_python()
 
-    def get_constant(self):
+    def get_constant(self) -> int:
         return self._obj.get_constant_val().to_python()
 
-    def get_denominator(self):
+    def get_denominator(self) -> int:
         return self._obj.get_denominator_val().to_python()
 
 
@@ -342,13 +342,13 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             space.as_expr_space())
 
     @staticmethod
-    def from_piece_and_aff(piece: Set, aff: Aff):
+    def from_piece_and_aff(piece: Set, aff: Aff) -> PwAff:
         if not piece.space.order_equal(aff.space.as_set_space()):
             raise ValueError("spaces don't match")
 
         return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
 
-    def like_var(self: PwAff, name: str):
+    def like_var(self: PwAff, name: str) -> PwAff:
         """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
 
         dt, idx = self.space.name_to_dim[name]
@@ -376,29 +376,29 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         from .set_like import Set
         return Set(func(self_a._obj, rhs_a._obj), self_a.space.as_set_space())
 
-    def eq_set(self, rhs: int | PwAff): return self.where("=", rhs)
-    def ne_set(self, rhs: int | PwAff): return self.where("!=", rhs)
-    def ge_set(self, rhs: int | PwAff): return self.where(">=", rhs)
-    def le_set(self, rhs: int | PwAff): return self.where("<=", rhs)
-    def gt_set(self, rhs: int | PwAff): return self.where(">", rhs)
-    def lt_set(self, rhs: int | PwAff): return self.where("<", rhs)
+    def eq_set(self, rhs: int | PwAff) -> Set: return self.where("=", rhs)
+    def ne_set(self, rhs: int | PwAff) -> Set: return self.where("!=", rhs)
+    def ge_set(self, rhs: int | PwAff) -> Set: return self.where(">=", rhs)
+    def le_set(self, rhs: int | PwAff) -> Set: return self.where("<=", rhs)
+    def gt_set(self, rhs: int | PwAff) -> Set: return self.where(">", rhs)
+    def lt_set(self, rhs: int | PwAff) -> Set: return self.where("<", rhs)
 
-    def max(self, other: PwAff):
+    def max(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.max(other_a._obj), self_a.space)
 
-    def min(self, other: PwAff):
+    def min(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.min(other_a._obj), self_a.space)
 
-    def div(self, other: PwAff):
+    def div(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.div(other_a._obj), self_a.space)
 
-    def floor(self):
+    def floor(self) -> PwAff:
         return PwAff(self._obj.floor(), self.space)
 
-    def get_pieces(self):
+    def get_pieces(self) -> list[tuple[Set, Aff]]:
         set_space = self.space.as_set_space()
         from .set_like import Set
         return [
@@ -406,14 +406,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             for set, aff in self._obj.get_pieces()
         ]
 
-    def coalesce(self):
+    def coalesce(self) -> PwAff:
         return PwAff(self._obj.coalesce(), self.space)
 
-    def get_aggregate_domain(self):
+    def get_aggregate_domain(self) -> Set:
         from .set_like import Set
         return Set(self._obj.get_aggregate_domain(), self.space.as_set_space())
 
-    def union_max(self, other: PwAff):
+    def union_max(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
 
@@ -456,7 +456,7 @@ class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
     .. automethod:: __pow__
     """
 
-    def __pow__(self, other: int):
+    def __pow__(self, other: int) -> Self:
         return type(self)(cast("IslPolynomialLikeT_co", self._obj ** other), self.space)
 
 
@@ -504,7 +504,7 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     {NamedIslObject.__doc__}
     """
 
-    def get_pieces(self):
+    def get_pieces(self) -> list[tuple[Set, QPolynomial]]:
         set_space = self.space.as_set_space()
         from .set_like import Set
         return [
@@ -553,7 +553,7 @@ class MultiAff(_NamedExpressionLike[isl.MultiAff]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
 
-    def __getitem__(self, name: str):
+    def __getitem__(self, name: str) -> Aff:
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
@@ -591,13 +591,13 @@ class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
 
-    def __getitem__(self, name: str):
+    def __getitem__(self, name: str) -> PwAff:
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError(f"'{name}' does not name an output dimension")
         return PwAff(self._obj.get_at(idx), self.space.drop_dim_type(DimType.out))
 
-    def as_multi_aff(self):
+    def as_multi_aff(self) -> MultiAff:
         return MultiAff(self._obj.as_multi_aff(), self.space)
 
 
