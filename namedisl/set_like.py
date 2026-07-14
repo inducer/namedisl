@@ -51,6 +51,7 @@ THE SOFTWARE.
 
 import operator
 from dataclasses import dataclass
+from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
 from constantdict import constantdict
@@ -78,7 +79,7 @@ from .expression_like import PwAff, make_pw_multi_aff
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Sequence
+    from collections.abc import Callable, Collection, Mapping, Sequence
 
     from namedisl import Aff, PwMultiAff
 
@@ -231,7 +232,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
     __doc__ = f"""
     .. automethod:: add_eq_constraint
     .. automethod:: add_ineq_constraint
-    .. automethod:: affs
+    .. autoattribute:: affs
     .. automethod:: as_set
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -253,7 +254,16 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet]):
             self._obj.add_constraint(isl.Constraint.inequality_from_aff(aff._obj)),
             self.space)
 
-    def affs(self) -> dict[str | Literal[0], Aff]:
+    @cached_property
+    def affs(self) -> Mapping[str | Literal[0], Aff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero) to
+        :class:`PwAff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
         from .expression_like import affs_from_domain_space
         return affs_from_domain_space(self.space)
 
@@ -283,7 +293,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: coalesce
     .. automethod:: dim_max
     .. automethod:: dim_min
-    .. automethod:: pw_affs
+    .. autoattribute:: pw_affs
     .. automethod:: as_map
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -316,7 +326,16 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         return PwAff(with_cache(cache, isl.Set.dim_min, self._obj, idx),
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
-    def pw_affs(self) -> dict[str | Literal[0], PwAff]:
+    @cached_property
+    def pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`PwAff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
         from .expression_like import pw_affs_from_domain_space
         return pw_affs_from_domain_space(self.space)
 
