@@ -400,6 +400,17 @@ def align_two(
     return named_obj1, named_obj2
 
 
+def align_expr_and_set(
+    expr_obj: NamedIslObjectT, set_obj: NamedIslObjectT2,
+) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
+    space = _find_joint_space(set_obj.space, expr_obj.space.as_set_space())
+
+    set_obj = align_obj(set_obj, space)
+    expr_obj = align_obj(expr_obj, space.as_expr_space())
+
+    return expr_obj, set_obj
+
+
 def align_for_compostition(
     lhs: NamedIslObject[IslObjectT],
     lhs_dt: DimType,

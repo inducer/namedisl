@@ -86,6 +86,7 @@ from .core import (
     IslScalarExpressionLikeT,
     NamedIslObject,
     Space,
+    align_expr_and_set,
     align_two,
 )
 
@@ -229,7 +230,7 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
         return self._obj.is_cst()
 
     def gist(self, set: Set) -> Self:
-        self_a, set_a = align_two(self, set)
+        self_a, set_a = align_expr_and_set(self, set)
         return type(self)(
             cast("IslAffLikeT_co", self._obj.gist(set_a._obj)), self_a.space)
 
