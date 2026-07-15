@@ -1,6 +1,11 @@
 """
 .. currentmodule:: namedisl
 
+Constraint
+^^^^^^^^^^
+.. autoclass:: Constraint
+.. autofunction:: make_constraint
+
 Quasiconvex set
 ^^^^^^^^^^^^^^^
 .. autoclass:: BasicSet
@@ -62,6 +67,7 @@ import islpy as isl
 from .core import (
     Cache,
     DimType,
+    IslBasicT_co,
     IslMapLikeT,
     IslSetLikeT,
     IslSetOrMapLikeT,
@@ -95,6 +101,42 @@ def _compare_set_or_map_like(
     aligned_lhs, aligned_rhs = align_two(lhs, rhs)
 
     return op(aligned_lhs._obj, aligned_rhs._obj)
+
+
+@dataclass(frozen=True, eq=False)
+class Constraint(NamedIslObject[isl.Constraint]):
+    """
+    .. automethod:: equality_from_aff
+    .. automethod:: inequality_from_aff
+    .. autoattribute:: is_equality
+    .. automethod:: as_aff
+    """
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
+        {DimType.param, DimType.in_, DimType.out})
+
+    @staticmethod
+    def equality_from_aff(aff: Aff) -> Constraint:
+        return Constraint(
+            isl.Constraint.equality_from_aff(aff._obj),
+            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
+
+    @staticmethod
+    def inequality_from_aff(aff: Aff) -> Constraint:
+        return Constraint(
+            isl.Constraint.inequality_from_aff(aff._obj),
+            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
+
+    @property
+    def is_equality(self):
+        return self._obj.is_equality()
+
+    def as_aff(self) -> Aff:
+        from .expression_like import Aff
+        return Aff(self._obj.get_aff(), self.space)
+
+
+def make_constraint(obj: isl.Constraint) -> Constraint:
+    return Constraint(obj, Space.from_isl(obj, Set.active_dim_types))
 
 
 @dataclass(frozen=True, eq=False)
@@ -271,31 +313,33 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
 
 @dataclass(frozen=True, eq=False)
-class BasicSet(_NamedIslSetLike[isl.BasicSet]):
+class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
+    __doc__ = """
+    .. automethod:: get_constraints
+    """
+
+    def get_constraints(self):
+        return [Constraint(cns, self.space) for cns in self._obj.get_constraints()]
+
+
+@dataclass(frozen=True, eq=False)
+class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     __doc__ = f"""
-    .. automethod:: add_eq_constraint
-    .. automethod:: add_ineq_constraint
+    .. automethod:: add_constraint
     .. autoattribute:: affs
     .. automethod:: as_set
     {_NamedIslSetLike.__doc__}
+    {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
 
-    def add_eq_constraint(self, aff: Aff) -> BasicSet:
-        if __debug__:  # noqa: SIM102
-            if not self.space.as_expr_space().order_equal(aff.space):
+    def add_constraint(self, cns: Constraint, /) -> BasicSet:
+        if __debug__:
+            if cns.space.dim(DimType.in_):
+                raise ValueError("cannot add constraint with 'in' dimension to set")
+            if not self.space.order_equal(cns.space.drop_dim_type(DimType.in_)):
                 raise ValueError("spaces don't match")
-        return BasicSet(
-            self._obj.add_constraint(isl.Constraint.equality_from_aff(aff._obj)),
-            self.space)
-
-    def add_ineq_constraint(self, aff: Aff) -> BasicSet:
-        if __debug__:  # noqa: SIM102
-            if not self.space.as_expr_space().order_equal(aff.space):
-                raise ValueError("spaces don't match")
-        return BasicSet(
-            self._obj.add_constraint(isl.Constraint.inequality_from_aff(aff._obj)),
-            self.space)
+        return BasicSet(self._obj.add_constraint(cns._obj), self.space)
 
     @cached_property
     def affs(self) -> Mapping[str | Literal[0], Aff]:
@@ -420,15 +464,22 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
 
 
 @dataclass(frozen=True, eq=False)
-class BasicMap(_NamedIslMapLike[isl.BasicMap]):
+class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     __doc__ = f"""
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
     {_NamedIslMapLike.__doc__}
+    {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
+
+    def add_constraint(self, cns: Constraint, /) -> BasicMap:
+        if __debug__:  # ruff:ignore[collapsible-if]
+            if not self.space.order_equal(cns.space):
+                raise ValueError("spaces don't match")
+        return BasicMap(self._obj.add_constraint(cns._obj), self.space)
 
     def domain(self) -> BasicSet:
         return BasicSet(

@@ -87,10 +87,11 @@ IslExpressionLike = IslScalarExpressionLike | IslMultiExpressionLike
 
 IslSetLike = isl.BasicSet | isl.Set
 IslMapLike = isl.BasicMap | isl.Map
+IslBasic = isl.BasicSet | isl.BasicMap
 IslUnbasic = isl.Set | isl.Map
 IslSetOrMapLike = IslSetLike | IslMapLike
 IslObject = (
-    IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike)
+    IslSetOrMapLike | IslScalarExpressionLike | IslMultiExpressionLike | isl.Constraint)
 
 IslObjectT = TypeVar("IslObjectT", bound=IslObject)
 IslObjectT2 = TypeVar("IslObjectT2", bound=IslObject)
@@ -116,6 +117,11 @@ IslSetLikeT = TypeVar(
 IslMapLikeT = TypeVar(
     "IslMapLikeT",
     bound=IslMapLike,
+)
+IslBasicT_co = TypeVar(
+    "IslBasicT_co",
+    bound=IslBasic,
+    covariant=True
 )
 IslUnbasicT_co = TypeVar(
     "IslUnbasicT_co",
@@ -211,6 +217,8 @@ def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjec
     # can arise where [n] -> ... and [n] -> ... will not be considered
     # equal, and arithmetic
 
+    if isinstance(obj, isl.Constraint):
+        raise NotImplementedError("setting names on Constraints")
     if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
         return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx,
             isl.Id.read_from_str(obj.get_ctx(), name)))
@@ -464,7 +472,7 @@ def plain_is_equal(lhs: IslObjectT, rhs: IslObjectT) -> bool:
     # Expose the cheapest/strictest equality test for all isl object types.
     if isinstance(lhs, (isl.Set, isl.Map, isl.PwAff, isl.Aff, isl.MultiAff)):
         return lhs.plain_is_equal(rhs)
-    if isinstance(lhs, (isl.BasicSet, isl.BasicMap)):
+    if isinstance(lhs, (isl.BasicSet, isl.BasicMap, isl.Constraint)):
         # these don't have plain_is_equal
         return lhs.is_equal(rhs)
 

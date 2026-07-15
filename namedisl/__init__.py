@@ -47,10 +47,12 @@ from .expression_like import (
 from .set_like import (
     BasicMap,
     BasicSet,
+    Constraint,
     Map,
     Set,
     make_basic_map,
     make_basic_set,
+    make_constraint,
     make_map,
     make_map_from_domain_and_range,
     make_set,
@@ -62,6 +64,7 @@ __all__ = [
     "BasicMap",
     "BasicSet",
     "Cache",
+    "Constraint",
     "DimType",
     "Map",
     "MultiAff",
@@ -75,6 +78,7 @@ __all__ = [
     "make_aff",
     "make_basic_map",
     "make_basic_set",
+    "make_constraint",
     "make_map",
     "make_map_from_domain_and_range",
     "make_multi_aff",
@@ -97,6 +101,7 @@ _ISL_TYPE_TO_CONSTRUCTOR = {
     isl.PwQPolynomial: make_pw_qpolynomial,
     isl.MultiAff: make_multi_aff,
     isl.PwMultiAff: make_pw_multi_aff,
+    isl.Constraint: make_constraint,
     isl.BasicSet: make_basic_set,
     isl.Set: make_set,
     isl.BasicMap: make_basic_map,
@@ -124,6 +129,8 @@ def to_named(obj: isl.Set) -> Set: ...
 def to_named(obj: isl.BasicMap) -> BasicMap: ...
 @overload
 def to_named(obj: isl.Map) -> Map: ...
+@overload
+def to_named(obj: isl.Constraint) -> Constraint: ...
 
 
 def to_named(obj: IslObject) -> (
@@ -132,5 +139,6 @@ def to_named(obj: IslObject) -> (
     | MultiAff | PwMultiAff
     | BasicSet | Set
     | BasicMap | Map
+    | Constraint
 ):
     return _ISL_TYPE_TO_CONSTRUCTOR[type(obj)](obj)  # pyright: ignore[reportCallIssue, reportUnknownVariableType, reportArgumentType]
