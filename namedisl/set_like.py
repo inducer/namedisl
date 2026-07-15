@@ -144,6 +144,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     __doc__ = """
     .. automethod:: is_empty
     .. automethod:: plain_is_empty
+    .. automethod:: plain_is_universe
     .. automethod:: universe_like_me
     .. automethod:: eliminate
     .. automethod:: project_out
@@ -164,6 +165,9 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
     def plain_is_empty(self) -> bool:
         return self._obj.plain_is_empty()
+
+    def plain_is_universe(self) -> bool:
+        return self._obj.plain_is_universe()
 
     def universe_like_me(self) -> Self:
         return type(self)(type(self._obj).universe(self._obj.space), self.space)
