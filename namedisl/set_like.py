@@ -471,7 +471,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def apply_range(self, other: Self) -> Self:
         self_a, other_a = align_for_compostition(self, DimType.out, other, DimType.in_)
         return type(self)(
-            self._obj.apply_range(other_a._obj),
+            self_a._obj.apply_range(other_a._obj),
             Space(constantdict({
                 DimType.param: self_a.space.dimtype_to_names[DimType.param],
                 DimType.in_: self_a.space.dimtype_to_names[DimType.in_],
@@ -481,7 +481,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def apply_domain(self, other: Self) -> Self:
         self_a, other_a = align_for_compostition(self, DimType.in_, other, DimType.out)
         return type(self)(
-            self._obj.apply_domain(other_a._obj),
+            self_a._obj.apply_domain(other_a._obj),
             Space(constantdict({
                 DimType.param: self_a.space.dimtype_to_names[DimType.param],
                 DimType.in_: other_a.space.dimtype_to_names[DimType.in_],
