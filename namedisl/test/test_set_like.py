@@ -616,6 +616,11 @@ def test_map_as_pw_multi_aff():
     o2 = nisl.make_pw_multi_aff("{ [i] -> [io = (floor((i)/32)), ii = ((i) mod 32)] }")
     assert o1 == o2
 
+
+def test_map_domain_produces_suitable_space() -> None:
+    m = nisl.make_map("{ [x] -> [y] : y = x + 1 }")
+    m.domain()
+
 # }}}
 
 
@@ -636,6 +641,11 @@ def test_basic_map_from_map() -> None:
 
     print(named_map._obj)
     print(named_map)
+
+
+def test_basic_map_domain_produces_suitable_space() -> None:
+    m = nisl.make_basic_map("{ [x] -> [y] : y = x + 1 }")
+    m.domain()
 
 
 # }}}
