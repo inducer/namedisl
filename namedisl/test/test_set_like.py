@@ -644,8 +644,8 @@ def test_basic_map_from_map() -> None:
 
 
 def test_basic_map_domain_produces_suitable_space() -> None:
-     m = nisl.make_basic_map("{ [x] -> [y] : y = x + 1 }")
-     m.domain()
+    m = nisl.make_basic_map("{ [x] -> [y] : y = x + 1 }")
+    m.domain()
 
 
 # }}}

@@ -370,7 +370,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap]):
 
     def domain(self) -> BasicSet:
         return BasicSet(
-            self._obj.domain(), 
+            self._obj.domain(),
             self.space
                 .drop_dim_type(DimType.out)
                 .move_dim_type(DimType.in_, DimType.out)
@@ -459,7 +459,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
 
     def domain(self) -> Set:
         return Set(
-            self._obj.domain(), 
+            self._obj.domain(),
             self.space
                 .drop_dim_type(DimType.out)
                 .move_dim_type(DimType.in_, DimType.out)
