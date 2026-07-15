@@ -136,7 +136,8 @@ def test_set_add_constraint_uses_named_dimensions() -> None:
     bset = nisl.make_basic_set("[m,n,p] -> { [j, i] }")
 
     v = bset.affs
-    constrained = bset.add_eq_constraint(v["i"] - v["j"] + 1)
+    constrained = bset.add_constraint(
+        nisl.Constraint.equality_from_aff(v["i"] - v["j"] + 1))
 
     assert constrained.as_set().equals(nisl.make_set("{ [j, i] : i = j - 1 }"))
 
