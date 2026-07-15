@@ -209,6 +209,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     __doc__ = """
     .. automethod:: equate_dims
     .. automethod:: as_pw_multi_aff
+    .. automethod:: remove_redundancies
     """
 
     def equate_dims(
@@ -231,6 +232,10 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
     def as_pw_multi_aff(self) -> PwMultiAff:
         return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
+
+    def remove_redundancies(self):
+        return type(self)(
+            cast("IslUnbasicT_co", self._obj.remove_redundancies()), self.space)
 
 
 @dataclass(frozen=True, eq=False)
