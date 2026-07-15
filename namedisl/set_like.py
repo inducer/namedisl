@@ -107,6 +107,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: project_out
     .. automethod:: project_out_except
     .. automethod:: gist
+    .. automethod:: remove_divs
     .. automethod:: __and__
     .. automethod:: __or__
     .. automethod:: __sub__
@@ -169,6 +170,12 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         self_aligned, context_aligned = align_two(self, context)
         return type(self)(
             self_aligned._obj.gist(context_aligned._obj),
+            self.space,
+        )
+
+    def remove_divs(self) -> Self:
+        return type(self)(
+            cast("IslSetOrMapLikeT_co", self._obj.remove_divs()),
             self.space,
         )
 
