@@ -506,6 +506,15 @@ def test_map_apply_range_can_equate_renamed_collisions_from_mapping() -> None:
     )
 
 
+def test_map_apply_range_unaligned_interface() -> None:
+    lhs = nisl.make_map("{ [x, y] -> [b = x, a = y] }")
+    rhs = nisl.make_map("{ [a, b] -> [u = a, v = b] }")
+
+    ref = nisl.make_map("{ [x, y] -> [u = y, v = x] }")
+
+    assert ref == lhs.apply_range(rhs)
+
+
 def test_equate_dims_mapping_rejects_unknown_name() -> None:
     map_ = nisl.make_map("{ [x] -> [x_out] }")
 
@@ -536,6 +545,15 @@ def test_map_apply_domain_can_explicitly_rename_and_equate_collision() -> None:
         .dim_min("x_out")
         == nisl.make_pw_aff("{ [(4)] }")
     )
+
+
+def test_map_apply_domain_unaligned_interface() -> None:
+    lhs = nisl.make_map("{ [b, a] -> [u = a, v = b] }")
+    rhs = nisl.make_map("{ [x, y] -> [a = x, b = y] }")
+
+    ref = nisl.make_map("{ [x, y] -> [u = x, v = y] }")
+
+    assert ref == lhs.apply_domain(rhs)
 
 
 def test_duplicate_map_names_are_rejected() -> None:
