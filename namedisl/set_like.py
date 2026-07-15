@@ -126,17 +126,40 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     def universe_like_me(self) -> Self:
         return type(self)(type(self._obj).universe(self._obj.space), self.space)
 
-    def eliminate(self: Self, names: Collection[str]) -> Self:
+    def eliminate(self,
+                names: Collection[str],
+                *, cache: Cache | None = None
+            ) -> Self:
+        "Keeps the dimensions, but eliminates constraints."
         obj = self._obj
         for dt, chunks in chunked_dims_by_type(
                 names, self.space.name_to_dim).items():
             for start, count in chunks:
-                obj = cast("IslSetOrMapLikeT_co",
-                    obj.eliminate(dt.as_isl(), start, count))
+                obj = with_cache(
+                    cache, type(obj).eliminate, obj, dt.as_isl(), start, count)  # pyright: ignore[reportArgumentType]
 
-        return type(self)(obj, self.space)
+        return type(self)(obj, self.space)  # pyright: ignore[reportArgumentType]
 
-    def project_out(self: Self, names: str | Collection[str]) -> Self:
+    def eliminate_except(
+                self,
+                names_to_keep: Collection[str],
+                *, cache: Cache | None = None,
+            ) -> Self:
+        "Keeps the dimensions, but eliminates constraints."
+        if isinstance(names_to_keep, str):
+            raise TypeError("names_to_keep must be a collection of str")
+
+        names_to_eliminate = [
+            name for name in self.space.name_to_dim if name not in names_to_keep
+        ]
+
+        return self.eliminate(names_to_eliminate, cache=cache)
+
+    def project_out(self,
+                names: str | Collection[str],
+                *, cache: Cache | None = None,
+            ) -> Self:
+        "Eliminates the dimensions and constraints."
         new_dimtype_to_names = {
             dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
         obj = self._obj
@@ -145,18 +168,20 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
                 names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
                 del new_dimtype_to_names[dt][start:start+count]
-                obj = cast("IslSetOrMapLikeT_co",
-                    obj.project_out(dt.as_isl(), start, count))
+                obj = with_cache(
+                    cache, type(obj).project_out, obj, dt.as_isl(), start, count)  # pyright: ignore[reportArgumentType]
 
-        return type(self)(obj, Space(constantdict({
+        return type(self)(obj, Space(constantdict({  # pyright: ignore[reportArgumentType]
             dt: tuple(names)
             for dt, names in new_dimtype_to_names.items()
         })))
 
     def project_out_except(
-        self: Self,
-        names_to_keep: Collection[str],
-    ) -> Self:
+                self,
+                names_to_keep: Collection[str],
+                *, cache: Cache | None = None,
+            ) -> Self:
+        "Eliminates the dimensions and constraints."
         if isinstance(names_to_keep, str):
             raise TypeError("names_to_keep must be a collection of str")
 
@@ -164,7 +189,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
             name for name in self.space.name_to_dim if name not in names_to_keep
         ]
 
-        return self.project_out(names_to_project_out)
+        return self.project_out(names_to_project_out, cache=cache)
 
     def gist(self, context: Self) -> Self:
         self_aligned, context_aligned = align_two(self, context)
