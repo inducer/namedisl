@@ -131,8 +131,13 @@ class Constraint(NamedIslObject[isl.Constraint]):
         return self._obj.is_equality()
 
     def as_aff(self) -> Aff:
+        if self.space.dim(DimType.in_):
+            raise ValueError("cannot convert constraint with 'in' dimensions to aff")
         from .expression_like import Aff
-        return Aff(self._obj.get_aff(), self.space)
+        return Aff(
+            self._obj.get_aff(),
+            self.space
+            .drop_dim_type(DimType.in_).move_dim_type(DimType.out, DimType.in_))
 
 
 def make_constraint(obj: isl.Constraint) -> Constraint:
