@@ -353,7 +353,7 @@ def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
 class PwAff(_NamedAffLike[isl.PwAff]):
     __doc__ = f"""
     .. automethod:: from_piece_and_aff
-    .. automethod:: like_var
+    .. automethod:: var_pw_aff
     .. automethod:: where
     .. automethod:: get_pieces
     .. automethod:: coalesce
@@ -387,12 +387,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
 
         return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
 
-    def like_var(self: PwAff, name: str) -> PwAff:
+    def var_pw_aff(self: PwAff, name: str) -> PwAff:
         """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
 
         dt, idx = self.space.name_to_dim[name]
+        if dt == DimType.in_:
+            dt = DimType.out
         return PwAff(
-            isl.PwAff.var_on_domain(self._obj.space, dt.as_isl(), idx),
+            isl.PwAff.var_on_domain(self._obj.get_domain_space(), dt.as_isl(), idx),
             self.space)
 
     _op_to_func: ClassVar[dict[str, Callable[[isl.PwAff, isl.PwAff], isl.Set]]] = {

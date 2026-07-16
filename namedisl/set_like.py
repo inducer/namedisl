@@ -393,6 +393,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. autoattribute:: pw_affs
+    .. autoattribute:: var_pw_aff
     .. automethod:: as_map
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -437,6 +438,14 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         """
         from .expression_like import pw_affs_from_domain_space
         return pw_affs_from_domain_space(self.space)
+
+    def var_pw_aff(self: Self, name: str) -> PwAff:
+        """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
+
+        dt, idx = self.space.name_to_dim[name]
+        return PwAff(
+            isl.PwAff.var_on_domain(self._obj.space, dt.as_isl(), idx),
+            self.space.as_expr_space())
 
     def as_map(self, in_names: Collection[str]) -> Map:
         result = isl.Map.universe(self._obj.space)
