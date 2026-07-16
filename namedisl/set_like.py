@@ -146,6 +146,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: plain_is_empty
     .. automethod:: plain_is_universe
     .. automethod:: universe_like_me
+    .. automethod:: fix_dim
     .. automethod:: eliminate
     .. automethod:: project_out
     .. automethod:: project_out_except
@@ -171,6 +172,13 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
     def universe_like_me(self) -> Self:
         return type(self)(type(self._obj).universe(self._obj.space), self.space)
+
+    def fix_dim(self, name: str, value: isl.Val | int) -> Self:
+        dt, idx = self.space.name_to_dim[name]
+        return type(self)(
+            cast("IslSetOrMapLikeT_co", self._obj.fix_val(dt.as_isl(), idx, value)),
+            self.space,
+        )
 
     def eliminate(self,
                 names: Collection[str],
