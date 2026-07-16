@@ -369,6 +369,8 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: floor
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
+    .. automethod:: union_min
+    .. automethod:: union_add
     {_NamedAffLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
@@ -459,6 +461,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def union_max(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
         return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
+
+    def union_min(self, other: PwAff) -> PwAff:
+        self_a, other_a = align_two(self, other)
+        return PwAff(self_a._obj.union_min(other_a._obj), self_a.space)
+
+    def union_add(self, other: PwAff) -> PwAff:
+        self_a, other_a = align_two(self, other)
+        return PwAff(self_a._obj.union_add(other_a._obj), self_a.space)
 
 
 @overload
