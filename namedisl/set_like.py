@@ -249,7 +249,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         self_aligned, context_aligned = align_two(self, context)
         return type(self)(
             self_aligned._obj.gist(context_aligned._obj),
-            self.space,
+            self_aligned.space,
         )
 
     def remove_divs(self) -> Self:
