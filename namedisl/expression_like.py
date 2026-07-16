@@ -140,6 +140,7 @@ def _apply_expression_binary_op(
 @dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     __doc__ = """
+    .. automethod:: __neg__
     .. automethod:: __add__
     .. automethod:: __radd__
     .. automethod:: __sub__
@@ -153,6 +154,9 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_})
+
+    def __neg__(self):
+        return type(self)(cast("IslExpressionLikeT_co", self._obj.neg()), self.space)
 
     def __add__(
         self: Self,
@@ -225,6 +229,7 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
+    .. automethod:: __mod__
     """
 
     def is_constant(self) -> bool:
@@ -239,6 +244,9 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
         self_a, set_a = align_two(self, set)
         return type(self)(
             cast("IslAffLikeT_co", self._obj.gist_params(set_a._obj)), self_a.space)
+
+    def __mod__(self, other: isl.Val | int) -> Self:
+        return type(self)(cast("IslAffLikeT_co", self._obj.mod_val(other)), self.space)
 
 
 @dataclass(frozen=True, eq=False)
