@@ -230,6 +230,10 @@ def _restore_names(
     obj: IslObjectT, dimtype_to_names: DimTypeToNames,
 ) -> IslObjectT:
     for dt, names in dimtype_to_names.items():
+        if dt == DimType.param:
+            # Those are kept up to date anyway because isl requires it.
+            continue
+
         for name, dim in zip(names, range(obj.dim(dt.as_isl())), strict=True):
             obj = _set_dim_name(obj, dt, dim, name)
 
