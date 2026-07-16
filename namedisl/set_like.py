@@ -344,11 +344,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 @dataclass(frozen=True, eq=False)
 class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
     __doc__ = """
-    .. automethod:: get_constraints
     """
-
-    def get_constraints(self):
-        return [Constraint(cns, self.space) for cns in self._obj.get_constraints()]
 
 
 @dataclass(frozen=True, eq=False)
@@ -357,6 +353,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     .. automethod:: add_constraint
     .. autoattribute:: affs
     .. automethod:: as_set
+    .. automethod:: get_constraints
     {_NamedIslSetLike.__doc__}
     {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -369,6 +366,11 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
             if not self.space.order_equal(cns.space.drop_dim_type(DimType.in_)):
                 raise ValueError("spaces don't match")
         return BasicSet(self._obj.add_constraint(cns._obj), self.space)
+
+    def get_constraints(self):
+        return [
+            Constraint(cns, self.space.with_empty_dim_type(DimType.in_))
+            for cns in self._obj.get_constraints()]
 
     @cached_property
     def affs(self) -> Mapping[str | Literal[0], Aff]:
@@ -508,6 +510,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     .. automethod:: range
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
+    .. automethod:: get_constraints
     {_NamedIslMapLike.__doc__}
     {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -518,6 +521,10 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
             if not self.space.order_equal(cns.space):
                 raise ValueError("spaces don't match")
         return BasicMap(self._obj.add_constraint(cns._obj), self.space)
+
+    def get_constraints(self):
+        return [
+            Constraint(cns, self.space) for cns in self._obj.get_constraints()]
 
     def domain(self) -> BasicSet:
         return BasicSet(
