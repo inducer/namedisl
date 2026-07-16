@@ -110,6 +110,8 @@ class Constraint(NamedIslObject[isl.Constraint]):
     .. automethod:: inequality_from_aff
     .. autoattribute:: is_equality
     .. automethod:: as_aff
+    .. automethod:: as_basic_set
+    .. automethod:: as_basic_map
     """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.out})
@@ -138,6 +140,16 @@ class Constraint(NamedIslObject[isl.Constraint]):
             self._obj.get_aff(),
             self.space
             .drop_dim_type(DimType.in_).move_dim_type(DimType.out, DimType.in_))
+
+    def as_basic_set(self):
+        return BasicSet(
+            isl.BasicSet.universe(self._obj.get_space()) .add_constraint(self._obj),
+            self.space.drop_dim_type(DimType.in_))
+
+    def as_basic_map(self):
+        return BasicMap(
+            isl.BasicMap.universe(self._obj.get_space()) .add_constraint(self._obj),
+            self.space)
 
 
 def make_constraint(obj: isl.Constraint) -> Constraint:
