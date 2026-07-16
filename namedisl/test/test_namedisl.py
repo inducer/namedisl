@@ -159,6 +159,20 @@ def test_move_dims_multiple_names_preserves_relative_order() -> None:
     assert moved == to_named(expected)
 
 
+def test_move_dims_to_parameter_restores_underlying_names() -> None:
+    named = nisl.make_set("{ [x, y] : x = 5 and y = 5 }")
+    anonymous = nisl.make_set("{ [x] : 0 <= x < 4 }").add_dims(
+        DimType.out, ("y",)
+    )
+
+    moved = (named | anonymous).move_dims({"y"}, DimType.param)
+
+    expected = nisl.make_set("""
+        [y] -> { [x] : 0 <= x < 4; [x = 5] : y = 5 }
+        """)
+    assert moved.equals(expected)
+
+
 def test_rename_dims_set() -> None:
     named_set = nisl.make_set("[p] -> { [x, y] : x < p and y < p }")
 

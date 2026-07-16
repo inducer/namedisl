@@ -805,8 +805,13 @@ class NamedIslObject(Generic[IslObjectT_co]):
                 new_dimtype_to_names[dest_dt].extend(self.space.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
 
-                if isinstance(obj, isl.PwMultiAff):
+                if isinstance(obj, (isl.PwMultiAff, isl.Constraint)):
                     raise NotImplementedError
+
+                if dest_dt == DimType.param:
+                    for offset, name in enumerate(
+                            self.space.dimtype_to_names[source_dt][start:start+count]):
+                        obj = _set_dim_name(obj, source_dt, start+offset, name)
 
                 obj = cast("IslObjectT_co",
                     obj.move_dims(
