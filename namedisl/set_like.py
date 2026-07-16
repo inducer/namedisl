@@ -303,6 +303,11 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.out})
 
+    if __debug__:
+        def __post_init__(self) -> None:
+            assert not self._obj.is_params()
+            return super().__post_init__()
+
     def is_bounded(self) -> bool:
         return self._obj.is_bounded()
 
@@ -399,6 +404,11 @@ def make_basic_set(src: isl.BasicSet) -> BasicSet: ...
 
 def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> BasicSet:
     obj = isl.BasicSet(src, ctx) if isinstance(src, str) else src
+
+    if obj.is_params():
+        # shield the user from 'param domain' complexity
+        obj = obj.from_params()
+
     return BasicSet(obj, Space.from_isl(obj, BasicSet.active_dim_types))
 
 
@@ -486,6 +496,11 @@ def make_set(src: isl.Set) -> Set: ...
 
 def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
     obj = isl.Set(src, ctx) if isinstance(src, str) else src
+
+    if obj.is_params():
+        # shield the user from 'param domain' complexity
+        obj = obj.from_params()
+
     return Set(obj, Space.from_isl(obj, Set.active_dim_types))
 
 

@@ -387,7 +387,10 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         if not piece.space.order_equal(aff.space.as_set_space()):
             raise ValueError("spaces don't match")
 
-        return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
+        if aff.space.dim(DimType.in_):
+            return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
+        else:
+            return PwAff(isl.PwAff.alloc(piece._obj.params(), aff._obj), aff.space)
 
     def var_pw_aff(self: PwAff, name: str) -> PwAff:
         """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
@@ -419,7 +422,10 @@ class PwAff(_NamedAffLike[isl.PwAff]):
                 self.space)
         self_a, rhs_a = align_two(self, rhs)
         from .set_like import Set
-        return Set(func(self_a._obj, rhs_a._obj), self_a.space.as_set_space())
+        res_set = func(self_a._obj, rhs_a._obj)
+        return Set(
+            res_set.from_params() if res_set.is_params() else res_set,
+            self_a.space.as_set_space())
 
     def eq_set(self, rhs: int | PwAff) -> Set: return self.where("=", rhs)
     def ne_set(self, rhs: int | PwAff) -> Set: return self.where("!=", rhs)
@@ -447,7 +453,9 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         set_space = self.space.as_set_space()
         from .set_like import Set
         return [
-            (Set(set, set_space), Aff(aff, self.space))
+            (Set(set.from_params() if set.is_params() else set,
+                set_space),
+                Aff(aff, self.space))
             for set, aff in self._obj.get_pieces()
         ]
 
@@ -456,7 +464,10 @@ class PwAff(_NamedAffLike[isl.PwAff]):
 
     def get_aggregate_domain(self) -> Set:
         from .set_like import Set
-        return Set(self._obj.get_aggregate_domain(), self.space.as_set_space())
+        agg_domain = self._obj.get_aggregate_domain()
+        return Set(
+            agg_domain.from_params() if agg_domain.is_params() else agg_domain,
+            self.space.as_set_space())
 
     def union_max(self, other: PwAff) -> PwAff:
         self_a, other_a = align_two(self, other)
