@@ -754,9 +754,14 @@ class NamedIslObject(Generic[IslObjectT_co]):
 
     if __debug__:
         def __post_init__(self) -> None:
-            if frozenset(self.space.dimtype_to_names) != self.active_dim_types:
+            space = self.space
+            if frozenset(space.dimtype_to_names) != self.active_dim_types:
                 raise ValueError(
                     f"space not suitable for '{type(self)}'")
+            isl_space = self._obj.space
+            for dt in self.active_dim_types:
+                if isl_space.dim(dt.as_isl()) != space.dim(dt):
+                    raise ValueError(f"space dimensions for {dt} don't match")
 
     def add_dims(
         self, dt: DimType, names_to_add: Collection[str], /
