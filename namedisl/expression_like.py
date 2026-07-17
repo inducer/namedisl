@@ -237,8 +237,13 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
 
     def gist(self, set: Set) -> Self:
         self_a, set_a = align_expr_and_set(self, set)
+        if self_a._obj.get_domain_space().is_params():
+            set_a_obj = set_a._obj.params()
+        else:
+            set_a_obj = set_a._obj
+
         return type(self)(
-            cast("IslAffLikeT_co", self_a._obj.gist(set_a._obj)), self_a.space)
+            cast("IslAffLikeT_co", self_a._obj.gist(set_a_obj)), self_a.space)
 
     def gist_params(self, set: Set) -> Self:
         self_a, set_a = align_expr_and_set(self, set)
