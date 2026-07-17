@@ -766,6 +766,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
     def add_dims(
         self, dt: DimType, names_to_add: Collection[str], /
     ) -> Self:
+        if isinstance(names_to_add, str):
+            raise TypeError("names_to_add may not be a plain string")
+
         all_names = [*names_to_add, *self.space.names]
         if len(set(all_names)) != len(all_names):
             raise ValueError("duplicate names after addition")
