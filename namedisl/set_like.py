@@ -424,6 +424,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. autoattribute:: pw_affs
     .. autoattribute:: var_pw_aff
     .. automethod:: as_map
+    .. automethod:: as_basic
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
@@ -484,6 +485,15 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
             DimType.in_: ()
         })))
         return named_map.move_dims(in_names, DimType.in_)
+
+    def as_basic(self) -> BasicSet:
+        """Will only succeed if self consists of a single piece.
+        Try :meth:`coalesce` if not.
+        """
+        bss = self._obj.get_basic_sets()
+        if len(bss) > 1:
+            raise ValueError("set has multiple basic sets")
+        return BasicSet(bss[0], self.space)
 
 
 @overload
@@ -616,6 +626,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: intersect_range
     .. automethod:: apply_range
     .. automethod:: apply_domain
+    .. automethod:: as_basic
     {_NamedIslSetOrMapLike.__doc__}
     {_NamedIslUnbasic.__doc__}
     {_NamedIslMapLike.__doc__}
@@ -674,6 +685,15 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
                 DimType.in_: other_a.space.dimtype_to_names[DimType.in_],
                 DimType.out: self.space.dimtype_to_names[DimType.out],
             })))
+
+    def as_basic(self) -> BasicMap:
+        """Will only succeed if self consists of a single piece.
+        Try :meth:`coalesce` if not.
+        """
+        bms = self._obj.get_basic_maps()
+        if len(bms) > 1:
+            raise ValueError("set has multiple basic sets")
+        return BasicMap(bms[0], self.space)
 
 
 @overload
