@@ -867,7 +867,6 @@ class NamedIslObject(Generic[IslObjectT_co]):
             str(self.as_isl())
         )
         key_builder.rec(key_hash, semantic_key)
-        
 
     @override
     def __hash__(self) -> int:
