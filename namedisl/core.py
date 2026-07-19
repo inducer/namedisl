@@ -860,6 +860,15 @@ class NamedIslObject(Generic[IslObjectT_co]):
         object.__setattr__(self, "_isl_names_ok", True)
         return res
 
+    def update_persistent_hash(self, key_hash, key_builder) -> None:
+        semantic_key = (
+            type(self),
+            self.space.dimtype_to_names,
+            str(self.as_isl())
+        )
+        key_builder.rec(key_hash, semantic_key)
+        
+
     @override
     def __hash__(self) -> int:
         return hash(self._obj)
