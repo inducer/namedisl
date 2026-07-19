@@ -553,6 +553,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_maps
+    .. automethod:: coalesce
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
@@ -573,6 +574,9 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
 
     def get_basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
+
+    def coalesce(self) -> Self:
+        return type(self)(self._obj.coalesce(), self.space)
 
     def domain(self) -> Set:
         return Set(
