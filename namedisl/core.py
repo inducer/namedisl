@@ -858,7 +858,8 @@ class NamedIslObject(Generic[IslObjectT_co]):
             dim_type, idx = self.space.name_to_dim[old_name]
 
             # isl doesn't like unnamed param dimensions. Make it happy.
-            obj = _set_dim_name(obj, dim_type, idx, new_name)
+            if dim_type == DimType.param:
+                obj = _set_dim_name(obj, dim_type, idx, new_name)
 
             new_dimtype_to_names[dim_type][idx] = new_name
 
