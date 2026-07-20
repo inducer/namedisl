@@ -322,6 +322,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     .. automethod:: equate_dims
     .. automethod:: as_pw_multi_aff
     .. automethod:: remove_redundancies
+    .. automethod:: coalesce
     """
 
     def equate_dims(
@@ -348,6 +349,9 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     def remove_redundancies(self):
         return type(self)(
             cast("IslUnbasicT_co", self._obj.remove_redundancies()), self.space)
+
+    def coalesce(self) -> Self:
+        return type(self)(cast("IslUnbasicT_co", self._obj.coalesce()), self.space)
 
 
 @dataclass(frozen=True, eq=False)
@@ -422,7 +426,6 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_sets
-    .. automethod:: coalesce
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. autoattribute:: var_pw_affs
@@ -442,9 +445,6 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
 
     def get_basic_sets(self) -> list[BasicSet]:
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
-
-    def coalesce(self) -> Self:
-        return type(self)(self._obj.coalesce(), self.space)
 
     def dim_max(self, name: str, *, cache: Cache | None = None) -> PwAff:
         dt, idx = self.space.name_to_dim[name]
@@ -615,7 +615,6 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: complement
     .. automethod:: convex_hull
     .. automethod:: get_basic_maps
-    .. automethod:: coalesce
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
@@ -640,9 +639,6 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
 
     def get_basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
-
-    def coalesce(self) -> Self:
-        return type(self)(self._obj.coalesce(), self.space)
 
     def domain(self) -> Set:
         return Set(
