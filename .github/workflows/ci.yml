@@ -18,8 +18,8 @@ jobs:
         name: Ruff
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v4
-        -   uses: actions/setup-python@v5
+        -   uses: actions/checkout@v7
+        -   uses: actions/setup-python@v7
         -   name: "Main Script"
             run: |
                 pip install ruff
@@ -29,15 +29,15 @@ jobs:
         name: Typos
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v7
         -   uses: crate-ci/typos@master
 
     validate_cff:
         name: Validate CITATION.cff
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v4
-        -   uses: actions/setup-python@v5
+        -   uses: actions/checkout@v7
+        -   uses: actions/setup-python@v7
             with:
                 python-version: '3.x'
         -   run: |
@@ -47,9 +47,9 @@ jobs:
     basedpyright:
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v7
         -
-            uses: actions/setup-python@v5
+            uses: actions/setup-python@v7
             with:
                 python-version: '3.x'
         -   name: "Main Script"
@@ -69,9 +69,9 @@ jobs:
                 python-version: ["3.10", "3.12", "3.x"]
                 os: [ubuntu-latest, macos-latest]
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v7
         -
-            uses: actions/setup-python@v5
+            uses: actions/setup-python@v7
             with:
                 python-version: ${{ matrix.python-version }}
         -   name: "Main Script"
@@ -85,9 +85,9 @@ jobs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v7
         -
-            uses: actions/setup-python@v5
+            uses: actions/setup-python@v7
             with:
                 python-version: '3.x'
         -   name: "Main Script"
