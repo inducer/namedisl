@@ -630,6 +630,12 @@ def test_map_domain_produces_suitable_space() -> None:
     m = nisl.make_map("{ [x] -> [y] : y = x + 1 }")
     m.domain()
 
+
+def test_map_as_set_and_back() -> None:
+    m = nisl.make_map("[n] -> { [x] -> [y] : y = x + 1 }")
+    m2 = m.as_set().as_map(["x"])
+    assert m.equals(m2)
+
 # }}}
 
 

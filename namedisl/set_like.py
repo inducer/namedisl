@@ -631,6 +631,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: apply_range
     .. automethod:: apply_domain
     .. automethod:: as_basic
+    .. automethod:: as_set
     {_NamedIslSetOrMapLike.__doc__}
     {_NamedIslUnbasic.__doc__}
     {_NamedIslMapLike.__doc__}
@@ -698,6 +699,10 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
         if len(bms) > 1:
             raise ValueError("set has multiple basic sets")
         return BasicMap(bms[0], self.space)
+
+    def as_set(self) -> Set:
+        result = self.move_dims(self.space.in_names, DimType.out)
+        return result.range()
 
 
 @overload
