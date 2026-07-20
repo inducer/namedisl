@@ -428,6 +428,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. autoattribute:: var_pw_affs
     .. automethod:: as_map
     .. automethod:: as_basic
+    {_NamedIslUnbasic.__doc__}
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
