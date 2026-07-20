@@ -389,7 +389,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
 
     @staticmethod
     def from_piece_and_aff(piece: Set, aff: Aff) -> PwAff:
-        if not piece.space.order_equal(aff.space.as_set_space()):
+        if not piece.space.order_equals(aff.space.as_set_space()):
             raise ValueError("spaces don't match")
 
         if aff.space.dim(DimType.in_):

@@ -401,7 +401,7 @@ def align_obj(
 def align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
-    if named_obj1.space.order_equal(named_obj2.space):
+    if named_obj1.space.order_equals(named_obj2.space):
         return named_obj1, named_obj2
 
     space = _find_joint_space(named_obj1.space, named_obj2.space)
@@ -508,8 +508,8 @@ class Space:
     .. automethod:: from_isl
     .. automethod:: __eq__
     .. automethod:: __hash__
-    .. automethod:: order_equal
-    .. automethod:: semantically_equal
+    .. automethod:: order_equals
+    .. automethod:: semantically_equals
     .. automethod:: __contains__
     .. autoattribute:: name_to_dim
     .. autoattribute:: dimtype_to_name_sets
@@ -567,19 +567,19 @@ class Space:
             return False
         # - consistent with hash
         # - the strictest/cheapest possible check
-        return self.order_equal(other)
+        return self.order_equals(other)
 
     @override
     def __hash__(self) -> int:
         return hash((type(self), self.dimtype_to_names))
 
-    def order_equal(self, other: Space) -> bool:
+    def order_equals(self, other: Space) -> bool:
         if self is other:
             return True
 
         return self.dimtype_to_names == other.dimtype_to_names
 
-    def semantically_equal(self, other: Space) -> bool:
+    def semantically_equals(self, other: Space) -> bool:
         if self is other:
             return True
         if not isinstance(other, Space):
@@ -887,7 +887,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
             return NotImplemented
         other = cast("Self", other)
 
-        if not self.space.order_equal(other.space):
+        if not self.space.order_equals(other.space):
             return False
 
         return plain_is_equal(self._obj, other._obj)
