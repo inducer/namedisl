@@ -769,6 +769,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
         if isinstance(names_to_add, str):
             raise TypeError("names_to_add may not be a plain string")
 
+        if not names_to_add:
+            return self
+
         all_names = [*names_to_add, *self.space.names]
         if len(set(all_names)) != len(all_names):
             raise ValueError("duplicate names after addition")
@@ -842,6 +845,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
 
         new_dimtype_to_names = {
             dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
+
+        if not renaming:
+            return self
 
         obj = self._obj
         for old_name, new_name in renaming:
