@@ -149,6 +149,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     .. automethod:: __rmul__
     .. automethod:: __bool__
     .. automethod:: is_zero
+    .. automethod:: plain_is_zero
     .. automethod:: equals
     """
 
@@ -194,7 +195,10 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     ) -> Self:
         return cast("Self", _apply_expression_binary_op(other, self, operator.mul))
 
-    def __bool__(self) -> bool:
+    def __bool__(self):
+        raise RuntimeError("use plain_is_zero instead of truthiness")
+
+    def plain_is_zero(self) -> bool:
         if isinstance(self._obj,
                       (isl.PwAff, isl.PwQPolynomial, isl.QPolynomial,
                           isl.MultiAff, isl.PwMultiAff)):
