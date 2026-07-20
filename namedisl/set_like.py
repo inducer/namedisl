@@ -632,6 +632,8 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: apply_domain
     .. automethod:: as_basic
     .. automethod:: as_set
+    .. autoattribute:: domain_var_pw_affs
+    .. autoattribute:: range_var_pw_affs
     {_NamedIslSetOrMapLike.__doc__}
     {_NamedIslUnbasic.__doc__}
     {_NamedIslMapLike.__doc__}
@@ -703,6 +705,35 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def as_set(self) -> Set:
         result = self.move_dims(self.space.in_names, DimType.out)
         return result.range()
+
+    @cached_property
+    def domain_var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`PwAff`\ s for the domain variables of *self*
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+        from .expression_like import pw_affs_from_domain_space
+        return pw_affs_from_domain_space(
+            self.space
+            .drop_dim_type(DimType.out)
+            .move_dim_type(DimType.in_, DimType.out))
+
+    @cached_property
+    def range_var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`PwAff`\ s for the domain variables of *self*
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+        from .expression_like import pw_affs_from_domain_space
+        return pw_affs_from_domain_space(self.space.drop_dim_type(DimType.out))
 
 
 @overload
