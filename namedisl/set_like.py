@@ -368,7 +368,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
         if __debug__:
             if cns.space.dim(DimType.in_):
                 raise ValueError("cannot add constraint with 'in' dimension to set")
-            if not self.space.order_equal(cns.space.drop_dim_type(DimType.in_)):
+            if not self.space.order_equals(cns.space.drop_dim_type(DimType.in_)):
                 raise ValueError("spaces don't match")
         return BasicSet(self._obj.add_constraint(cns._obj), self.space)
 
@@ -543,7 +543,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
 
     def add_constraint(self, cns: Constraint, /) -> BasicMap:
         if __debug__:  # ruff:ignore[collapsible-if]
-            if not self.space.order_equal(cns.space):
+            if not self.space.order_equals(cns.space):
                 raise ValueError("spaces don't match")
         return BasicMap(self._obj.add_constraint(cns._obj), self.space)
 

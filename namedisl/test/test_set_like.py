@@ -211,7 +211,7 @@ def test_set_convex_hull_returns_basic_set() -> None:
     print(result == bs2)
     if result != bs2:
         print(result == bs2)
-        print(result.space.order_equal(bs2.space))
+        print(result.space.order_equals(bs2.space))
         print(result._obj)
         print(bs2._obj)
         print(result._obj.plain_is_equal(bs2._obj))
