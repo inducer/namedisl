@@ -360,7 +360,7 @@ class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
 class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     __doc__ = f"""
     .. automethod:: add_constraint
-    .. autoattribute:: affs
+    .. autoattribute:: var_affs
     .. automethod:: as_set
     .. automethod:: get_constraints
     {_NamedIslSetLike.__doc__}
@@ -382,7 +382,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
             for cns in self._obj.get_constraints()]
 
     @cached_property
-    def affs(self) -> Mapping[str | Literal[0], Aff]:
+    def var_affs(self) -> Mapping[str | Literal[0], Aff]:
         r"""
         Returns a lazily-evaluated mapping from dimension names (or zero) to
         :class:`PwAff`\ s.
@@ -425,7 +425,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: coalesce
     .. automethod:: dim_max
     .. automethod:: dim_min
-    .. autoattribute:: pw_affs
+    .. autoattribute:: var_pw_affs
     .. autoattribute:: var_pw_aff
     .. automethod:: as_map
     .. automethod:: as_basic
@@ -461,7 +461,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
     @cached_property
-    def pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
+    def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
         r"""
         Returns a lazily-evaluated mapping from dimension names (or zero)
         to :class:`PwAff`\ s.
