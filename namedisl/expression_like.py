@@ -70,7 +70,6 @@ from typing import (
     Literal,
     TypeVar,
     cast,
-    final,
     overload,
 )
 
@@ -137,7 +136,6 @@ def _apply_expression_binary_op(
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
-@dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     __doc__ = """
     .. automethod:: __neg__
@@ -227,7 +225,6 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return aligned_lhs._obj.is_equal(aligned_rhs._obj)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
     __doc__ = """
     .. automethod:: is_constant
@@ -258,7 +255,6 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
         return type(self)(cast("IslAffLikeT_co", self._obj.mod_val(other)), self.space)
 
 
-@dataclass(frozen=True, eq=False)
 class Aff(_NamedAffLike[isl.Aff]):
     __doc__ = f"""
     .. automethod:: zero_on_domain
@@ -358,7 +354,6 @@ def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
     return _AffMapping(zero.space, zero._obj)
 
 
-@dataclass(frozen=True, eq=False)
 class PwAff(_NamedAffLike[isl.PwAff]):
     __doc__ = f"""
     .. automethod:: from_piece_and_aff
@@ -544,7 +539,6 @@ def pw_affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], PwAff]:
     return _PwAffMapping(zero.space, zero._obj)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
     __doc__ = """
     .. automethod:: __pow__
@@ -554,7 +548,6 @@ class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
         return type(self)(cast("IslPolynomialLikeT_co", self._obj ** other), self.space)
 
 
-@dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
     __doc__ = f"""
     {_NamedPolynomialLike.__doc__}
@@ -589,7 +582,6 @@ def make_qpolynomial(
     return QPolynomial(obj, Space.from_isl(obj, QPolynomial.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
     .. automethod:: get_pieces
@@ -636,8 +628,6 @@ def make_pw_qpolynomial(
 
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
-@final
-@dataclass(frozen=True, eq=False)
 class MultiAff(_NamedExpressionLike[isl.MultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__
@@ -673,7 +663,6 @@ def make_multi_aff(
     return MultiAff(obj, Space.from_isl(obj, MultiAff.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__

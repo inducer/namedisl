@@ -55,7 +55,6 @@ THE SOFTWARE.
 """
 
 import operator
-from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
@@ -103,7 +102,6 @@ def _compare_set_or_map_like(
     return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
-@dataclass(frozen=True, eq=False)
 class Constraint(NamedIslObject[isl.Constraint]):
     """
     .. automethod:: equality_from_aff
@@ -156,7 +154,6 @@ def make_constraint(obj: isl.Constraint) -> Constraint:
     return Constraint(obj, Space.from_isl(obj, Set.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     __doc__ = """
     .. automethod:: is_empty
@@ -298,7 +295,6 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         return _compare_set_or_map_like(self, other, operator.le)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     __doc__ = """
     .. automethod:: is_bounded
@@ -316,7 +312,6 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
         return self._obj.is_bounded()
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     __doc__ = """
     .. automethod:: equate_dims
@@ -354,13 +349,11 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
         return type(self)(cast("IslUnbasicT_co", self._obj.coalesce()), self.space)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
     __doc__ = """
     """
 
 
-@dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     __doc__ = f"""
     .. automethod:: add_constraint
@@ -420,7 +413,6 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
     return BasicSet(obj, Space.from_isl(obj, BasicSet.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     __doc__ = f"""
     .. automethod:: complement
@@ -524,7 +516,6 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
             self.space.swap_dim_types(DimType.in_, DimType.out))
 
 
-@dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     __doc__ = f"""
     .. automethod:: domain
@@ -609,7 +600,6 @@ def make_map_from_domain_and_range(
     )
 
 
-@dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     __doc__ = f"""
     .. automethod:: complement
