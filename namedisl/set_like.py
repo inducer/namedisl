@@ -416,6 +416,7 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     __doc__ = f"""
     .. automethod:: complement
+    .. automethod:: simple_hull
     .. automethod:: convex_hull
     .. automethod:: get_basic_sets
     .. automethod:: dim_max
@@ -431,9 +432,11 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     def complement(self) -> Set:
         return Set(self._obj.complement(), self.space)
 
+    def simple_hull(self):
+        return BasicSet(self._obj.simple_hull(), self.space)
+
     def convex_hull(self) -> BasicSet:
-        return BasicSet(
-            self._obj.convex_hull(), self.space)
+        return BasicSet(self._obj.convex_hull(), self.space)
 
     def get_basic_sets(self) -> list[BasicSet]:
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
@@ -603,6 +606,7 @@ def make_map_from_domain_and_range(
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     __doc__ = f"""
     .. automethod:: complement
+    .. automethod:: simple_hull
     .. automethod:: convex_hull
     .. automethod:: get_basic_maps
     .. automethod:: domain
@@ -623,9 +627,11 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)
 
+    def simple_hull(self):
+        return BasicMap(self._obj.simple_hull(), self.space)
+
     def convex_hull(self) -> BasicMap:
-        return BasicMap(
-            self._obj.convex_hull(), self.space)
+        return BasicMap(self._obj.convex_hull(), self.space)
 
     def get_basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
