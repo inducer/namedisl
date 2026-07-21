@@ -552,15 +552,15 @@ class Space:
     def from_names(
         param: Sequence[str] | None = None,
         in_: Sequence[str] | None = None,
-        set: Sequence[str] | None = None,
+        out: Sequence[str] | None = None,
     ) -> Space:
         dim_type_to_names: dict[DimType, tuple[str, ...]] = {}
         if param is not None:
             dim_type_to_names[DimType.param] = tuple(param)
         if in_ is not None:
             dim_type_to_names[DimType.in_] = tuple(in_)
-        if set is not None:
-            dim_type_to_names[DimType.out] = tuple(set)
+        if out is not None:
+            dim_type_to_names[DimType.out] = tuple(out)
         return Space(constantdict(dim_type_to_names))
 
     @staticmethod
