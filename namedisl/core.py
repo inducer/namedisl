@@ -5,6 +5,7 @@
 .. autoclass:: DimType
 .. autoclass:: Space
 .. autoclass:: Cache
+.. autoclass:: align_two
 """
 
 from __future__ import annotations
@@ -401,6 +402,11 @@ def align_obj(
 def align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
+    """
+    Returns a version of both passed objects so that both live in a shared
+    :class:`Space`. For :mod:`namedisl`, this is semantically irrelevant,
+    but it can prevent repeated internal alignment operations.
+    """
     if named_obj1.space.order_equals(named_obj2.space):
         return named_obj1, named_obj2
 
