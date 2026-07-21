@@ -270,6 +270,8 @@ class Aff(_NamedAffLike[isl.Aff]):
     .. automethod:: get_constant
     .. automethod:: get_denominator
 
+    .. autoattribute:: var_affs
+
     {_NamedAffLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
@@ -309,6 +311,20 @@ class Aff(_NamedAffLike[isl.Aff]):
 
     def get_denominator(self) -> isl.Val:
         return self._obj.get_denominator_val()
+
+    @cached_property
+    def var_affs(self) -> Mapping[str | Literal[0], Aff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`Aff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+
+        return _AffMapping(self.space,
+            self._obj.zero_on_domain(self._obj.get_domain_space()))
 
 
 @overload
@@ -409,7 +425,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             self.space)
 
     @cached_property
-    def var_pw_affs(self: PwAff) -> Mapping[str | Literal[0], PwAff]:
+    def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
         r"""
         Returns a lazily-evaluated mapping from dimension names (or zero)
         to :class:`PwAff`\ s.
