@@ -955,3 +955,16 @@ def with_cache(
         cache._cache.setdefault(key, [])
     ).append((obj, result))
     return result
+
+
+def _dump_isl_space(sp: isl.Space):  # pyright: ignore[reportUnusedFunction]
+    param_names = [sp.get_dim_name(isl.dim_type.param, i)
+        for i in range(sp.dim(isl.dim_type.param))]
+    return (f"Space("
+        f"params=[{', '.join(repr(n) for n in param_names)}]"
+        f":in={sp.dim(isl.dim_type.in_)}"
+        f":out={sp.dim(isl.dim_type.out)}"
+        f":is_params={sp.is_params()}"
+        f":is_set={sp.is_set()}"
+        ")"
+    )
