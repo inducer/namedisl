@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 from typing import overload
 
-from .core import Cache, DimType, IslObject, Space
+from .core import Cache, DimType, IslObject, Space, align_two
 from .expression_like import (
     Aff,
     MultiAff,
@@ -75,6 +75,7 @@ __all__ = [
     "Set",
     "Space",
     "affs_from_domain_space",
+    "align_two",
     "make_aff",
     "make_basic_map",
     "make_basic_set",
