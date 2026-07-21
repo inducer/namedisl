@@ -417,7 +417,15 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         if aff.space.dim(DimType.in_):
             return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
         else:
-            return PwAff(isl.PwAff.alloc(piece._obj.params(), aff._obj), aff.space)
+            piece_obj = piece._obj
+
+            # match piece to aff's params status
+            if aff._obj.get_domain_space().is_params():
+                piece_obj = piece_obj.params()
+            else:
+                if piece_obj.is_params():
+                    piece_obj = piece_obj.from_params()
+            return PwAff(isl.PwAff.alloc(piece_obj, aff._obj), aff.space)
 
     def zero_like_me(self) -> PwAff:
         return PwAff(
