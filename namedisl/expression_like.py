@@ -64,6 +64,7 @@ THE SOFTWARE.
 import operator
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from typing import (
     TYPE_CHECKING,
     ClassVar,
@@ -357,7 +358,8 @@ def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
 class PwAff(_NamedAffLike[isl.PwAff]):
     __doc__ = f"""
     .. automethod:: from_piece_and_aff
-    .. automethod:: var_pw_aff
+    .. automethod:: zero_like_me
+    .. autoattribute:: var_pw_affs
     .. automethod:: where
     .. automethod:: get_pieces
     .. automethod:: coalesce
@@ -396,15 +398,23 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         else:
             return PwAff(isl.PwAff.alloc(piece._obj.params(), aff._obj), aff.space)
 
-    def var_pw_aff(self: PwAff, name: str) -> PwAff:
-        """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
-
-        dt, idx = self.space.name_to_dim[name]
-        if dt == DimType.in_:
-            dt = DimType.out
+    def zero_like_me(self) -> PwAff:
         return PwAff(
-            isl.PwAff.var_on_domain(self._obj.get_domain_space(), dt.as_isl(), idx),
+            isl.PwAff.zero_on_domain(self._obj.get_domain_space()),
             self.space)
+
+    @cached_property
+    def var_pw_affs(self: PwAff) -> Mapping[str | Literal[0], PwAff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`PwAff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+
+        return _PwAffMapping(self.space, self._obj.get_domain_space())
 
     @override
     def plain_is_zero(self) -> bool:
@@ -512,7 +522,7 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 @dataclass(frozen=True)
 class _PwAffMapping(Mapping[str | Literal[0], PwAff]):
     expr_space: Space
-    isl_zero: isl.Aff
+    isl_domain_space: isl.Space
 
     @override
     def __len__(self):
@@ -527,12 +537,14 @@ class _PwAffMapping(Mapping[str | Literal[0], PwAff]):
     def __getitem__(self, name: str | Literal[0]) -> PwAff:
         if name == 0:
             return PwAff(
-            self.isl_zero.to_pw_aff(),
+            isl.PwAff.zero_on_domain(self.isl_domain_space),
             self.expr_space)
 
         dt, idx = self.expr_space.name_to_dim[name]
+        if dt == DimType.in_:
+            dt = DimType.out
         return PwAff(
-            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
+            isl.PwAff.var_on_domain(self.isl_domain_space, dt.as_isl(), idx),
             self.expr_space)
 
 
@@ -540,8 +552,7 @@ def pw_affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], PwAff]:
     """This creates a lazily-evaluated mapping, i.e. you do not pay for the creation
     of unused dimensions.
     """
-    zero = Aff.zero_on_domain(space)
-    return _PwAffMapping(zero.space, zero._obj)
+    return _PwAffMapping(space.as_expr_space(), space.as_isl_set_space())
 
 
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
