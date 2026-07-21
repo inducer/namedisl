@@ -82,6 +82,7 @@ from .core import (
     DimType,
     IslAffLikeT_co,
     IslExpressionLikeT_co,
+    IslObject,
     IslPolynomialLikeT_co,
     IslScalarExpressionLike,
     IslScalarExpressionLikeT,
@@ -274,6 +275,8 @@ class Aff(_NamedAffLike[isl.Aff]):
     {NamedIslObject.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.Aff
+
     @staticmethod
     def zero_on_domain(space: Space) -> Aff:
         return Aff(
@@ -381,6 +384,8 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwAff
 
     @staticmethod
     def zero_on_domain(space: Space) -> PwAff:
@@ -570,6 +575,7 @@ class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+    _isl_type: ClassVar[type[IslObject]] = isl.QPolynomial
 
 
 @overload
@@ -605,6 +611,8 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
 
     def get_pieces(self) -> list[tuple[Set, QPolynomial]]:
         set_space = self.space.as_set_space()
@@ -650,6 +658,8 @@ class MultiAff(_NamedExpressionLike[isl.MultiAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+    _isl_type: ClassVar[type[IslObject]] = isl.MultiAff
+
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
 
@@ -686,6 +696,8 @@ class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwMultiAff
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
