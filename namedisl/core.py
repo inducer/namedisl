@@ -734,7 +734,7 @@ class Space:
         return result
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True, eq=False, repr=False)
 class NamedIslObject(Generic[IslObjectT_co]):
     # NB: Assigning to __doc__ is goofy, but it allows for compatibility with
     # the docstring pasting scheme used in subclasses.
@@ -749,6 +749,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
     .. automethod:: __hash__
     .. automethod:: __eq__
     .. automethod:: __str__
+    .. automethod:: __repr__
     """
     # NOTE: _obj holds names, but they are not kept up to date and should not
     # be considered authoritative. See as_isl().
@@ -908,6 +909,10 @@ class NamedIslObject(Generic[IslObjectT_co]):
     @override
     def __str__(self) -> str:
         return str(self.as_isl())
+
+    @override
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self.as_isl())!r})"
 
 
 class Cache:
