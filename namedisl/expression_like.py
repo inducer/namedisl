@@ -406,6 +406,11 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             isl.PwAff.var_on_domain(self._obj.get_domain_space(), dt.as_isl(), idx),
             self.space)
 
+    @override
+    def plain_is_zero(self) -> bool:
+        return self._obj.plain_is_equal(
+            isl.PwAff.zero_on_domain(self._obj.get_domain_space()))
+
     _op_to_func: ClassVar[dict[str, Callable[[isl.PwAff, isl.PwAff], isl.Set]]] = {
         "<": isl.PwAff.lt_set,
         "<=": isl.PwAff.le_set,
