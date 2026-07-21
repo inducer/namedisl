@@ -465,8 +465,8 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
 
             Lazy evaluation means you do not pay for the creation of unused dimensions.
         """
-        from .expression_like import pw_affs_from_domain_space
-        return pw_affs_from_domain_space(self.space)
+        from .expression_like import _PwAffMapping
+        return _PwAffMapping(self.space.as_expr_space(), self._obj.space)
 
     def as_map(self, in_names: Collection[str]) -> Map:
         result = isl.Map.universe(self._obj.space)
