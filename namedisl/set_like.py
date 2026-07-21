@@ -68,6 +68,7 @@ from .core import (
     DimType,
     IslBasicT_co,
     IslMapLikeT,
+    IslObject,
     IslSetLikeT,
     IslSetOrMapLikeT,
     IslSetOrMapLikeT_co,
@@ -111,6 +112,8 @@ class Constraint(NamedIslObject[isl.Constraint]):
     .. automethod:: as_basic_set
     .. automethod:: as_basic_map
     """
+    _isl_type: ClassVar[type[IslObject]] = isl.Constraint
+
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.out})
 
@@ -365,6 +368,8 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.BasicSet
+
     def add_constraint(self, cns: Constraint, /) -> BasicSet:
         if __debug__:
             if cns.space.dim(DimType.in_):
@@ -428,6 +433,8 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     {_NamedIslSetLike.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.Set
 
     def complement(self) -> Set:
         return Set(self._obj.complement(), self.space)
@@ -531,6 +538,8 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.BasicMap
+
     def add_constraint(self, cns: Constraint, /) -> BasicMap:
         if __debug__:  # ruff:ignore[collapsible-if]
             if not self.space.order_equals(cns.space):
@@ -623,6 +632,8 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     {_NamedIslUnbasic.__doc__}
     {_NamedIslMapLike.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.Map
 
     def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)

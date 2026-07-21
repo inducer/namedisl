@@ -757,10 +757,14 @@ class NamedIslObject(Generic[IslObjectT_co]):
     space: Space
     _isl_names_ok: bool = False
 
+    _isl_type: ClassVar[type[IslObject]]
+
     active_dim_types: ClassVar[frozenset[DimType]]
 
     if __debug__:
         def __post_init__(self) -> None:
+            if self._obj.__class__ is not self._isl_type:
+                raise TypeError("unexpected type of ISL object")
             space = self.space
             if frozenset(space.dimtype_to_names) != self.active_dim_types:
                 raise ValueError(
