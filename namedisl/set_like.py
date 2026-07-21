@@ -443,6 +443,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: get_basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
+    .. autoattribute:: var_affs
     .. autoattribute:: var_pw_affs
     .. automethod:: as_map
     .. automethod:: as_basic
@@ -478,6 +479,21 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
             raise ValueError("can only take min with respect to set dimensions")
         return PwAff(with_cache(cache, isl.Set.dim_min, self._obj, idx),
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
+
+    @cached_property
+    def var_affs(self) -> Mapping[str | Literal[0], Aff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`Aff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+        from .expression_like import _AffMapping
+        return _AffMapping(
+            self.space.as_expr_space(),
+            isl.Aff.zero_on_domain(self._obj.space))
 
     @cached_property
     def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
