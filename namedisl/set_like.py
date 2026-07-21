@@ -70,6 +70,7 @@ from .core import (
     IslMapLikeT,
     IslObject,
     IslSetLikeT,
+    IslSetOrMapLike,
     IslSetOrMapLikeT,
     IslSetOrMapLikeT_co,
     IslUnbasicT_co,
@@ -162,6 +163,8 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: is_empty
     .. automethod:: plain_is_empty
     .. automethod:: plain_is_universe
+    .. automethod:: universe
+    .. automethod:: empty
     .. automethod:: universe_like_me
     .. automethod:: empty_like_me
     .. automethod:: fix_dim
@@ -187,6 +190,20 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
     def plain_is_universe(self) -> bool:
         return self._obj.plain_is_universe()
+
+    @classmethod
+    def universe(cls, space: Space) -> Self:
+        my_isl_type = cast("IslSetOrMapLike", cls._isl_type)
+        return cls(
+            cast("IslSetOrMapLikeT_co", my_isl_type.universe(space.as_isl_set_space())),
+            space)
+
+    @classmethod
+    def empty(cls, space: Space) -> Self:
+        my_isl_type = cast("IslSetOrMapLike", cls._isl_type)
+        return cls(
+            cast("IslSetOrMapLikeT_co", my_isl_type.empty(space.as_isl_set_space())),
+            space)
 
     def universe_like_me(self) -> Self:
         return type(self)(type(self._obj).universe(self._obj.space), self.space)
