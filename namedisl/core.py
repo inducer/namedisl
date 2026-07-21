@@ -318,7 +318,7 @@ def _find_joint_space(
             if dup_names:
                 raise ValueError(
                     "duplicate dimension names across dimension types: "
-                    f"{', '.join(sorted(dup_names))} across {dt1} and {dt2}"
+                    f"{', '.join(sorted(dup_names))} across {dt1!r} and {dt2!r}"
                 )
 
     return Space(constantdict({
