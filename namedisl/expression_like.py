@@ -453,14 +453,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     _op_to_func: ClassVar[dict[str, Callable[[isl.PwAff, isl.PwAff], isl.Set]]] = {
         "<": isl.PwAff.lt_set,
         "<=": isl.PwAff.le_set,
-        "=": isl.PwAff.eq_set,
+        "==": isl.PwAff.eq_set,
         "!=": isl.PwAff.ne_set,
         ">": isl.PwAff.gt_set,
         ">=": isl.PwAff.ge_set,
     }
 
     def where(self,
-        op: Literal["<", "<=", "=", "!=", ">=", ">"],
+        op: Literal["<", "<=", "==", "!=", ">=", ">"],
         rhs: int | PwAff
     ) -> Set:
         func = self._op_to_func[op]
@@ -475,7 +475,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             res_set.from_params() if res_set.is_params() else res_set,
             self_a.space.as_set_space())
 
-    def eq_set(self, rhs: int | PwAff) -> Set: return self.where("=", rhs)
+    def eq_set(self, rhs: int | PwAff) -> Set: return self.where("==", rhs)
     def ne_set(self, rhs: int | PwAff) -> Set: return self.where("!=", rhs)
     def ge_set(self, rhs: int | PwAff) -> Set: return self.where(">=", rhs)
     def le_set(self, rhs: int | PwAff) -> Set: return self.where("<=", rhs)

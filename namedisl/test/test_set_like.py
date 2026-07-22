@@ -150,7 +150,7 @@ def test_set_where() -> None:
     i = v["i"]
     j = v["j"]
     k = v["k"]
-    constrained = zero.where("<=", i) & j.where("=", i + 1) & k.where("<=", j)
+    constrained = zero.where("<=", i) & j.where("==", i + 1) & k.where("<=", j)
 
     assert constrained == nisl.make_set(
         "{ [i, j, k] : 0 <= i and j = i + 1 and k <= j }"
