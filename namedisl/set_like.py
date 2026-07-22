@@ -492,8 +492,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         """
         from .expression_like import _AffMapping
         return _AffMapping(
-            self.space.as_expr_space(),
-            isl.Aff.zero_on_domain(self._obj.space))
+            self.space.as_expr_space(), self._obj.space)
 
     @cached_property
     def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:

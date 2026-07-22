@@ -323,8 +323,7 @@ class Aff(_NamedAffLike[isl.Aff]):
             Lazy evaluation means you do not pay for the creation of unused dimensions.
         """
 
-        return _AffMapping(self.space,
-            self._obj.zero_on_domain(self._obj.get_domain_space()))
+        return _AffMapping(self.space, self._obj.get_domain_space())
 
 
 @overload
@@ -345,7 +344,7 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 @dataclass(frozen=True)
 class _AffMapping(Mapping[str | Literal[0], Aff]):
     expr_space: Space
-    isl_zero: isl.Aff
+    isl_domain_space: isl.Space
 
     @override
     def __len__(self):
@@ -360,18 +359,20 @@ class _AffMapping(Mapping[str | Literal[0], Aff]):
     def __getitem__(self, name: str | Literal[0]) -> Aff:
         if name == 0:
             return Aff(
-            self.isl_zero,
+            isl.Aff.zero_on_domain(self.isl_domain_space),
             self.expr_space)
 
         dt, idx = self.expr_space.name_to_dim[name]
+        if dt == DimType.in_:
+            dt = DimType.out
         return Aff(
-            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
+            isl.Aff.var_on_domain(self.isl_domain_space, dt.as_isl(), idx),
             self.expr_space)
 
 
 def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
     zero = Aff.zero_on_domain(space)
-    return _AffMapping(zero.space, zero._obj)
+    return _AffMapping(zero.space, space.as_isl_set_space())
 
 
 class PwAff(_NamedAffLike[isl.PwAff]):
