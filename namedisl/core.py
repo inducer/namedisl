@@ -857,14 +857,17 @@ class NamedIslObject(Generic[IslObjectT_co]):
         new_dimtype_to_names = {
             dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
 
-        if not renaming:
-            return self
-
         obj = self._obj
+        did_something = False
         for old_name, new_name in renaming:
+            if new_name == old_name:
+                continue
+
             if new_name in self.space.names:
                 raise ValueError(
                     f"cannot rename to existing name: '{new_name}'")
+
+            did_something = True
 
             dim_type, idx = self.space.name_to_dim[old_name]
 
@@ -873,6 +876,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
                 obj = _set_dim_name(obj, dim_type, idx, new_name)
 
             new_dimtype_to_names[dim_type][idx] = new_name
+
+        if not did_something:
+            return self
 
         return type(self)(
             obj,
