@@ -827,6 +827,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
         for source_dt, chunks in chunked_dims_by_type(
                 names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
+                if dest_dt == source_dt:
+                    continue
+
                 del new_dimtype_to_names[source_dt][start:start+count]
                 new_dimtype_to_names[dest_dt].extend(self.space.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
