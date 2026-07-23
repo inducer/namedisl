@@ -824,12 +824,15 @@ class NamedIslObject(Generic[IslObjectT_co]):
 
         obj = self._obj
 
+        did_something = False
+
         for source_dt, chunks in chunked_dims_by_type(
                 names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
                 if dest_dt == source_dt:
                     continue
 
+                did_something = True
                 del new_dimtype_to_names[source_dt][start:start+count]
                 new_dimtype_to_names[dest_dt].extend(self.space.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
@@ -848,10 +851,13 @@ class NamedIslObject(Generic[IslObjectT_co]):
                         source_dt.as_isl(), start,
                         count))
 
-        return type(self)(obj, Space(constantdict({
-            dt: tuple(names)
-            for dt, names in new_dimtype_to_names.items()
-        })))
+        if did_something:
+            return type(self)(obj, Space(constantdict({
+                dt: tuple(names)
+                for dt, names in new_dimtype_to_names.items()
+            })))
+        else:
+            return self
 
     def rename_dims(self, renaming: Iterable[tuple[str, str]]) -> Self:
         if not renaming:
