@@ -550,9 +550,9 @@ class Space:
 
     @staticmethod
     def from_names(
-        param: Sequence[str] | None = None,
-        in_: Sequence[str] | None = None,
-        out: Sequence[str] | None = None,
+        param: Collection[str] | None = None,
+        in_: Collection[str] | None = None,
+        out: Collection[str] | None = None,
     ) -> Space:
         dim_type_to_names: dict[DimType, tuple[str, ...]] = {}
         if param is not None:
