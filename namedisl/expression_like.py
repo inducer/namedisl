@@ -7,6 +7,11 @@ Quasi-affine expression
 .. autofunction:: make_aff
 .. autofunction:: affs_from_domain_space
 
+Constraint
+----------
+.. autoclass:: Constraint
+.. autofunction:: make_constraint
+
 Piecewise quasi-affine expression
 ---------------------------------
 .. autoclass:: PwAff
@@ -64,13 +69,13 @@ THE SOFTWARE.
 import operator
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from typing import (
     TYPE_CHECKING,
     ClassVar,
     Literal,
     TypeVar,
     cast,
-    final,
     overload,
 )
 
@@ -82,6 +87,8 @@ from .core import (
     DimType,
     IslAffLikeT_co,
     IslExpressionLikeT_co,
+    IslHasCoefficientsT_co,
+    IslObject,
     IslPolynomialLikeT_co,
     IslScalarExpressionLike,
     IslScalarExpressionLikeT,
@@ -98,11 +105,36 @@ if TYPE_CHECKING:
     from namedisl.set_like import Set
 
 
-NamedExpressionLikeT_co = TypeVar(
-    "NamedExpressionLikeT_co",
-    bound=IslScalarExpressionLike,
-    covariant=True,
-)
+NamedExpressionLikeT = TypeVar(
+    "NamedExpressionLikeT",
+    bound="_NamedExpressionLike[IslScalarExpressionLike]")
+
+
+def _unparam_expr_domain(obj: NamedExpressionLikeT) -> NamedExpressionLikeT:
+    """If the domain of obj is a param domain, this will make it not a param domain."""
+
+    # Oh isl. There *has* to be a better way.
+
+    dt = isl.dim_type.in_
+    d = obj._obj.dim(dt)
+    return type(obj)(obj._obj.add_dims(dt, 1).drop_dims(dt, d, 1), obj.space)
+
+
+def _align_two_expr_likes(
+    lhs: _NamedExpressionLike[IslScalarExpressionLikeT],
+    rhs: _NamedExpressionLike[IslScalarExpressionLikeT],
+) -> tuple[
+    _NamedExpressionLike[IslScalarExpressionLikeT],
+    _NamedExpressionLike[IslScalarExpressionLikeT]
+]:
+    lhs, rhs = align_two(lhs, rhs)
+
+    if lhs._obj.get_domain_space().is_params():
+        lhs = _unparam_expr_domain(lhs)
+    if rhs._obj.get_domain_space().is_params():
+        rhs = _unparam_expr_domain(rhs)
+
+    return lhs, rhs
 
 
 def _apply_expression_binary_op(
@@ -130,14 +162,13 @@ def _apply_expression_binary_op(
     if type(lhs) is not type(rhs):
         return NotImplemented
 
-    lhs, rhs = align_two(lhs, rhs)
+    lhs, rhs = _align_two_expr_likes(lhs, rhs)
     return type(lhs)(
         cast("IslScalarExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.space)
 
 
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
-@dataclass(frozen=True, eq=False)
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     __doc__ = """
     .. automethod:: __neg__
@@ -155,6 +186,15 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_})
+
+    if __debug__:
+        def __post_init__(self) -> None:
+            # NB: There's also self._obj.space.is_set(), which may not agree. Oh isl.
+            if not self._obj.get_domain_space().is_set():
+                raise ValueError("expression-like with non-set-type domain space")
+            # if not self._obj.get_domain_space().is_params():
+            #     raise ValueError("expression-like with param-type domain space")
+            super().__post_init__()
 
     def __neg__(self):
         return type(self)(cast("IslExpressionLikeT_co", self._obj.neg()), self.space)
@@ -216,7 +256,13 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return NotImplemented
         other = cast("Self", other)
 
-        aligned_lhs, aligned_rhs = align_two(self, other)
+        aligned_lhs, aligned_rhs = _align_two_expr_likes(self, other)
+
+        # without this, spurious disagreement will result
+        assert (
+            aligned_lhs._obj.get_domain_space().is_params()
+            ==
+            aligned_rhs._obj.get_domain_space().is_params())
 
         if isinstance(aligned_lhs._obj, (isl.QPolynomial, isl.PwQPolynomial)):
             return (aligned_lhs._obj - aligned_rhs._obj).is_zero()
@@ -227,13 +273,16 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return aligned_lhs._obj.is_equal(aligned_rhs._obj)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
     __doc__ = """
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
+    .. automethod:: div
+    .. automethod:: __truediv__
     .. automethod:: __mod__
+    .. automethod:: floor
+    .. automethod:: ceil
     """
 
     def is_constant(self) -> bool:
@@ -254,41 +303,30 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
         return type(self)(
             cast("IslAffLikeT_co", self_a._obj.gist_params(set_a._obj)), self_a.space)
 
+    def __truediv__(self, other: Self) -> Self:
+        self_a, other_a = _align_two_expr_likes(self, other)
+        return type(self)(
+            cast("IslAffLikeT_co", self_a._obj.div(other_a._obj)),
+            self_a.space)
+
     def __mod__(self, other: isl.Val | int) -> Self:
         return type(self)(cast("IslAffLikeT_co", self._obj.mod_val(other)), self.space)
 
+    def floor(self) -> Self:
+        return type(self)(cast("IslAffLikeT_co", self._obj.floor()), self.space)
 
-@dataclass(frozen=True, eq=False)
-class Aff(_NamedAffLike[isl.Aff]):
-    __doc__ = f"""
-    .. automethod:: zero_on_domain
-    .. automethod:: set_coefficient
-    .. automethod:: as_pw_aff
+    def ceil(self) -> Self:
+        return type(self)(cast("IslAffLikeT_co", self._obj.ceil()), self.space)
 
+
+class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
+    __doc__ = """
     .. autoattribute:: num_divs
     .. automethod:: get_div
     .. automethod:: get_div_coefficient
 
     .. automethod:: get_constant
-    .. automethod:: get_denominator
-
-    {_NamedAffLike.__doc__}
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
-
-    @staticmethod
-    def zero_on_domain(space: Space) -> Aff:
-        return Aff(
-            isl.Aff.zero_on_domain(isl.LocalSpace.from_space(space.as_isl_set_space())),
-            space.as_expr_space())
-
-    def set_coefficient(self, name: str, value: int) -> Aff:
-        dt, idx = self.space.name_to_dim[name]
-        return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
-
-    def as_pw_aff(self) -> PwAff:
-        return PwAff(self._obj.to_pw_aff(), self.space)
 
     @property
     def num_divs(self) -> int:
@@ -307,8 +345,52 @@ class Aff(_NamedAffLike[isl.Aff]):
     def get_constant(self) -> isl.Val:
         return self._obj.get_constant_val()
 
+
+class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
+    __doc__ = f"""
+    .. automethod:: zero_on_domain
+    .. automethod:: as_pw_aff
+    .. automethod:: set_coefficient
+    .. automethod:: get_denominator
+
+    .. autoattribute:: var_affs
+
+    {_NamedHasCoefficients.__doc__}
+    {_NamedAffLike.__doc__}
+    {_NamedExpressionLike.__doc__}
+    {NamedIslObject.__doc__}
+    """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.Aff
+
+    @staticmethod
+    def zero_on_domain(space: Space) -> Aff:
+        return Aff(
+            isl.Aff.zero_on_domain(isl.LocalSpace.from_space(space.as_isl_set_space())),
+            space.as_expr_space())
+
+    def as_pw_aff(self) -> PwAff:
+        return PwAff(self._obj.to_pw_aff(), self.space)
+
+    def set_coefficient(self, name: str, value: int) -> Aff:
+        dt, idx = self.space.name_to_dim[name]
+        return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
+
     def get_denominator(self) -> isl.Val:
         return self._obj.get_denominator_val()
+
+    @cached_property
+    def var_affs(self) -> Mapping[str | Literal[0], Aff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`Aff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+
+        return _AffMapping(self.space, self._obj.get_domain_space())
 
 
 @overload
@@ -329,7 +411,7 @@ def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
 @dataclass(frozen=True)
 class _AffMapping(Mapping[str | Literal[0], Aff]):
     expr_space: Space
-    isl_zero: isl.Aff
+    isl_domain_space: isl.Space
 
     @override
     def __len__(self):
@@ -344,25 +426,85 @@ class _AffMapping(Mapping[str | Literal[0], Aff]):
     def __getitem__(self, name: str | Literal[0]) -> Aff:
         if name == 0:
             return Aff(
-            self.isl_zero,
+            isl.Aff.zero_on_domain(self.isl_domain_space),
             self.expr_space)
 
         dt, idx = self.expr_space.name_to_dim[name]
+        if dt == DimType.in_:
+            dt = DimType.out
         return Aff(
-            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1),
+            isl.Aff.var_on_domain(self.isl_domain_space, dt.as_isl(), idx),
             self.expr_space)
 
 
 def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
     zero = Aff.zero_on_domain(space)
-    return _AffMapping(zero.space, zero._obj)
+    return _AffMapping(zero.space, space.as_isl_set_space())
 
 
-@dataclass(frozen=True, eq=False)
+class Constraint(_NamedHasCoefficients[isl.Constraint]):
+    __doc__ = f"""
+    .. automethod:: equality_from_aff
+    .. automethod:: inequality_from_aff
+    .. autoattribute:: is_equality
+    .. automethod:: as_aff
+    .. automethod:: as_basic_set
+    .. automethod:: as_basic_map
+
+    {_NamedHasCoefficients.__doc__}
+    """
+    _isl_type: ClassVar[type[IslObject]] = isl.Constraint
+
+    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
+        {DimType.param, DimType.in_, DimType.out})
+
+    @staticmethod
+    def equality_from_aff(aff: Aff) -> Constraint:
+        return Constraint(
+            isl.Constraint.equality_from_aff(aff._obj),
+            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
+
+    @staticmethod
+    def inequality_from_aff(aff: Aff) -> Constraint:
+        return Constraint(
+            isl.Constraint.inequality_from_aff(aff._obj),
+            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
+
+    @property
+    def is_equality(self):
+        return self._obj.is_equality()
+
+    def as_aff(self) -> Aff:
+        if self.space.dim(DimType.in_):
+            raise ValueError("cannot convert constraint with 'in' dimensions to aff")
+        from .expression_like import Aff
+        return Aff(
+            self._obj.get_aff(),
+            self.space
+            .drop_dim_type(DimType.in_).move_dim_type(DimType.out, DimType.in_))
+
+    def as_basic_set(self):
+        from .set_like import BasicSet
+        return BasicSet(
+            isl.BasicSet.universe(self._obj.get_space()) .add_constraint(self._obj),
+            self.space.drop_dim_type(DimType.in_))
+
+    def as_basic_map(self):
+        from .set_like import BasicMap
+        return BasicMap(
+            isl.BasicMap.universe(self._obj.get_space()) .add_constraint(self._obj),
+            self.space)
+
+
+def make_constraint(obj: isl.Constraint) -> Constraint:
+    return Constraint(obj, Space.from_isl(obj, Constraint.active_dim_types))
+
+
 class PwAff(_NamedAffLike[isl.PwAff]):
     __doc__ = f"""
     .. automethod:: from_piece_and_aff
-    .. automethod:: var_pw_aff
+    .. automethod:: zero_like_me
+    .. autoattribute:: var_pw_affs
     .. automethod:: where
     .. automethod:: get_pieces
     .. automethod:: coalesce
@@ -374,8 +516,6 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: lt_set
     .. automethod:: max
     .. automethod:: min
-    .. automethod:: div
-    .. automethod:: floor
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
     .. automethod:: union_min
@@ -384,6 +524,8 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwAff
 
     @staticmethod
     def zero_on_domain(space: Space) -> PwAff:
@@ -399,29 +541,50 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         if aff.space.dim(DimType.in_):
             return PwAff(isl.PwAff.alloc(piece._obj, aff._obj), aff.space)
         else:
-            return PwAff(isl.PwAff.alloc(piece._obj.params(), aff._obj), aff.space)
+            piece_obj = piece._obj
 
-    def var_pw_aff(self: PwAff, name: str) -> PwAff:
-        """Return a :class:`PwAff` that evaluates to *name* in the space of *self*."""
+            # match piece to aff's params status
+            if aff._obj.get_domain_space().is_params():
+                piece_obj = piece_obj.params()
+            else:
+                if piece_obj.is_params():
+                    piece_obj = piece_obj.from_params()
+            return PwAff(isl.PwAff.alloc(piece_obj, aff._obj), aff.space)
 
-        dt, idx = self.space.name_to_dim[name]
-        if dt == DimType.in_:
-            dt = DimType.out
+    def zero_like_me(self) -> PwAff:
         return PwAff(
-            isl.PwAff.var_on_domain(self._obj.get_domain_space(), dt.as_isl(), idx),
+            isl.PwAff.zero_on_domain(self._obj.get_domain_space()),
             self.space)
+
+    @cached_property
+    def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`PwAff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+
+        return _PwAffMapping(self.space, self._obj.get_domain_space())
+
+    @override
+    def plain_is_zero(self) -> bool:
+        return self._obj.plain_is_equal(
+            isl.PwAff.zero_on_domain(self._obj.get_domain_space()))
 
     _op_to_func: ClassVar[dict[str, Callable[[isl.PwAff, isl.PwAff], isl.Set]]] = {
         "<": isl.PwAff.lt_set,
         "<=": isl.PwAff.le_set,
-        "=": isl.PwAff.eq_set,
+        "==": isl.PwAff.eq_set,
         "!=": isl.PwAff.ne_set,
         ">": isl.PwAff.gt_set,
         ">=": isl.PwAff.ge_set,
     }
 
     def where(self,
-        op: Literal["<", "<=", "=", "!=", ">=", ">"],
+        op: Literal["<", "<=", "==", "!=", ">=", ">"],
         rhs: int | PwAff
     ) -> Set:
         func = self._op_to_func[op]
@@ -429,14 +592,14 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             rhs = PwAff(
                 isl.PwAff.zero_on_domain(self._obj.get_domain_space()) + rhs,
                 self.space)
-        self_a, rhs_a = align_two(self, rhs)
+        self_a, rhs_a = _align_two_expr_likes(self, rhs)
         from .set_like import Set
         res_set = func(self_a._obj, rhs_a._obj)
         return Set(
             res_set.from_params() if res_set.is_params() else res_set,
             self_a.space.as_set_space())
 
-    def eq_set(self, rhs: int | PwAff) -> Set: return self.where("=", rhs)
+    def eq_set(self, rhs: int | PwAff) -> Set: return self.where("==", rhs)
     def ne_set(self, rhs: int | PwAff) -> Set: return self.where("!=", rhs)
     def ge_set(self, rhs: int | PwAff) -> Set: return self.where(">=", rhs)
     def le_set(self, rhs: int | PwAff) -> Set: return self.where("<=", rhs)
@@ -444,19 +607,12 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def lt_set(self, rhs: int | PwAff) -> Set: return self.where("<", rhs)
 
     def max(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.max(other_a._obj), self_a.space)
 
     def min(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.min(other_a._obj), self_a.space)
-
-    def div(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
-        return PwAff(self_a._obj.div(other_a._obj), self_a.space)
-
-    def floor(self) -> PwAff:
-        return PwAff(self._obj.floor(), self.space)
 
     def get_pieces(self) -> list[tuple[Set, Aff]]:
         set_space = self.space.as_set_space()
@@ -479,15 +635,15 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             self.space.as_set_space())
 
     def union_max(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
 
     def union_min(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_min(other_a._obj), self_a.space)
 
     def union_add(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_add(other_a._obj), self_a.space)
 
 
@@ -512,7 +668,7 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
 @dataclass(frozen=True)
 class _PwAffMapping(Mapping[str | Literal[0], PwAff]):
     expr_space: Space
-    isl_zero: isl.Aff
+    isl_domain_space: isl.Space
 
     @override
     def __len__(self):
@@ -527,12 +683,14 @@ class _PwAffMapping(Mapping[str | Literal[0], PwAff]):
     def __getitem__(self, name: str | Literal[0]) -> PwAff:
         if name == 0:
             return PwAff(
-            self.isl_zero.to_pw_aff(),
+            isl.PwAff.zero_on_domain(self.isl_domain_space),
             self.expr_space)
 
         dt, idx = self.expr_space.name_to_dim[name]
+        if dt == DimType.in_:
+            dt = DimType.out
         return PwAff(
-            self.isl_zero.set_coefficient_val(dt.as_isl(), idx, 1).to_pw_aff(),
+            isl.PwAff.var_on_domain(self.isl_domain_space, dt.as_isl(), idx),
             self.expr_space)
 
 
@@ -540,11 +698,9 @@ def pw_affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], PwAff]:
     """This creates a lazily-evaluated mapping, i.e. you do not pay for the creation
     of unused dimensions.
     """
-    zero = Aff.zero_on_domain(space)
-    return _PwAffMapping(zero.space, zero._obj)
+    return _PwAffMapping(space.as_expr_space(), space.as_isl_set_space())
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
     __doc__ = """
     .. automethod:: __pow__
@@ -554,13 +710,13 @@ class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
         return type(self)(cast("IslPolynomialLikeT_co", self._obj ** other), self.space)
 
 
-@dataclass(frozen=True, eq=False)
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
     __doc__ = f"""
     {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+    _isl_type: ClassVar[type[IslObject]] = isl.QPolynomial
 
 
 @overload
@@ -589,7 +745,6 @@ def make_qpolynomial(
     return QPolynomial(obj, Space.from_isl(obj, QPolynomial.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
     .. automethod:: get_pieces
@@ -597,6 +752,8 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
 
     def get_pieces(self) -> list[tuple[Set, QPolynomial]]:
         set_space = self.space.as_set_space()
@@ -636,14 +793,14 @@ def make_pw_qpolynomial(
 
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
-@final
-@dataclass(frozen=True, eq=False)
 class MultiAff(_NamedExpressionLike[isl.MultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+    _isl_type: ClassVar[type[IslObject]] = isl.MultiAff
+
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})
 
@@ -673,7 +830,6 @@ def make_multi_aff(
     return MultiAff(obj, Space.from_isl(obj, MultiAff.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     __doc__ = f"""
     .. automethod:: __getitem__
@@ -681,6 +837,8 @@ class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
+
+    _isl_type: ClassVar[type[IslObject]] = isl.PwMultiAff
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset({
         DimType.param, DimType.in_, DimType.out})

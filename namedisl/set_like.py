@@ -1,11 +1,6 @@
 """
 .. currentmodule:: namedisl
 
-Constraint
-^^^^^^^^^^
-.. autoclass:: Constraint
-.. autofunction:: make_constraint
-
 Quasiconvex set
 ^^^^^^^^^^^^^^^
 .. autoclass:: BasicSet
@@ -55,7 +50,6 @@ THE SOFTWARE.
 """
 
 import operator
-from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
@@ -69,7 +63,9 @@ from .core import (
     DimType,
     IslBasicT_co,
     IslMapLikeT,
+    IslObject,
     IslSetLikeT,
+    IslSetOrMapLike,
     IslSetOrMapLikeT,
     IslSetOrMapLikeT_co,
     IslUnbasicT_co,
@@ -81,13 +77,12 @@ from .core import (
     chunked_dims_by_type,
     with_cache,
 )
-from .expression_like import PwAff, make_pw_multi_aff
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping, Sequence
 
-    from namedisl import Aff, PwMultiAff
+    from .expression_like import Aff, Constraint, PwAff, PwMultiAff
 
 
 def _compare_set_or_map_like(
@@ -103,65 +98,13 @@ def _compare_set_or_map_like(
     return op(aligned_lhs._obj, aligned_rhs._obj)
 
 
-@dataclass(frozen=True, eq=False)
-class Constraint(NamedIslObject[isl.Constraint]):
-    """
-    .. automethod:: equality_from_aff
-    .. automethod:: inequality_from_aff
-    .. autoattribute:: is_equality
-    .. automethod:: as_aff
-    .. automethod:: as_basic_set
-    .. automethod:: as_basic_map
-    """
-    active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
-        {DimType.param, DimType.in_, DimType.out})
-
-    @staticmethod
-    def equality_from_aff(aff: Aff) -> Constraint:
-        return Constraint(
-            isl.Constraint.equality_from_aff(aff._obj),
-            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
-
-    @staticmethod
-    def inequality_from_aff(aff: Aff) -> Constraint:
-        return Constraint(
-            isl.Constraint.inequality_from_aff(aff._obj),
-            aff.space.as_set_space().with_empty_dim_type(DimType.in_))
-
-    @property
-    def is_equality(self):
-        return self._obj.is_equality()
-
-    def as_aff(self) -> Aff:
-        if self.space.dim(DimType.in_):
-            raise ValueError("cannot convert constraint with 'in' dimensions to aff")
-        from .expression_like import Aff
-        return Aff(
-            self._obj.get_aff(),
-            self.space
-            .drop_dim_type(DimType.in_).move_dim_type(DimType.out, DimType.in_))
-
-    def as_basic_set(self):
-        return BasicSet(
-            isl.BasicSet.universe(self._obj.get_space()) .add_constraint(self._obj),
-            self.space.drop_dim_type(DimType.in_))
-
-    def as_basic_map(self):
-        return BasicMap(
-            isl.BasicMap.universe(self._obj.get_space()) .add_constraint(self._obj),
-            self.space)
-
-
-def make_constraint(obj: isl.Constraint) -> Constraint:
-    return Constraint(obj, Space.from_isl(obj, Set.active_dim_types))
-
-
-@dataclass(frozen=True, eq=False)
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     __doc__ = """
     .. automethod:: is_empty
     .. automethod:: plain_is_empty
     .. automethod:: plain_is_universe
+    .. automethod:: universe
+    .. automethod:: empty
     .. automethod:: universe_like_me
     .. automethod:: empty_like_me
     .. automethod:: fix_dim
@@ -187,6 +130,20 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
     def plain_is_universe(self) -> bool:
         return self._obj.plain_is_universe()
+
+    @classmethod
+    def universe(cls, space: Space) -> Self:
+        my_isl_type = cast("IslSetOrMapLike", cls._isl_type)
+        return cls(
+            cast("IslSetOrMapLikeT_co", my_isl_type.universe(space.as_isl_set_space())),
+            space)
+
+    @classmethod
+    def empty(cls, space: Space) -> Self:
+        my_isl_type = cast("IslSetOrMapLike", cls._isl_type)
+        return cls(
+            cast("IslSetOrMapLikeT_co", my_isl_type.empty(space.as_isl_set_space())),
+            space)
 
     def universe_like_me(self) -> Self:
         return type(self)(type(self._obj).universe(self._obj.space), self.space)
@@ -298,7 +255,6 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         return _compare_set_or_map_like(self, other, operator.le)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     __doc__ = """
     .. automethod:: is_bounded
@@ -316,7 +272,6 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
         return self._obj.is_bounded()
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     __doc__ = """
     .. automethod:: equate_dims
@@ -344,6 +299,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
         return type(self)(obj, self.space)
 
     def as_pw_multi_aff(self) -> PwMultiAff:
+        from .expression_like import make_pw_multi_aff
         return make_pw_multi_aff(self.as_isl().as_pw_multi_aff())
 
     def remove_redundancies(self):
@@ -354,13 +310,11 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
         return type(self)(cast("IslUnbasicT_co", self._obj.coalesce()), self.space)
 
 
-@dataclass(frozen=True, eq=False)
 class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
     __doc__ = """
     """
 
 
-@dataclass(frozen=True, eq=False)
 class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     __doc__ = f"""
     .. automethod:: add_constraint
@@ -372,6 +326,8 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.BasicSet
+
     def add_constraint(self, cns: Constraint, /) -> BasicSet:
         if __debug__:
             if cns.space.dim(DimType.in_):
@@ -381,6 +337,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
         return BasicSet(self._obj.add_constraint(cns._obj), self.space)
 
     def get_constraints(self):
+        from .expression_like import Constraint
         return [
             Constraint(cns, self.space.with_empty_dim_type(DimType.in_))
             for cns in self._obj.get_constraints()]
@@ -420,14 +377,15 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
     return BasicSet(obj, Space.from_isl(obj, BasicSet.active_dim_types))
 
 
-@dataclass(frozen=True, eq=False)
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     __doc__ = f"""
     .. automethod:: complement
+    .. automethod:: simple_hull
     .. automethod:: convex_hull
     .. automethod:: get_basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
+    .. autoattribute:: var_affs
     .. autoattribute:: var_pw_affs
     .. automethod:: as_map
     .. automethod:: as_basic
@@ -436,12 +394,16 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.Set
+
     def complement(self) -> Set:
         return Set(self._obj.complement(), self.space)
 
+    def simple_hull(self):
+        return BasicSet(self._obj.simple_hull(), self.space)
+
     def convex_hull(self) -> BasicSet:
-        return BasicSet(
-            self._obj.convex_hull(), self.space)
+        return BasicSet(self._obj.convex_hull(), self.space)
 
     def get_basic_sets(self) -> list[BasicSet]:
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
@@ -450,6 +412,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
+        from .expression_like import PwAff
         return PwAff(with_cache(cache, isl.Set.dim_max, self._obj, idx),
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
@@ -457,8 +420,23 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
+        from .expression_like import PwAff
         return PwAff(with_cache(cache, isl.Set.dim_min, self._obj, idx),
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
+
+    @cached_property
+    def var_affs(self) -> Mapping[str | Literal[0], Aff]:
+        r"""
+        Returns a lazily-evaluated mapping from dimension names (or zero)
+        to :class:`Aff`\ s.
+
+        .. note::
+
+            Lazy evaluation means you do not pay for the creation of unused dimensions.
+        """
+        from .expression_like import _AffMapping
+        return _AffMapping(
+            self.space.as_expr_space(), self._obj.space)
 
     @cached_property
     def var_pw_affs(self) -> Mapping[str | Literal[0], PwAff]:
@@ -470,8 +448,8 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
 
             Lazy evaluation means you do not pay for the creation of unused dimensions.
         """
-        from .expression_like import pw_affs_from_domain_space
-        return pw_affs_from_domain_space(self.space)
+        from .expression_like import _PwAffMapping
+        return _PwAffMapping(self.space.as_expr_space(), self._obj.space)
 
     def as_map(self, in_names: Collection[str]) -> Map:
         result = isl.Map.universe(self._obj.space)
@@ -524,7 +502,6 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
             self.space.swap_dim_types(DimType.in_, DimType.out))
 
 
-@dataclass(frozen=True, eq=False)
 class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     __doc__ = f"""
     .. automethod:: domain
@@ -537,6 +514,8 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     {_NamedIslSetOrMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.BasicMap
+
     def add_constraint(self, cns: Constraint, /) -> BasicMap:
         if __debug__:  # ruff:ignore[collapsible-if]
             if not self.space.order_equals(cns.space):
@@ -544,6 +523,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
         return BasicMap(self._obj.add_constraint(cns._obj), self.space)
 
     def get_constraints(self):
+        from .expression_like import Constraint
         return [
             Constraint(cns, self.space) for cns in self._obj.get_constraints()]
 
@@ -609,10 +589,11 @@ def make_map_from_domain_and_range(
     )
 
 
-@dataclass(frozen=True, eq=False)
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     __doc__ = f"""
+    .. automethod:: is_bijective
     .. automethod:: complement
+    .. automethod:: simple_hull
     .. automethod:: convex_hull
     .. automethod:: get_basic_maps
     .. automethod:: domain
@@ -630,12 +611,19 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     {_NamedIslMapLike.__doc__}
     """
 
+    _isl_type: ClassVar[type[IslObject]] = isl.Map
+
+    def is_bijective(self):
+        return self._obj.is_bijective()
+
     def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)
 
+    def simple_hull(self):
+        return BasicMap(self._obj.simple_hull(), self.space)
+
     def convex_hull(self) -> BasicMap:
-        return BasicMap(
-            self._obj.convex_hull(), self.space)
+        return BasicMap(self._obj.convex_hull(), self.space)
 
     def get_basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]

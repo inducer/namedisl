@@ -27,9 +27,10 @@ THE SOFTWARE.
 
 from typing import overload
 
-from .core import Cache, DimType, IslObject, Space
+from .core import Cache, DimType, IslObject, Space, align_two
 from .expression_like import (
     Aff,
+    Constraint,
     MultiAff,
     PwAff,
     PwMultiAff,
@@ -37,6 +38,7 @@ from .expression_like import (
     QPolynomial,
     affs_from_domain_space,
     make_aff,
+    make_constraint,
     make_multi_aff,
     make_pw_aff,
     make_pw_multi_aff,
@@ -47,12 +49,10 @@ from .expression_like import (
 from .set_like import (
     BasicMap,
     BasicSet,
-    Constraint,
     Map,
     Set,
     make_basic_map,
     make_basic_set,
-    make_constraint,
     make_map,
     make_map_from_domain_and_range,
     make_set,
@@ -75,6 +75,7 @@ __all__ = [
     "Set",
     "Space",
     "affs_from_domain_space",
+    "align_two",
     "make_aff",
     "make_basic_map",
     "make_basic_set",

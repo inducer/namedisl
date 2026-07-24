@@ -5,6 +5,7 @@
 .. autoclass:: DimType
 .. autoclass:: Space
 .. autoclass:: Cache
+.. autoclass:: align_two
 """
 
 from __future__ import annotations
@@ -80,6 +81,7 @@ class DimType(enum.IntEnum):
 
 
 IslAffLike = isl.Aff | isl.PwAff
+IslHasCoefficients = isl.Aff | isl.Constraint
 IslPolynomialLike = isl.QPolynomial | isl.PwQPolynomial
 IslScalarExpressionLike = IslAffLike | IslPolynomialLike
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
@@ -140,6 +142,11 @@ IslMultiExpressionLikeT_co = TypeVar(
 IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     bound=IslExpressionLike,
+)
+IslHasCoefficientsT_co = TypeVar(
+    "IslHasCoefficientsT_co",
+    bound=IslHasCoefficients,
+    covariant=True,
 )
 IslAffLikeT_co = TypeVar(
     "IslAffLikeT_co",
@@ -317,7 +324,7 @@ def _find_joint_space(
             if dup_names:
                 raise ValueError(
                     "duplicate dimension names across dimension types: "
-                    f"{', '.join(sorted(dup_names))} across {dt1} and {dt2}"
+                    f"{', '.join(sorted(dup_names))} across {dt1!r} and {dt2!r}"
                 )
 
     return Space(constantdict({
@@ -401,6 +408,11 @@ def align_obj(
 def align_two(
     named_obj1: NamedIslObjectT, named_obj2: NamedIslObjectT2
 ) -> tuple[NamedIslObjectT, NamedIslObjectT2]:
+    """
+    Returns a version of both passed objects so that both live in a shared
+    :class:`Space`. For :mod:`namedisl`, this is semantically irrelevant,
+    but it can prevent repeated internal alignment operations.
+    """
     if named_obj1.space.order_equals(named_obj2.space):
         return named_obj1, named_obj2
 
@@ -544,17 +556,17 @@ class Space:
 
     @staticmethod
     def from_names(
-        param: Sequence[str] | None = None,
-        in_: Sequence[str] | None = None,
-        set: Sequence[str] | None = None,
+        param: Collection[str] | None = None,
+        in_: Collection[str] | None = None,
+        out: Collection[str] | None = None,
     ) -> Space:
         dim_type_to_names: dict[DimType, tuple[str, ...]] = {}
         if param is not None:
             dim_type_to_names[DimType.param] = tuple(param)
         if in_ is not None:
             dim_type_to_names[DimType.in_] = tuple(in_)
-        if set is not None:
-            dim_type_to_names[DimType.out] = tuple(set)
+        if out is not None:
+            dim_type_to_names[DimType.out] = tuple(out)
         return Space(constantdict(dim_type_to_names))
 
     @staticmethod
@@ -728,7 +740,7 @@ class Space:
         return result
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True, eq=False, repr=False)
 class NamedIslObject(Generic[IslObjectT_co]):
     # NB: Assigning to __doc__ is goofy, but it allows for compatibility with
     # the docstring pasting scheme used in subclasses.
@@ -740,9 +752,11 @@ class NamedIslObject(Generic[IslObjectT_co]):
     .. automethod:: move_dims
     .. automethod:: rename_dims
     .. automethod:: as_isl
+    .. automethod:: involves_dims
     .. automethod:: __hash__
     .. automethod:: __eq__
     .. automethod:: __str__
+    .. automethod:: __repr__
     """
     # NOTE: _obj holds names, but they are not kept up to date and should not
     # be considered authoritative. See as_isl().
@@ -750,10 +764,14 @@ class NamedIslObject(Generic[IslObjectT_co]):
     space: Space
     _isl_names_ok: bool = False
 
+    _isl_type: ClassVar[type[IslObject]]
+
     active_dim_types: ClassVar[frozenset[DimType]]
 
     if __debug__:
         def __post_init__(self) -> None:
+            if self._obj.__class__ is not self._isl_type:
+                raise TypeError("unexpected type of ISL object")
             space = self.space
             if frozenset(space.dimtype_to_names) != self.active_dim_types:
                 raise ValueError(
@@ -813,9 +831,15 @@ class NamedIslObject(Generic[IslObjectT_co]):
 
         obj = self._obj
 
+        did_something = False
+
         for source_dt, chunks in chunked_dims_by_type(
                 names, self.space.name_to_dim).items():
             for start, count in chunks[::-1]:
+                if dest_dt == source_dt:
+                    continue
+
+                did_something = True
                 del new_dimtype_to_names[source_dt][start:start+count]
                 new_dimtype_to_names[dest_dt].extend(self.space.dimtype_to_names[source_dt][start:start+count])
                 isl_dest_dt = dest_dt.as_isl()
@@ -834,10 +858,13 @@ class NamedIslObject(Generic[IslObjectT_co]):
                         source_dt.as_isl(), start,
                         count))
 
-        return type(self)(obj, Space(constantdict({
-            dt: tuple(names)
-            for dt, names in new_dimtype_to_names.items()
-        })))
+        if did_something:
+            return type(self)(obj, Space(constantdict({
+                dt: tuple(names)
+                for dt, names in new_dimtype_to_names.items()
+            })))
+        else:
+            return self
 
     def rename_dims(self, renaming: Iterable[tuple[str, str]]) -> Self:
         if not renaming:
@@ -846,14 +873,17 @@ class NamedIslObject(Generic[IslObjectT_co]):
         new_dimtype_to_names = {
             dt: list(names) for dt, names in self.space.dimtype_to_names.items()}
 
-        if not renaming:
-            return self
-
         obj = self._obj
+        did_something = False
         for old_name, new_name in renaming:
+            if new_name == old_name:
+                continue
+
             if new_name in self.space.names:
                 raise ValueError(
                     f"cannot rename to existing name: '{new_name}'")
+
+            did_something = True
 
             dim_type, idx = self.space.name_to_dim[old_name]
 
@@ -862,6 +892,9 @@ class NamedIslObject(Generic[IslObjectT_co]):
                 obj = _set_dim_name(obj, dim_type, idx, new_name)
 
             new_dimtype_to_names[dim_type][idx] = new_name
+
+        if not did_something:
+            return self
 
         return type(self)(
             obj,
@@ -878,6 +911,14 @@ class NamedIslObject(Generic[IslObjectT_co]):
         object.__setattr__(self, "_obj", res)
         object.__setattr__(self, "_isl_names_ok", True)
         return res
+
+    def involves_dims(self, names: Collection[str]) -> bool:
+        """True if *self* involves any of the given dimensions."""
+        for dt, chunks in chunked_dims_by_type(names, self.space.name_to_dim).items():
+            for chunk in chunks:
+                if self._obj.involves_dims(dt.as_isl(), chunk.start, chunk.cnt):
+                    return True
+        return False
 
     @override
     def __hash__(self) -> int:
@@ -902,6 +943,10 @@ class NamedIslObject(Generic[IslObjectT_co]):
     @override
     def __str__(self) -> str:
         return str(self.as_isl())
+
+    @override
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self.as_isl())!r})"
 
 
 class Cache:
@@ -940,3 +985,16 @@ def with_cache(
         cache._cache.setdefault(key, [])
     ).append((obj, result))
     return result
+
+
+def _dump_isl_space(sp: isl.Space):  # pyright: ignore[reportUnusedFunction]
+    param_names = [sp.get_dim_name(isl.dim_type.param, i)
+        for i in range(sp.dim(isl.dim_type.param))]
+    return (f"Space("
+        f"params=[{', '.join(repr(n) for n in param_names)}]"
+        f":in={sp.dim(isl.dim_type.in_)}"
+        f":out={sp.dim(isl.dim_type.out)}"
+        f":is_params={sp.is_params()}"
+        f":is_set={sp.is_set()}"
+        ")"
+    )

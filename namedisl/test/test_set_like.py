@@ -143,14 +143,14 @@ def test_set_add_constraint_uses_named_dimensions() -> None:
 
 
 def test_set_where() -> None:
-    sp = nisl.Space.from_names(param=[], set=["i", "j", "k"])
+    sp = nisl.Space.from_names(param=[], out=["i", "j", "k"])
 
     v = nisl.pw_affs_from_domain_space(sp)
     zero = v[0]
     i = v["i"]
     j = v["j"]
     k = v["k"]
-    constrained = zero.where("<=", i) & j.where("=", i + 1) & k.where("<=", j)
+    constrained = zero.where("<=", i) & j.where("==", i + 1) & k.where("<=", j)
 
     assert constrained == nisl.make_set(
         "{ [i, j, k] : 0 <= i and j = i + 1 and k <= j }"
