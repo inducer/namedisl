@@ -105,11 +105,36 @@ if TYPE_CHECKING:
     from namedisl.set_like import Set
 
 
-NamedExpressionLikeT_co = TypeVar(
-    "NamedExpressionLikeT_co",
-    bound=IslScalarExpressionLike,
-    covariant=True,
-)
+NamedExpressionLikeT = TypeVar(
+    "NamedExpressionLikeT",
+    bound="_NamedExpressionLike[IslScalarExpressionLike]")
+
+
+def _unparam_expr_domain(obj: NamedExpressionLikeT) -> NamedExpressionLikeT:
+    """If the domain of obj is a param domain, this will make it not a param domain."""
+
+    # Oh isl. There *has* to be a better way.
+
+    dt = isl.dim_type.in_
+    d = obj._obj.dim(dt)
+    return type(obj)(obj._obj.add_dims(dt, 1).drop_dims(dt, d, 1), obj.space)
+
+
+def _align_two_expr_likes(
+    lhs: _NamedExpressionLike[IslScalarExpressionLikeT],
+    rhs: _NamedExpressionLike[IslScalarExpressionLikeT],
+) -> tuple[
+    _NamedExpressionLike[IslScalarExpressionLikeT],
+    _NamedExpressionLike[IslScalarExpressionLikeT]
+]:
+    lhs, rhs = align_two(lhs, rhs)
+
+    if lhs._obj.get_domain_space().is_params():
+        lhs = _unparam_expr_domain(lhs)
+    if rhs._obj.get_domain_space().is_params():
+        rhs = _unparam_expr_domain(rhs)
+
+    return lhs, rhs
 
 
 def _apply_expression_binary_op(
@@ -137,7 +162,7 @@ def _apply_expression_binary_op(
     if type(lhs) is not type(rhs):
         return NotImplemented
 
-    lhs, rhs = align_two(lhs, rhs)
+    lhs, rhs = _align_two_expr_likes(lhs, rhs)
     return type(lhs)(
         cast("IslScalarExpressionLikeT", op(lhs._obj, rhs._obj)), lhs.space)
 
@@ -231,7 +256,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return NotImplemented
         other = cast("Self", other)
 
-        aligned_lhs, aligned_rhs = align_two(self, other)
+        aligned_lhs, aligned_rhs = _align_two_expr_likes(self, other)
 
         # without this, spurious disagreement will result
         assert (
@@ -553,7 +578,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             rhs = PwAff(
                 isl.PwAff.zero_on_domain(self._obj.get_domain_space()) + rhs,
                 self.space)
-        self_a, rhs_a = align_two(self, rhs)
+        self_a, rhs_a = _align_two_expr_likes(self, rhs)
         from .set_like import Set
         res_set = func(self_a._obj, rhs_a._obj)
         return Set(
@@ -568,15 +593,15 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def lt_set(self, rhs: int | PwAff) -> Set: return self.where("<", rhs)
 
     def max(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.max(other_a._obj), self_a.space)
 
     def min(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.min(other_a._obj), self_a.space)
 
     def div(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.div(other_a._obj), self_a.space)
 
     def floor(self) -> PwAff:
@@ -603,15 +628,15 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             self.space.as_set_space())
 
     def union_max(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
 
     def union_min(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_min(other_a._obj), self_a.space)
 
     def union_add(self, other: PwAff) -> PwAff:
-        self_a, other_a = align_two(self, other)
+        self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.union_add(other_a._obj), self_a.space)
 
 
