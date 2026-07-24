@@ -746,6 +746,7 @@ class NamedIslObject(Generic[IslObjectT_co]):
     .. automethod:: move_dims
     .. automethod:: rename_dims
     .. automethod:: as_isl
+    .. automethod:: involves_dims
     .. automethod:: __hash__
     .. automethod:: __eq__
     .. automethod:: __str__
@@ -904,6 +905,14 @@ class NamedIslObject(Generic[IslObjectT_co]):
         object.__setattr__(self, "_obj", res)
         object.__setattr__(self, "_isl_names_ok", True)
         return res
+
+    def involves_dims(self, names: Collection[str]) -> bool:
+        """True if *self* involves any of the given dimensions."""
+        for dt, chunks in chunked_dims_by_type(names, self.space.name_to_dim).items():
+            for chunk in chunks:
+                if self._obj.involves_dims(dt.as_isl(), chunk.start, chunk.cnt):
+                    return True
+        return False
 
     @override
     def __hash__(self) -> int:
