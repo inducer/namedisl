@@ -278,7 +278,11 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
+    .. automethod:: div
+    .. automethod:: __truediv__
     .. automethod:: __mod__
+    .. automethod:: floor
+    .. automethod:: ceil
     """
 
     def is_constant(self) -> bool:
@@ -299,8 +303,20 @@ class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
         return type(self)(
             cast("IslAffLikeT_co", self_a._obj.gist_params(set_a._obj)), self_a.space)
 
+    def __truediv__(self, other: Self) -> Self:
+        self_a, other_a = _align_two_expr_likes(self, other)
+        return type(self)(
+            cast("IslAffLikeT_co", self_a._obj.div(other_a._obj)),
+            self_a.space)
+
     def __mod__(self, other: isl.Val | int) -> Self:
         return type(self)(cast("IslAffLikeT_co", self._obj.mod_val(other)), self.space)
+
+    def floor(self) -> Self:
+        return type(self)(cast("IslAffLikeT_co", self._obj.floor()), self.space)
+
+    def ceil(self) -> Self:
+        return type(self)(cast("IslAffLikeT_co", self._obj.ceil()), self.space)
 
 
 class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
@@ -500,8 +516,6 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: lt_set
     .. automethod:: max
     .. automethod:: min
-    .. automethod:: div
-    .. automethod:: floor
     .. automethod:: get_aggregate_domain
     .. automethod:: union_max
     .. automethod:: union_min
@@ -599,13 +613,6 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def min(self, other: PwAff) -> PwAff:
         self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.min(other_a._obj), self_a.space)
-
-    def div(self, other: PwAff) -> PwAff:
-        self_a, other_a = _align_two_expr_likes(self, other)
-        return PwAff(self_a._obj.div(other_a._obj), self_a.space)
-
-    def floor(self) -> PwAff:
-        return PwAff(self._obj.floor(), self.space)
 
     def get_pieces(self) -> list[tuple[Set, Aff]]:
         set_space = self.space.as_set_space()
