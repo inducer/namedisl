@@ -81,6 +81,7 @@ class DimType(enum.IntEnum):
 
 
 IslAffLike = isl.Aff | isl.PwAff
+IslHasCoefficients = isl.Aff | isl.Constraint
 IslPolynomialLike = isl.QPolynomial | isl.PwQPolynomial
 IslScalarExpressionLike = IslAffLike | IslPolynomialLike
 IslMultiExpressionLike = isl.MultiAff | isl.PwMultiAff
@@ -141,6 +142,11 @@ IslMultiExpressionLikeT_co = TypeVar(
 IslExpressionLikeT = TypeVar(
     "IslExpressionLikeT",
     bound=IslExpressionLike,
+)
+IslHasCoefficientsT_co = TypeVar(
+    "IslHasCoefficientsT_co",
+    bound=IslHasCoefficients,
+    covariant=True,
 )
 IslAffLikeT_co = TypeVar(
     "IslAffLikeT_co",
