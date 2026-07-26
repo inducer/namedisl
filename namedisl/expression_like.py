@@ -332,7 +332,7 @@ class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
     .. automethod:: get_div
     .. automethod:: get_div_coefficient
 
-    .. automethod:: get_constant
+    .. autoattribute:: constant
     """
 
     @property
@@ -349,7 +349,8 @@ class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
         dt, idx = self.space.name_to_dim[name]
         return self._obj.get_coefficient_val(dt.as_isl(), idx)
 
-    def get_constant(self) -> isl.Val:
+    @property
+    def constant(self) -> isl.Val:
         return self._obj.get_constant_val()
 
 
