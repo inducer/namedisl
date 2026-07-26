@@ -18,6 +18,10 @@ Piecewise quasi-affine expression
 .. autofunction:: make_pw_aff
 .. autofunction:: pw_affs_from_domain_space
 
+Quasipolynomial term
+--------------------
+.. autoclass:: Term
+
 Quasipolynomial
 ---------------
 .. autoclass:: QPolynomial
@@ -67,7 +71,7 @@ THE SOFTWARE.
 """
 
 import operator
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import (
@@ -86,6 +90,7 @@ import islpy as isl
 from .core import (
     DimType,
     IslAffLikeT_co,
+    IslExpressionLikeT,
     IslExpressionLikeT_co,
     IslHasCoefficientsT_co,
     IslObject,
@@ -716,13 +721,50 @@ class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
         return type(self)(cast("IslPolynomialLikeT_co", self._obj ** other), self.space)
 
 
+@dataclass(frozen=True, eq=False)
+class Term:
+    """
+    .. autoattribute:: space
+    .. autoattribute:: coefficient
+    .. automethod:: get_exp
+    .. autoattribute:: num_divs
+    .. automethod:: get_div
+    .. automethod:: get_div_exp
+    """
+    # Term is super-rudimentary
+    _obj: isl.Term
+    space: Space
+
+    @property
+    def coefficient(self) -> isl.Val:
+        return self._obj.get_coefficient_val()
+
+    def get_exp(self, name: str) -> int:
+        dt, idx = self.space.name_to_dim[name]
+        return self._obj.get_exp(dt.as_isl(), idx)
+
+    @property
+    def num_divs(self) -> int:
+        return self._obj.dim(isl.dim_type.div)
+
+    def get_div(self, index: int) -> Aff:
+        return Aff(self._obj.get_div(index), self.space)
+
+    def get_div_exp(self, index: int) -> int:
+        return self._obj.get_exp(isl.dim_type.div, index)
+
+
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
     __doc__ = f"""
+    .. automethod:: terms
     {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
     _isl_type: ClassVar[type[IslObject]] = isl.QPolynomial
+
+    def terms(self) -> Sequence[Term]:
+        return [Term(trm, self.space) for trm in self._obj.get_terms()]
 
 
 @overload
