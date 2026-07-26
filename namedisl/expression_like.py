@@ -505,7 +505,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: zero_like_me
     .. autoattribute:: var_pw_affs
     .. automethod:: where
-    .. automethod:: get_pieces
+    .. autoattribute:: pieces
     .. automethod:: coalesce
     .. automethod:: eq_set
     .. automethod:: ne_set
@@ -613,7 +613,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
         self_a, other_a = _align_two_expr_likes(self, other)
         return PwAff(self_a._obj.min(other_a._obj), self_a.space)
 
-    def get_pieces(self) -> list[tuple[Set, Aff]]:
+    def pieces(self) -> list[tuple[Set, Aff]]:
         set_space = self.space.as_set_space()
         from .set_like import Set
         return [
@@ -746,7 +746,7 @@ def make_qpolynomial(
 
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
-    .. automethod:: get_pieces
+    .. automethod:: pieces
     {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
@@ -754,7 +754,7 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
 
     _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
 
-    def get_pieces(self) -> list[tuple[Set, QPolynomial]]:
+    def pieces(self) -> list[tuple[Set, QPolynomial]]:
         set_space = self.space.as_set_space()
         from .set_like import Set
         return [

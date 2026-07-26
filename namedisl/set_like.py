@@ -320,7 +320,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
     .. automethod:: add_constraint
     .. autoattribute:: var_affs
     .. automethod:: as_set
-    .. automethod:: get_constraints
+    .. automethod:: constraints
     {_NamedIslSetLike.__doc__}
     {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -336,7 +336,7 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
                 raise ValueError("spaces don't match")
         return BasicSet(self._obj.add_constraint(cns._obj), self.space)
 
-    def get_constraints(self):
+    def constraints(self):
         from .expression_like import Constraint
         return [
             Constraint(cns, self.space.with_empty_dim_type(DimType.in_))
@@ -382,7 +382,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: complement
     .. automethod:: simple_hull
     .. automethod:: convex_hull
-    .. automethod:: get_basic_sets
+    .. automethod:: basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. autoattribute:: var_affs
@@ -405,7 +405,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     def convex_hull(self) -> BasicSet:
         return BasicSet(self._obj.convex_hull(), self.space)
 
-    def get_basic_sets(self) -> list[BasicSet]:
+    def basic_sets(self) -> list[BasicSet]:
         return [BasicSet(bs, self.space) for bs in self._obj.get_basic_sets()]
 
     def dim_max(self, name: str, *, cache: Cache | None = None) -> PwAff:
@@ -595,7 +595,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: complement
     .. automethod:: simple_hull
     .. automethod:: convex_hull
-    .. automethod:: get_basic_maps
+    .. automethod:: basic_maps
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
@@ -625,7 +625,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     def convex_hull(self) -> BasicMap:
         return BasicMap(self._obj.convex_hull(), self.space)
 
-    def get_basic_maps(self) -> list[BasicMap]:
+    def basic_maps(self) -> list[BasicMap]:
         return [BasicMap(bs, self.space) for bs in self._obj.get_basic_maps()]
 
     def domain(self) -> Set:
