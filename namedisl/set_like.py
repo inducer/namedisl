@@ -512,7 +512,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     .. automethod:: range
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
-    .. automethod:: get_constraints
+    .. automethod:: constraints
     {_NamedIslMapLike.__doc__}
     {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -526,7 +526,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
                 raise ValueError("spaces don't match")
         return BasicMap(self._obj.add_constraint(cns._obj), self.space)
 
-    def get_constraints(self):
+    def constraints(self):
         from .expression_like import Constraint
         return [
             Constraint(cns, self.space) for cns in self._obj.get_constraints()]
