@@ -311,8 +311,8 @@ def test_map_coalesce() -> None:
     map_ = nisl.make_map(
         "{ [i] -> [j = i] : 0 <= i < 5 or 5 <= i < 10 }"
     )
-    assert len(map_.get_basic_maps()) == 2
-    assert len(map_.coalesce().get_basic_maps()) == 1
+    assert len(map_.basic_maps()) == 2
+    assert len(map_.coalesce().basic_maps()) == 1
 
 
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
