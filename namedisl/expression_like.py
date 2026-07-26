@@ -359,7 +359,7 @@ class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
     .. automethod:: zero_on_domain
     .. automethod:: as_pw_aff
     .. automethod:: set_coefficient
-    .. automethod:: get_denominator
+    .. automethod:: denominator
 
     .. autoattribute:: var_affs
 
@@ -384,7 +384,7 @@ class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
         dt, idx = self.space.name_to_dim[name]
         return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
 
-    def get_denominator(self) -> isl.Val:
+    def denominator(self) -> isl.Val:
         return self._obj.get_denominator_val()
 
     @cached_property
@@ -526,7 +526,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: lt_set
     .. automethod:: max
     .. automethod:: min
-    .. automethod:: get_aggregate_domain
+    .. automethod:: aggregate_domain
     .. automethod:: union_max
     .. automethod:: union_min
     .. automethod:: union_add
@@ -637,7 +637,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def coalesce(self) -> PwAff:
         return PwAff(self._obj.coalesce(), self.space)
 
-    def get_aggregate_domain(self) -> Set:
+    def aggregate_domain(self) -> Set:
         from .set_like import Set
         agg_domain = self._obj.get_aggregate_domain()
         return Set(
