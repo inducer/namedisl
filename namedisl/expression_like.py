@@ -407,6 +407,8 @@ def make_aff(src: isl.Aff) -> Aff:
 
 def make_aff(src: str | isl.Aff, ctx: isl.Context | None = None) -> Aff:
     obj = isl.Aff(src, ctx) if isinstance(src, str) else src
+    if obj.get_domain_space().is_params():
+        obj = _unparam_expr_domain(obj)
     return Aff(obj, Space.from_isl(obj, Aff.active_dim_types))
 
 
@@ -664,6 +666,8 @@ def make_pw_aff(src: str | isl.PwAff, ctx: isl.Context | None = None) -> PwAff:
     Create a :class:`PwAff` from isl syntax or an :class:`islpy.PwAff`.
     """
     obj = isl.PwAff(src, ctx) if isinstance(src, str) else src
+    if obj.get_domain_space().is_params():
+        obj = _unparam_expr_domain(obj)
     return PwAff(obj, Space.from_isl(obj, PwAff. active_dim_types))
 
 
@@ -744,6 +748,9 @@ def make_qpolynomial(
     else:
         obj = src
 
+    if obj.get_domain_space().is_params():
+        obj = _unparam_expr_domain(obj)
+
     return QPolynomial(obj, Space.from_isl(obj, QPolynomial.active_dim_types))
 
 
@@ -785,6 +792,8 @@ def make_pw_qpolynomial(
     Create a :class:`PwQPolynomial` from isl syntax or an isl object.
     """
     obj = isl.PwQPolynomial(src, ctx) if isinstance(src, str) else src
+    if obj.get_domain_space().is_params():
+        obj = _unparam_expr_domain(obj)
     return PwQPolynomial(
         obj,
         Space.from_isl(obj, PwQPolynomial.active_dim_types))
