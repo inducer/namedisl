@@ -412,16 +412,20 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take max with respect to set dimensions")
-        from .expression_like import PwAff
-        return PwAff(with_cache(cache, isl.Set.dim_max, self._obj, idx),
+        from .expression_like import PwAff, _unparam_expr_domain
+        isl_result = _unparam_expr_domain(
+            with_cache(cache, isl.Set.dim_max, self._obj, idx))
+        return PwAff(isl_result,
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
     def dim_min(self, name: str, *, cache: Cache | None = None) -> PwAff:
         dt, idx = self.space.name_to_dim[name]
         if dt != DimType.out:
             raise ValueError("can only take min with respect to set dimensions")
-        from .expression_like import PwAff
-        return PwAff(with_cache(cache, isl.Set.dim_min, self._obj, idx),
+        from .expression_like import PwAff, _unparam_expr_domain
+        isl_result = _unparam_expr_domain(
+            with_cache(cache, isl.Set.dim_min, self._obj, idx))
+        return PwAff(isl_result,
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
     @cached_property
