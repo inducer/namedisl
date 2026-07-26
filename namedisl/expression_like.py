@@ -110,14 +110,17 @@ NamedExpressionLikeT = TypeVar(
     bound="_NamedExpressionLike[IslScalarExpressionLike]")
 
 
-def _unparam_expr_domain(obj: NamedExpressionLikeT) -> NamedExpressionLikeT:
+def _unparam_expr_domain(obj: IslExpressionLikeT) -> IslExpressionLikeT:
     """If the domain of obj is a param domain, this will make it not a param domain."""
 
     # Oh isl. There *has* to be a better way.
 
+    if isinstance(obj, (isl.PwMultiAff, isl.Constraint)):
+        raise NotImplementedError(f"not supported for {type(obj)}")
+
     dt = isl.dim_type.in_
-    d = obj._obj.dim(dt)
-    return type(obj)(obj._obj.add_dims(dt, 1).drop_dims(dt, d, 1), obj.space)
+    d = obj.dim(dt)
+    return cast("IslExpressionLikeT", obj.add_dims(dt, 1).drop_dims(dt, d, 1))
 
 
 def _align_two_expr_likes(
@@ -130,9 +133,9 @@ def _align_two_expr_likes(
     lhs, rhs = align_two(lhs, rhs)
 
     if lhs._obj.get_domain_space().is_params():
-        lhs = _unparam_expr_domain(lhs)
+        lhs = type(lhs)(_unparam_expr_domain(lhs._obj), lhs.space)
     if rhs._obj.get_domain_space().is_params():
-        rhs = _unparam_expr_domain(rhs)
+        rhs = type(rhs)(_unparam_expr_domain(rhs._obj), rhs.space)
 
     return lhs, rhs
 
