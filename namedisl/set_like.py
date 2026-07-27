@@ -463,8 +463,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         return _PwAffMapping(self.space.as_expr_space(), self._obj.space)
 
     def as_map(self, in_names: Collection[str]) -> Map:
-        result = isl.Map.universe(self._obj.space)
-        result = result.intersect_range(self._obj)
+        result = isl.Map.from_range(self._obj)
         named_map = Map(result, Space(dimtype_to_names=constantdict({
             **self.space.dimtype_to_names,
             DimType.in_: ()
