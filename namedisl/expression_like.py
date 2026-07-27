@@ -124,8 +124,7 @@ def _unparam_expr_domain(obj: IslExpressionLikeT) -> IslExpressionLikeT:
         raise NotImplementedError(f"not supported for {type(obj)}")
 
     dt = isl.dim_type.in_
-    d = obj.dim(dt)
-    return cast("IslExpressionLikeT", obj.add_dims(dt, 1).drop_dims(dt, d, 1))
+    return cast("IslExpressionLikeT", obj.add_dims(dt, 0))
 
 
 def _align_two_expr_likes(
