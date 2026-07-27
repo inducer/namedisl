@@ -507,6 +507,12 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
         {DimType.param, DimType.in_, DimType.out})
 
+    if __debug__:
+        def __post_init__(self) -> None:
+            if self._obj.space.domain().is_params():
+                raise ValueError("domain is params, this is not allowed")
+            return super().__post_init__()
+
     def reverse(self) -> Self:
         return type(self)(
             cast("IslMapLikeT", self._obj.reverse()),
