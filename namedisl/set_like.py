@@ -525,6 +525,7 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
     .. automethod:: constraints
+    .. automethod:: as_map
     {_NamedIslMapLike.__doc__}
     {_NamedIslBasic.__doc__}
     {_NamedIslSetOrMapLike.__doc__}
@@ -563,6 +564,9 @@ class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
         self_a, range_a = align_for_compostition(
             self, DimType.out, range, DimType.out)
         return type(self)(self_a._obj.intersect_range(range_a._obj), self_a.space)
+
+    def as_map(self) -> Map:
+        return Map(self._obj.to_map(), self.space)
 
 
 @overload
