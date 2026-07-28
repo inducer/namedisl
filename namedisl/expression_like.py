@@ -529,6 +529,7 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: union_max
     .. automethod:: union_min
     .. automethod:: union_add
+    .. automethod:: as_pw_qpoly
     {_NamedAffLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
@@ -654,6 +655,9 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     def union_add(self, other: PwAff) -> Self:
         self_a, other_a = _align_two_expr_likes(self, other)
         return type(self)(self_a._obj.union_add(other_a._obj), self_a.space)
+
+    def as_pw_qpoly(self) -> PwQPolynomial:
+        return PwQPolynomial(isl.PwQPolynomial.from_pw_aff(self._obj), self.space)
 
 
 @overload
@@ -798,13 +802,41 @@ def make_qpolynomial(
 
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
+    .. automethod:: zero
+    .. automethod:: from_piece_and_qpolynomial
     .. automethod:: pieces
+    .. automethod:: coalesce
+    .. automethod:: add_disjoint
     {_NamedPolynomialLike.__doc__}
     {_NamedExpressionLike.__doc__}
     {NamedIslObject.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
+
+    @classmethod
+    def zero(cls, space: Space):
+        return cls(isl.PwQPolynomial.zero(space.as_isl()), space)
+
+    @staticmethod
+    def from_piece_and_qpolynomial(piece: Set, qpoly: QPolynomial) -> PwQPolynomial:
+        if not piece.space.order_equals(qpoly.space.as_set_space()):
+            raise ValueError("spaces don't match")
+
+        if qpoly.space.dim(DimType.in_):
+            return PwQPolynomial(
+                isl.PwQPolynomial.alloc(piece._obj, qpoly._obj), qpoly.space)
+        else:
+            piece_obj = piece._obj
+
+            # match piece to qpoly's params status
+            if qpoly._obj.get_domain_space().is_params():
+                piece_obj = piece_obj.params()
+            else:
+                if piece_obj.is_params():
+                    piece_obj = piece_obj.from_params()
+            return PwQPolynomial(
+                isl.PwQPolynomial.alloc(piece_obj, qpoly._obj), qpoly.space)
 
     def pieces(self) -> list[tuple[Set, QPolynomial]]:
         set_space = self.space.as_set_space()
@@ -813,6 +845,14 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
             (Set(set, set_space), QPolynomial(qp, self.space))
             for set, qp in self._obj.get_pieces()
         ]
+
+    def coalesce(self) -> Self:
+        return type(self)(self._obj.coalesce(), self.space)
+
+    def add_disjoint(self, other: Self) -> Self:
+        self_a, other_a = _align_two_expr_likes(self, other)
+        return type(self)(
+            self_a._obj.add_disjoint(other_a._obj), self.space)
 
 
 @overload
