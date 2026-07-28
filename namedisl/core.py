@@ -556,6 +556,7 @@ class Space:
 
     @staticmethod
     def from_names(
+        *,
         param: Collection[str] | None = None,
         in_: Collection[str] | None = None,
         out: Collection[str] | None = None,
