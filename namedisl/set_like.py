@@ -1,6 +1,10 @@
 """
 .. currentmodule:: namedisl
 
+Point
+^^^^^
+.. autoclass:: Point
+
 Quasiconvex set
 ^^^^^^^^^^^^^^^
 .. autoclass:: BasicSet
@@ -50,11 +54,12 @@ THE SOFTWARE.
 """
 
 import operator
+from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
 from constantdict import constantdict
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 import islpy as isl
 
@@ -96,6 +101,29 @@ def _compare_set_or_map_like(
     aligned_lhs, aligned_rhs = align_two(lhs, rhs)
 
     return op(aligned_lhs._obj, aligned_rhs._obj)
+
+
+@dataclass(frozen=True)
+class Point:
+    """
+    .. autoattribute:: space
+    .. autoattribute:: is_void
+    .. automethod:: get_coordinate
+    """
+    _obj: isl.Point
+    space: Space
+
+    @property
+    def is_void(self):
+        return self._obj.is_void()
+
+    def get_coordinate(self, name: str):
+        dt, idx = self.space.name_to_dim[name]
+        return self._obj.get_coordinate_val(dt.as_isl(), idx)
+
+    @override
+    def __str__(self):
+        return str(self._obj)
 
 
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
@@ -266,6 +294,7 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     __doc__ = """
     .. automethod:: is_bounded
     .. automethod:: params
+    .. automethod:: sample_point
     """
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
@@ -283,6 +312,9 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
 
     def is_bounded(self) -> bool:
         return self._obj.is_bounded()
+
+    def sample_point(self):
+        return Point(self.as_isl().sample_point(), self.space)
 
 
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
