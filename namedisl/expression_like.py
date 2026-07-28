@@ -633,8 +633,8 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             for set, aff in self._obj.get_pieces()
         ]
 
-    def coalesce(self) -> PwAff:
-        return PwAff(self._obj.coalesce(), self.space)
+    def coalesce(self) -> Self:
+        return type(self)(self._obj.coalesce(), self.space)
 
     def aggregate_domain(self) -> Set:
         from .set_like import Set
@@ -643,17 +643,17 @@ class PwAff(_NamedAffLike[isl.PwAff]):
             agg_domain.from_params() if agg_domain.is_params() else agg_domain,
             self.space.as_set_space())
 
-    def union_max(self, other: PwAff) -> PwAff:
+    def union_max(self, other: PwAff) -> Self:
         self_a, other_a = _align_two_expr_likes(self, other)
-        return PwAff(self_a._obj.union_max(other_a._obj), self_a.space)
+        return type(self)(self_a._obj.union_max(other_a._obj), self_a.space)
 
-    def union_min(self, other: PwAff) -> PwAff:
+    def union_min(self, other: PwAff) -> Self:
         self_a, other_a = _align_two_expr_likes(self, other)
-        return PwAff(self_a._obj.union_min(other_a._obj), self_a.space)
+        return type(self)(self_a._obj.union_min(other_a._obj), self_a.space)
 
-    def union_add(self, other: PwAff) -> PwAff:
+    def union_add(self, other: PwAff) -> Self:
         self_a, other_a = _align_two_expr_likes(self, other)
-        return PwAff(self_a._obj.union_add(other_a._obj), self_a.space)
+        return type(self)(self_a._obj.union_add(other_a._obj), self_a.space)
 
 
 @overload
