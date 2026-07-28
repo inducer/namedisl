@@ -265,6 +265,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
     __doc__ = """
     .. automethod:: is_bounded
+    .. automethod:: params
     """
 
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
@@ -274,6 +275,11 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
         def __post_init__(self) -> None:
             assert not self._obj.is_params()
             return super().__post_init__()
+
+    def params(self):
+        return type(self)(
+            cast("IslSetLikeT", self._obj.params().from_params()),
+            self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.out))
 
     def is_bounded(self) -> bool:
         return self._obj.is_bounded()
