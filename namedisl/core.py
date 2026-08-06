@@ -220,14 +220,17 @@ def _dimtype_to_names(
 
 
 def _set_dim_name(obj: IslObjectT, dt: DimType, idx: int, name: str) -> IslObjectT:
-    # Ick, annoying. PwAff doesn't have native set_dim_name, but the Id's
-    # are not considered equal to 'plain' names. As such, a situation
-    # can arise where [n] -> ... and [n] -> ... will not be considered
-    # equal, and arithmetic
-
     if isinstance(obj, isl.Constraint):
+        if obj.get_dim_name(dt.as_isl(), idx) == name:
+            # Succeed if it's a no-op.
+            return obj
+
         raise NotImplementedError("setting names on Constraints")
     if isinstance(obj, (isl.PwAff, isl.PwMultiAff)):
+        # Ick, annoying. PwAff doesn't have native set_dim_name, but they
+        # do have set_dim_id. These gymnastics are required to set names
+        # that will pass isl's param name matching.
+
         return cast("IslObjectT", obj.set_dim_id(dt.as_isl(), idx,
             isl.Id.read_from_str(obj.get_ctx(), name)))
     else:
