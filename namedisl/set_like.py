@@ -241,17 +241,20 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     def project_out_except(
                 self,
                 names_to_keep: Collection[str],
-                *, cache: Cache | None = None,
+                *, dim_type: DimType | Literal["all"] = "all",
+                cache: Cache | None = None,
             ) -> Self:
-        "Eliminates the dimensions and constraints."
+        """Eliminates the dimensions and constraints within *dim_type* except
+        the ones named."""
         if isinstance(names_to_keep, str):
             raise TypeError("names_to_keep must be a collection of str")
 
-        names_to_project_out = [
-            name for name in self.space.name_to_dim if name not in names_to_keep
-        ]
+        if dim_type == "all":
+            names_to_project_out = self.space.names - set(names_to_keep)
+        else:
+            names_to_project_out = self.space.dim_names(dim_type)
 
-        return self.project_out(names_to_project_out, cache=cache)
+        return self.project_out(names_to_project_out - set(names_to_keep), cache=cache)
 
     def gist(self, context: Self) -> Self:
         self_aligned, context_aligned = align_two(self, context)
