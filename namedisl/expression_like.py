@@ -802,7 +802,7 @@ def make_qpolynomial(
 
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     __doc__ = f"""
-    .. automethod:: zero
+    .. automethod:: zero_on_domain
     .. automethod:: from_piece_and_qpolynomial
     .. automethod:: pieces
     .. automethod:: coalesce
@@ -815,8 +815,10 @@ class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
     _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
 
     @classmethod
-    def zero(cls, space: Space):
-        return cls(isl.PwQPolynomial.zero(space.as_isl()), space)
+    def zero_on_domain(cls, space: Space):
+        expr_space = space.as_expr_space()
+        isl_space = space.as_expr_space().as_isl().add_dims(isl.dim_type.out, 1)
+        return cls(isl.PwQPolynomial.zero(isl_space), expr_space)
 
     @staticmethod
     def from_piece_and_qpolynomial(piece: Set, qpoly: QPolynomial) -> PwQPolynomial:
