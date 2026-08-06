@@ -393,7 +393,9 @@ class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
         from .expression_like import Constraint
         return [
             Constraint(cns, self.space.with_empty_dim_type(DimType.in_))
-            for cns in self._obj.get_constraints()]
+            # Constraints don't allow names to be set, so create them with correct
+            # names.
+            for cns in self.as_isl().get_constraints()]
 
     @cached_property
     def var_affs(self) -> Mapping[str | Literal[0], Aff]:
