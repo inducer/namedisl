@@ -2,6 +2,7 @@
 .. autofunction:: align_two
 
 .. currentmodule:: namedisl
+.. autoclass:: Error
 .. autoclass:: DimType
 .. autoclass:: Space
 .. autoclass:: Cache

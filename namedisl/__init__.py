@@ -27,6 +27,8 @@ THE SOFTWARE.
 
 from typing import overload
 
+from islpy import Error
+
 from .core import Cache, DimType, IslObject, Space, align_two
 from .expression_like import (
     Aff,
@@ -68,6 +70,7 @@ __all__ = [
     "Cache",
     "Constraint",
     "DimType",
+    "Error",
     "Map",
     "MultiAff",
     "Point",
