@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping, Sequence
 
     from .expression_like import Aff, Constraint, PwAff, PwMultiAff
+    from namedisl.expression_like import PwQPolynomial
 
 
 def _compare_set_or_map_like(
@@ -434,6 +435,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
+    .. automethod:: card
     .. autoattribute:: var_affs
     .. autoattribute:: var_pw_affs
     .. automethod:: as_map
@@ -475,6 +477,15 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         isl_result = _unparam_expr_domain(
             with_cache(cache, isl.Set.dim_min, self._obj, idx))
         return PwAff(isl_result,
+            self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
+
+    def card(self, *, cache: Cache | None = None) -> PwQPolynomial:
+        """Available if the underlying :mod:`islpy` was built with barvinok.
+        (But do note the license implications.)
+        """
+        from namedisl.expression_like import PwQPolynomial
+        return PwQPolynomial(
+            with_cache(cache, isl.Set.card, self._obj),  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
 
     @cached_property
