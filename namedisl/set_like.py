@@ -323,6 +323,7 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
     .. automethod:: as_pw_multi_aff
     .. automethod:: remove_redundancies
     .. automethod:: coalesce
+    .. automethod:: make_disjoint
     """
 
     def equate_dims(
@@ -353,6 +354,9 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
     def coalesce(self) -> Self:
         return type(self)(cast("IslUnbasicT_co", self._obj.coalesce()), self.space)
+
+    def make_disjoint(self) -> Self:
+        return type(self)(cast("IslUnbasicT_co", self._obj.make_disjoint()), self.space)
 
 
 class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
