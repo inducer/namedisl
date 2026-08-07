@@ -1,4 +1,5 @@
 """
+.. autofunction:: align_obj
 .. autofunction:: align_two
 
 .. currentmodule:: namedisl

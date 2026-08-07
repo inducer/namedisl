@@ -29,7 +29,7 @@ from typing import overload
 
 from islpy import Error
 
-from .core import Cache, DimType, IslObject, Space, align_two
+from .core import Cache, DimType, IslObject, Space, align_obj, align_two
 from .expression_like import (
     Aff,
     Constraint,
@@ -82,6 +82,7 @@ __all__ = [
     "Space",
     "Term",
     "affs_from_domain_space",
+    "align_obj",
     "align_two",
     "make_aff",
     "make_basic_map",
