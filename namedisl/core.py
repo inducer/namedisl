@@ -338,10 +338,22 @@ def _find_joint_space(
     }))
 
 
+def _dimtype_to_names_from_name_to_dim(name_to_dim: NameToDim) -> DimTypeToNames:
+    dimtype_to_names: dict[DimType, tuple[str, ...]] = {}
+    for (dt, idx), name in sorted(
+            (dim_id, name) for name, dim_id in name_to_dim.items()):
+        tup = dimtype_to_names.get(dt, ())
+        assert idx == len(tup)
+        dimtype_to_names[dt] = (*tup, name)
+
+    return constantdict(dimtype_to_names)
+
+
 def align_obj(
     named_obj: NamedIslObjectT,
     space: Space,
     *, allow_cross_dim_type: bool = False,
+    obj_larger_than_space_ok: bool = False,
 ) -> NamedIslObjectT:
     obj = named_obj._obj
     running_name_to_dim_id = dict(named_obj.space.name_to_dim)
@@ -407,7 +419,17 @@ def align_obj(
 
             running_name_to_dim_id[name] = DimId(target_dt, target_dim)
 
-    return type(named_obj)(obj, space)
+    if len(running_name_to_dim_id) == len(space.name_to_dim):
+        assert running_name_to_dim_id == space.name_to_dim
+        new_space = space
+    else:
+        if obj_larger_than_space_ok:
+            new_space = Space(
+                _dimtype_to_names_from_name_to_dim(running_name_to_dim_id))
+        else:
+            raise ValueError("object has more dimensions than space")
+
+    return type(named_obj)(obj, new_space)
 
 
 def align_two(
