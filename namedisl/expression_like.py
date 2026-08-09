@@ -100,6 +100,7 @@ from .core import (
     IslScalarExpressionLikeT_co,
     NamedIslObject,
     Space,
+    add_mro_docstrings,
     align_expr_and_set,
     align_two,
 )
@@ -178,7 +179,7 @@ def _apply_expression_binary_op(
 # {{{ "base" named expression-likes (affs, pwaffs, qpolynomials, pwqpolynomials)
 
 class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
-    __doc__ = """
+    """
     .. automethod:: __neg__
     .. automethod:: __add__
     .. automethod:: __radd__
@@ -299,7 +300,6 @@ class _NamedAffLike(_NamedScalarExpressionLike[IslAffLikeT_co]):
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
-    .. automethod:: __truediv__
     .. automethod:: __mod__
     .. automethod:: floor
     .. automethod:: ceil
@@ -340,7 +340,7 @@ class _NamedAffLike(_NamedScalarExpressionLike[IslAffLikeT_co]):
 
 
 class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
-    __doc__ = """
+    """
     .. autoattribute:: num_divs
     .. automethod:: get_div
     .. automethod:: get_div_coefficient
@@ -367,19 +367,15 @@ class _NamedHasCoefficients(NamedIslObject[IslHasCoefficientsT_co]):
         return self._obj.get_constant_val()
 
 
+@add_mro_docstrings
 class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
-    __doc__ = f"""
+    """
     .. automethod:: zero_on_domain
     .. automethod:: as_pw_aff
     .. automethod:: set_coefficient
     .. automethod:: denominator
 
     .. autoattribute:: var_affs
-
-    {_NamedHasCoefficients.__doc__}
-    {_NamedAffLike.__doc__}
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.Aff
@@ -465,16 +461,15 @@ def affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], Aff]:
     return _AffMapping(zero.space, space.as_isl_set_space())
 
 
+@add_mro_docstrings
 class Constraint(_NamedHasCoefficients[isl.Constraint]):
-    __doc__ = f"""
+    """
     .. automethod:: equality_from_aff
     .. automethod:: inequality_from_aff
     .. autoattribute:: is_equality
     .. automethod:: as_aff
     .. automethod:: as_basic_set
     .. automethod:: as_basic_map
-
-    {_NamedHasCoefficients.__doc__}
     """
     _isl_type: ClassVar[type[IslObject]] = isl.Constraint
 
@@ -523,8 +518,9 @@ def make_constraint(obj: isl.Constraint) -> Constraint:
     return Constraint(obj, Space.from_isl(obj, Constraint.active_dim_types))
 
 
+@add_mro_docstrings
 class PwAff(_NamedAffLike[isl.PwAff]):
-    __doc__ = f"""
+    """
     .. automethod:: from_piece_and_aff
     .. automethod:: zero_like_me
     .. autoattribute:: var_pw_affs
@@ -544,9 +540,6 @@ class PwAff(_NamedAffLike[isl.PwAff]):
     .. automethod:: union_min
     .. automethod:: union_add
     .. automethod:: as_pw_qpoly
-    {_NamedAffLike.__doc__}
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.PwAff
@@ -772,12 +765,10 @@ class Term:
         return self._obj.get_exp(isl.dim_type.div, index)
 
 
+@add_mro_docstrings
 class QPolynomial(_NamedPolynomialLike[isl.QPolynomial]):
-    __doc__ = f"""
+    """
     .. automethod:: terms
-    {_NamedPolynomialLike.__doc__}
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
     _isl_type: ClassVar[type[IslObject]] = isl.QPolynomial
 
@@ -814,16 +805,14 @@ def make_qpolynomial(
     return QPolynomial(obj, Space.from_isl(obj, QPolynomial.active_dim_types))
 
 
+@add_mro_docstrings
 class PwQPolynomial(_NamedPolynomialLike[isl.PwQPolynomial]):
-    __doc__ = f"""
+    """
     .. automethod:: zero_on_domain
     .. automethod:: from_piece_and_qpolynomial
     .. automethod:: pieces
     .. automethod:: coalesce
     .. automethod:: add_disjoint
-    {_NamedPolynomialLike.__doc__}
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.PwQPolynomial
@@ -902,11 +891,10 @@ def make_pw_qpolynomial(
 
 # {{{ multi expression-likes (multiaff, pwmultiaff)
 
+@add_mro_docstrings
 class MultiAff(_NamedExpressionLike[isl.MultiAff]):
-    __doc__ = f"""
+    """
     .. automethod:: __getitem__
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
     _isl_type: ClassVar[type[IslObject]] = isl.MultiAff
 
@@ -939,12 +927,11 @@ def make_multi_aff(
     return MultiAff(obj, Space.from_isl(obj, MultiAff.active_dim_types))
 
 
+@add_mro_docstrings
 class PwMultiAff(_NamedExpressionLike[isl.PwMultiAff]):
-    __doc__ = f"""
+    """
     .. automethod:: __getitem__
     .. automethod:: as_multi_aff
-    {_NamedExpressionLike.__doc__}
-    {NamedIslObject.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.PwMultiAff
