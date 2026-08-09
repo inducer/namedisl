@@ -97,6 +97,7 @@ from .core import (
     IslPolynomialLikeT_co,
     IslScalarExpressionLike,
     IslScalarExpressionLikeT,
+    IslScalarExpressionLikeT_co,
     NamedIslObject,
     Space,
     align_expr_and_set,
@@ -107,7 +108,7 @@ from .core import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from namedisl.set_like import Set
+    from .set_like import Point, Set
 
 
 NamedExpressionLikeT = TypeVar(
@@ -280,8 +281,21 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
             return aligned_lhs._obj.is_equal(aligned_rhs._obj)
 
 
-class _NamedAffLike(_NamedExpressionLike[IslAffLikeT_co]):
-    __doc__ = """
+class _NamedScalarExpressionLike(_NamedExpressionLike[IslScalarExpressionLikeT_co]):
+    """
+    .. automethod:: eval
+    """
+
+    def eval(self, point: Point):
+        if __debug__:  # ruff: ignore[collapsible-if]
+            if not self.space.as_set_space().order_equals(point.space):
+                raise ValueError("point space does not match expr space")
+
+        return self._obj.eval(point._obj)
+
+
+class _NamedAffLike(_NamedScalarExpressionLike[IslAffLikeT_co]):
+    """
     .. automethod:: is_constant
     .. automethod:: gist
     .. automethod:: gist_params
@@ -716,8 +730,8 @@ def pw_affs_from_domain_space(space: Space) -> Mapping[str | Literal[0], PwAff]:
     return _PwAffMapping(space.as_expr_space(), space.as_isl_set_space())
 
 
-class _NamedPolynomialLike(_NamedExpressionLike[IslPolynomialLikeT_co]):
-    __doc__ = """
+class _NamedPolynomialLike(_NamedScalarExpressionLike[IslPolynomialLikeT_co]):
+    """
     .. automethod:: __pow__
     """
 

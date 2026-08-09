@@ -165,6 +165,11 @@ IslExpressionLikeT_co = TypeVar(
     bound=IslExpressionLike,
     covariant=True,
 )
+IslScalarExpressionLikeT_co = TypeVar(
+    "IslScalarExpressionLikeT_co",
+    bound=IslScalarExpressionLike,
+    covariant=True,
+)
 
 NamedIslObjectT = TypeVar(
     "NamedIslObjectT",
