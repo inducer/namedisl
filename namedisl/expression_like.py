@@ -187,6 +187,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
     .. automethod:: __rsub__
     .. automethod:: __mul__
     .. automethod:: __rmul__
+    .. automethod:: __truediv__
     .. automethod:: __bool__
     .. automethod:: is_zero
     .. automethod:: plain_is_zero
@@ -243,6 +244,14 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
         other: int,
     ) -> Self:
         return cast("Self", _apply_expression_binary_op(other, self, operator.mul))
+
+    def __truediv__(
+        self: Self,
+        other: isl.Val | int,
+    ) -> Self:
+        return type(self)(
+            cast("IslExpressionLikeT_co", self._obj.scale_down_val(other)),
+            self.space)
 
     def __bool__(self):
         raise RuntimeError("use plain_is_zero instead of truthiness")
@@ -323,7 +332,11 @@ class _NamedAffLike(_NamedScalarExpressionLike[IslAffLikeT_co]):
         return type(self)(
             cast("IslAffLikeT_co", self_a._obj.gist_params(set_a._obj)), self_a.space)
 
-    def __truediv__(self, other: Self) -> Self:
+    @override
+    def __truediv__(self, other: Self | int | isl.Val) -> Self:
+        if isinstance(other, (int, isl.Val)):
+            return super().__truediv__(other)
+
         self_a, other_a = _align_two_expr_likes(self, other)
         return type(self)(
             cast("IslAffLikeT_co", self_a._obj.div(other_a._obj)),
