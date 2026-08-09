@@ -385,7 +385,7 @@ class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
     """
     .. automethod:: zero_on_domain
     .. automethod:: as_pw_aff
-    .. automethod:: set_coefficient
+    .. automethod:: with_coefficient
     .. automethod:: denominator
 
     .. autoattribute:: var_affs
@@ -402,7 +402,7 @@ class Aff(_NamedAffLike[isl.Aff], _NamedHasCoefficients[isl.Aff]):
     def as_pw_aff(self) -> PwAff:
         return PwAff(self._obj.to_pw_aff(), self.space)
 
-    def set_coefficient(self, name: str, value: int) -> Aff:
+    def with_coefficient(self, name: str, value: int) -> Aff:
         dt, idx = self.space.name_to_dim[name]
         return Aff(self._obj.set_coefficient_val(dt.as_isl(), idx, value), self.space)
 
