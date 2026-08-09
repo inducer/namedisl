@@ -294,6 +294,7 @@ class _NamedExpressionLike(NamedIslObject[IslExpressionLikeT_co]):
 class _NamedScalarExpressionLike(_NamedExpressionLike[IslScalarExpressionLikeT_co]):
     """
     .. automethod:: eval
+    .. automethod:: eval_with_dict
     """
 
     def eval(self, point: Point):
@@ -302,6 +303,12 @@ class _NamedScalarExpressionLike(_NamedExpressionLike[IslScalarExpressionLikeT_c
                 raise ValueError("point space does not match expr space")
 
         return self._obj.eval(point._obj)
+
+    def eval_with_dict(self, value_dict: Mapping[str, int | isl.Val]):
+        from .set_like import Point
+        pt = Point.from_dict(self.space.as_set_space(), value_dict)
+
+        return self.eval(pt)
 
 
 class _NamedAffLike(_NamedScalarExpressionLike[IslAffLikeT_co]):
