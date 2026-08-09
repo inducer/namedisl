@@ -14,6 +14,7 @@ General set
 ^^^^^^^^^^^
 .. autoclass:: Set
 .. autofunction:: make_set
+.. autoclass:: StrideInfo
 
 Quasiconvex map
 ^^^^^^^^^^^^^^^
@@ -432,6 +433,24 @@ def make_basic_set(src: str | isl.BasicSet, ctx: isl.Context | None = None) -> B
     return BasicSet(obj, Space.from_isl(obj, BasicSet.active_dim_types))
 
 
+@dataclass(frozen=True)
+class StrideInfo:
+    """
+    .. autoattribute:: stride
+    .. autoattribute:: offset
+    """
+
+    _obj: isl.StrideInfo
+
+    @property
+    def stride(self):
+        return self._obj.get_stride()
+
+    @property
+    def offset(self):
+        return self._obj.get_offset()
+
+
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     __doc__ = f"""
     .. automethod:: complement
@@ -440,6 +459,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: basic_sets
     .. automethod:: dim_max
     .. automethod:: dim_min
+    .. automethod:: stride_info
     .. automethod:: card
     .. autoattribute:: var_affs
     .. autoattribute:: var_pw_affs
@@ -483,6 +503,13 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
             with_cache(cache, isl.Set.dim_min, self._obj, idx))
         return PwAff(isl_result,
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
+
+    def stride_info(self, name: str, *, cache: Cache | None = None):
+        dt, idx = self.space.name_to_dim[name]
+        if dt != DimType.out:
+            raise ValueError("can only find stride with respect to set dimensions")
+        return StrideInfo(with_cache(cache,
+            isl.Set.get_stride_info, self._obj, idx))
 
     def card(self, *, cache: Cache | None = None) -> PwQPolynomial:
         """Available if the underlying :mod:`islpy` was built with barvinok.
