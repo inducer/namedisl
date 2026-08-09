@@ -89,8 +89,13 @@ from .core import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping, Sequence
 
-    from .expression_like import Aff, Constraint, PwAff, PwMultiAff
-    from namedisl.expression_like import PwQPolynomial
+    from .expression_like import (
+        Aff,
+        Constraint,
+        PwAff,
+        PwMultiAff,
+        PwQPolynomial,
+    )
 
 
 def _compare_set_or_map_like(
@@ -111,7 +116,14 @@ class Point:
     """
     .. autoattribute:: space
     .. autoattribute:: is_void
+    .. automethod:: zero_on_domain
+    .. automethod:: zero
+    .. automethod:: from_dict
     .. automethod:: get_coordinate
+    .. automethod:: with_coordinate
+    .. automethod:: as_set
+    .. automethod:: __str__
+    .. automethod:: __repr__
     """
     _obj: isl.Point
     space: Space
@@ -120,13 +132,47 @@ class Point:
     def is_void(self):
         return self._obj.is_void()
 
+    @staticmethod
+    def zero_on_domain(other: BasicSet | Set | BasicMap | Map) -> Point:
+        return Point(isl.Point.zero(other._obj.space), other.space)
+
+    @staticmethod
+    def zero(space: Space) -> Point:
+        if not space.dimtype_to_name_sets.get(DimType.in_):
+            isl_sp = space.as_isl_set_space()
+        else:
+            isl_sp = space.as_isl()
+        return Point(isl.Point.zero(isl_sp), space)
+
+    @classmethod
+    def from_dict(cls, space: Space, value_dict: Mapping[str, int | isl.Val]):
+        pt = cls.zero(space)
+
+        for name, value in value_dict.items():
+            pt = pt.with_coordinate(name, value)
+
+        return pt
+
     def get_coordinate(self, name: str):
         dt, idx = self.space.name_to_dim[name]
         return self._obj.get_coordinate_val(dt.as_isl(), idx)
 
+    def with_coordinate(self, name: str, value: isl.Val | int):
+        dt, idx = self.space.name_to_dim[name]
+        return Point(
+            self._obj.set_coordinate_val(dt.as_isl(), idx, value),
+            self.space)
+
+    def as_set(self) -> Set:
+        return Set(isl.Set.from_point(self._obj), self.space)
+
     @override
     def __str__(self):
         return str(self._obj)
+
+    @override
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self._obj)!r})"
 
 
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
