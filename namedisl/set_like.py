@@ -78,6 +78,7 @@ from .core import (
     NamedIslObject,
     Space,
     _align_and_apply_binary_op,
+    add_mro_docstrings,
     align_for_compostition,
     align_two,
     chunked_dims_by_type,
@@ -129,7 +130,7 @@ class Point:
 
 
 class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
-    __doc__ = """
+    """
     .. automethod:: is_empty
     .. automethod:: plain_is_empty
     .. automethod:: plain_is_universe
@@ -147,7 +148,6 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: __and__
     .. automethod:: __or__
     .. automethod:: __sub__
-    .. automethod:: __eq__
     .. automethod:: equals
     .. automethod:: __lt__
     .. automethod:: __le__
@@ -296,7 +296,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
 
 
 class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
-    __doc__ = """
+    """
     .. automethod:: is_bounded
     .. automethod:: params
     .. automethod:: sample_point
@@ -323,7 +323,7 @@ class _NamedIslSetLike(_NamedIslSetOrMapLike[IslSetLikeT]):
 
 
 class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
-    __doc__ = """
+    """
     .. automethod:: equate_dims
     .. automethod:: as_pw_multi_aff
     .. automethod:: remove_redundancies
@@ -365,19 +365,16 @@ class _NamedIslUnbasic(_NamedIslSetOrMapLike[IslUnbasicT_co]):
 
 
 class _NamedIslBasic(_NamedIslSetOrMapLike[IslBasicT_co]):
-    __doc__ = """
-    """
+    pass
 
 
+@add_mro_docstrings
 class BasicSet(_NamedIslSetLike[isl.BasicSet], _NamedIslBasic[isl.BasicSet]):
-    __doc__ = f"""
+    """
     .. automethod:: add_constraint
     .. autoattribute:: var_affs
     .. automethod:: as_set
     .. automethod:: constraints
-    {_NamedIslSetLike.__doc__}
-    {_NamedIslBasic.__doc__}
-    {_NamedIslSetOrMapLike.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.BasicSet
@@ -451,8 +448,9 @@ class StrideInfo:
         return self._obj.get_offset()
 
 
+@add_mro_docstrings
 class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
-    __doc__ = f"""
+    """
     .. automethod:: complement
     .. automethod:: simple_hull
     .. automethod:: convex_hull
@@ -465,9 +463,6 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. autoattribute:: var_pw_affs
     .. automethod:: as_map
     .. automethod:: as_basic
-    {_NamedIslUnbasic.__doc__}
-    {_NamedIslSetLike.__doc__}
-    {_NamedIslSetOrMapLike.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.Set
@@ -584,8 +579,7 @@ def make_set(src: isl.Set | str, ctx: isl.Context | None = None) -> Set:
 
 
 class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
-    __doc__ = """
-    .. autoattribute:: active_dim_types
+    """
     .. automethod:: reverse
     """
     active_dim_types: ClassVar[frozenset[DimType]] = frozenset(
@@ -603,17 +597,15 @@ class _NamedIslMapLike(_NamedIslSetOrMapLike[IslMapLikeT]):
             self.space.swap_dim_types(DimType.in_, DimType.out))
 
 
+@add_mro_docstrings
 class BasicMap(_NamedIslMapLike[isl.BasicMap], _NamedIslBasic[isl.BasicMap]):
-    __doc__ = f"""
+    """
     .. automethod:: domain
     .. automethod:: range
     .. automethod:: intersect_domain
     .. automethod:: intersect_range
     .. automethod:: constraints
     .. automethod:: as_map
-    {_NamedIslMapLike.__doc__}
-    {_NamedIslBasic.__doc__}
-    {_NamedIslSetOrMapLike.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.BasicMap
@@ -694,8 +686,9 @@ def make_map_from_domain_and_range(
     )
 
 
+@add_mro_docstrings
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
-    __doc__ = f"""
+    """
     .. automethod:: is_bijective
     .. automethod:: complement
     .. automethod:: simple_hull
@@ -711,9 +704,6 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: as_set
     .. autoattribute:: domain_var_pw_affs
     .. autoattribute:: range_var_pw_affs
-    {_NamedIslSetOrMapLike.__doc__}
-    {_NamedIslUnbasic.__doc__}
-    {_NamedIslMapLike.__doc__}
     """
 
     _isl_type: ClassVar[type[IslObject]] = isl.Map

@@ -775,10 +775,8 @@ class Space:
 
 @dataclass(frozen=True, eq=False, repr=False)
 class NamedIslObject(Generic[IslObjectT_co]):
-    # NB: Assigning to __doc__ is goofy, but it allows for compatibility with
-    # the docstring pasting scheme used in subclasses.
-    __doc__ = """
-    .. autoattribute:: _obj
+    # .. autoattribute:: _obj
+    """
     .. autoattribute:: space
     .. autoattribute:: active_dim_types
     .. automethod:: add_dims
@@ -1031,3 +1029,15 @@ def _dump_isl_space(sp: isl.Space):  # pyright: ignore[reportUnusedFunction]
         f":is_set={sp.is_set()}"
         ")"
     )
+
+
+def add_mro_docstrings(cls: type[T]) -> type[T]:
+    doc_parts: list[str] = []
+    for supercls in cls.__mro__:
+        if supercls is object or supercls.__name__ == "Generic":
+            continue
+        superdoc = cast("str | None", getattr(supercls, "__doc__", None))
+        if superdoc is not None:
+            doc_parts.append(superdoc)
+    cls.__doc__ = "\n\n".join(doc_parts)
+    return cls
