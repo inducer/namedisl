@@ -556,7 +556,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
         """Available if the underlying :mod:`islpy` was built with barvinok.
         (But do note the license implications.)
         """
-        from namedisl.expression_like import PwQPolynomial
+        from .expression_like import PwQPolynomial
         return PwQPolynomial(
             with_cache(cache, isl.Set.card, self._obj),  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportAttributeAccessIssue]
             self.space.drop_dim_type(DimType.out).with_empty_dim_type(DimType.in_))
