@@ -31,6 +31,7 @@ nitpick_ignore_regex = [
 
 sphinxconfig_missing_reference_aliases = {
     "dim_type": "class:islpy.dim_type",
+    "isl.Val": "class:islpy.Val",
 }
 
 
