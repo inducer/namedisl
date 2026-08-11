@@ -288,7 +288,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     def project_out_except(
                 self,
                 names_to_keep: Collection[str],
-                *, dim_type: DimType | Literal["all"] = "all",
+                *, dim_type: DimType | Literal["all"],
                 cache: Cache | None = None,
             ) -> Self:
         """Eliminates the dimensions and constraints within *dim_type* except
