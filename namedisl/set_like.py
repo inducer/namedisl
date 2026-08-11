@@ -252,17 +252,19 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     def eliminate_except(
                 self,
                 names_to_keep: Collection[str],
-                *, cache: Cache | None = None,
+                *, dim_type: DimType | Literal["all"],
+                cache: Cache | None = None,
             ) -> Self:
         "Keeps the dimensions, but eliminates constraints."
         if isinstance(names_to_keep, str):
             raise TypeError("names_to_keep must be a collection of str")
 
-        names_to_eliminate = [
-            name for name in self.space.name_to_dim if name not in names_to_keep
-        ]
+        if dim_type == "all":
+            names_to_eliminate = self.space.names
+        else:
+            names_to_eliminate = self.space.dim_names(dim_type)
 
-        return self.eliminate(names_to_eliminate, cache=cache)
+        return self.eliminate(names_to_eliminate - set(names_to_keep), cache=cache)
 
     def project_out(self,
                 names: str | Collection[str],
@@ -297,7 +299,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
             raise TypeError("names_to_keep must be a collection of str")
 
         if dim_type == "all":
-            names_to_project_out = self.space.names - set(names_to_keep)
+            names_to_project_out = self.space.names
         else:
             names_to_project_out = self.space.dim_names(dim_type)
 
