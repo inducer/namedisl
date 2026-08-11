@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "namedisl"
-version = "2026.1"
+version = "2026.1.1"
 description = 'Name-oriented polyhedral operations'
 readme = "README.rst"
 requires-python = ">=3.10"
