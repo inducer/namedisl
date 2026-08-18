@@ -315,6 +315,24 @@ def test_map_coalesce() -> None:
     assert len(map_.coalesce().basic_maps()) == 1
 
 
+def test_map_function_properties() -> None:
+    bijective = nisl.make_map("{ [i] -> [j = i] : 0 <= i < 2 }")
+    many_to_one = nisl.make_map("{ [i] -> [j = 0] : 0 <= i < 2 }")
+    one_to_many = nisl.make_map("{ [i = 0] -> [j] : 0 <= j < 2 }")
+
+    assert bijective.is_bijective()
+    assert bijective.is_injective()
+    assert bijective.is_single_valued()
+
+    assert not many_to_one.is_bijective()
+    assert not many_to_one.is_injective()
+    assert many_to_one.is_single_valued()
+
+    assert not one_to_many.is_bijective()
+    assert one_to_many.is_injective()
+    assert not one_to_many.is_single_valued()
+
+
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
 @pytest.mark.parametrize("ndims_range", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])

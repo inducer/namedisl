@@ -738,6 +738,8 @@ def make_map_from_domain_and_range(
 class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     """
     .. automethod:: is_bijective
+    .. automethod:: is_injective
+    .. automethod:: is_single_valued
     .. automethod:: complement
     .. automethod:: simple_hull
     .. automethod:: convex_hull
@@ -756,8 +758,14 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
 
     _isl_type: ClassVar[type[IslObject]] = isl.Map
 
-    def is_bijective(self):
+    def is_bijective(self) -> bool:
         return self._obj.is_bijective()
+
+    def is_injective(self) -> bool:
+        return self._obj.is_injective()
+
+    def is_single_valued(self) -> bool:
+        return self._obj.is_single_valued()
 
     def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)
