@@ -1,1 +1,1 @@
-git+https://github.com/inducer/islpy.git@no-auto-self-downcast#egg=islpy
+git+https://github.com/inducer/islpy.git#egg=islpy
