@@ -333,6 +333,14 @@ def test_map_function_properties() -> None:
     assert not one_to_many.is_single_valued()
 
 
+def test_map_lexmin_preserves_named_space() -> None:
+    map_ = nisl.make_map(
+        "{ [target] -> [source] : target = 0 and 1 <= source <= 2 }"
+    )
+
+    assert map_.lexmin() == nisl.make_map("{ [target = 0] -> [source = 1] }")
+
+
 @pytest.mark.parametrize("ndims_domain", [2, 3, 4, 5])
 @pytest.mark.parametrize("ndims_range", [2, 3, 4, 5])
 @pytest.mark.parametrize("has_params", [True, False])

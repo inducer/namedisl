@@ -740,6 +740,7 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
     .. automethod:: is_bijective
     .. automethod:: is_injective
     .. automethod:: is_single_valued
+    .. automethod:: lexmin
     .. automethod:: complement
     .. automethod:: simple_hull
     .. automethod:: convex_hull
@@ -766,6 +767,9 @@ class Map(_NamedIslMapLike[isl.Map], _NamedIslUnbasic[isl.Map]):
 
     def is_single_valued(self) -> bool:
         return self._obj.is_single_valued()
+
+    def lexmin(self) -> Map:
+        return Map(self._obj.lexmin(), self.space)
 
     def complement(self) -> Map:
         return Map(self._obj.complement(), self.space)
