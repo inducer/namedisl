@@ -648,7 +648,7 @@ class Space:
             for dt, names in self.dimtype_to_names.items()
             for i, name in enumerate(names)}
 
-        object.__setattr__(self, "_name_to_dim_cache", result)
+        object.__setattr__(self, "_name_to_dim_cache", result)  # ruff: ignore[unnecessary-dunder-call]
         return result
 
     @cached_property
@@ -724,7 +724,7 @@ class Space:
 
         # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
         result = self.move_dim_type(DimType.out, DimType.in_)
-        object.__setattr__(self, "_expr_space_cache", result)
+        object.__setattr__(self, "_expr_space_cache", result)  # ruff: ignore[unnecessary-dunder-call]
         return result
 
     def as_set_space(self) -> Space:
@@ -735,7 +735,7 @@ class Space:
 
         # In isl's exxpression-like spaces, "set" dimensions become "in" dimensions
         result = self.move_dim_type(DimType.in_, DimType.out)
-        object.__setattr__(self, "_set_space_cache", result)
+        object.__setattr__(self, "_set_space_cache", result)  # ruff: ignore[unnecessary-dunder-call]
         return result
 
     def as_isl(self, ctx: isl.Context | None = None) -> isl.Space:
@@ -939,8 +939,8 @@ class NamedIslObject(Generic[IslObjectT_co]):
             return self._obj
 
         res = _restore_names(self._obj, self.space.dimtype_to_names)
-        object.__setattr__(self, "_obj", res)
-        object.__setattr__(self, "_isl_names_ok", True)
+        object.__setattr__(self, "_obj", res)  # ruff: ignore[unnecessary-dunder-call]
+        object.__setattr__(self, "_isl_names_ok", True)  # ruff: ignore[unnecessary-dunder-call]
         return res
 
     def involves_dims(self, names: Collection[str]) -> bool:
