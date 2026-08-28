@@ -315,6 +315,15 @@ def test_map_coalesce() -> None:
     assert len(map_.coalesce().basic_maps()) == 1
 
 
+def test_map_detect_equalities() -> None:
+    map_ = nisl.make_map("{ [i] -> [j] : 0 <= i <= j < 5 }")
+    detected = map_.detect_equalities()
+
+    assert isinstance(detected, nisl.Map)
+    assert detected.space == map_.space
+    assert detected.equals(map_)
+
+
 def test_map_function_properties() -> None:
     bijective = nisl.make_map("{ [i] -> [j = i] : 0 <= i < 2 }")
     many_to_one = nisl.make_map("{ [i] -> [j = 0] : 0 <= i < 2 }")

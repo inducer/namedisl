@@ -189,6 +189,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
     .. automethod:: project_out
     .. automethod:: project_out_except
     .. automethod:: gist
+    .. automethod:: detect_equalities
     .. automethod:: remove_divs
     .. automethod:: compute_divs
     .. automethod:: __and__
@@ -310,6 +311,12 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         return type(self)(
             self_aligned._obj.gist(context_aligned._obj),
             self_aligned.space,
+        )
+
+    def detect_equalities(self) -> Self:
+        return type(self)(
+            cast("IslSetOrMapLikeT_co", self._obj.detect_equalities()),
+            self.space,
         )
 
     def compute_divs(self) -> Self:
