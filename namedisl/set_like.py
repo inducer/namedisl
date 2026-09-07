@@ -268,7 +268,7 @@ class _NamedIslSetOrMapLike(NamedIslObject[IslSetOrMapLikeT_co]):
         return self.eliminate(names_to_eliminate - set(names_to_keep), cache=cache)
 
     def project_out(self,
-                names: str | Collection[str],
+                names: Collection[str],
                 *, cache: Cache | None = None,
             ) -> Self:
         "Eliminates the dimensions and constraints."
