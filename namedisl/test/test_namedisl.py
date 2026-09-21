@@ -26,6 +26,9 @@ THE SOFTWARE.
 """
 
 
+import pickle
+from typing import cast
+
 import pytest
 
 import islpy as isl
@@ -243,5 +246,16 @@ def test_align_obj_promotes_renamed_dimension_with_its_named_id() -> None:
     aligned = align_obj(
         renamed_set, parameter_space, allow_cross_dim_type=True)
 
-    assert aligned._obj.get_dim_name(isl.dim_type.param, 0) == "n"
     assert aligned.equals(nisl.make_set("[n] -> { [] : n = 4 }"))
+
+
+def test_pickling_restores_unique_raw_dimension_names() -> None:
+    raw_space = isl.Space.set_alloc(isl.DEFAULT_CONTEXT, 0, 2)
+    named_set = nisl.Set(
+        isl.Set.universe(raw_space), Space.from_names(param=[], out=["i", "j"]))
+
+    restored = cast("nisl.Set", pickle.loads(pickle.dumps(named_set)))
+
+    assert restored.equals(named_set)
+    assert restored._obj.get_dim_name(isl.dim_type.set, 0) == "i"
+    assert restored._obj.get_dim_name(isl.dim_type.set, 1) == "j"
