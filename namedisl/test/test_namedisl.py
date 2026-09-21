@@ -33,7 +33,7 @@ import islpy as isl
 import namedisl as nisl
 from .utils_for_tests import generate_random_named_set
 from namedisl import to_named
-from namedisl.core import DimType
+from namedisl.core import DimType, Space, align_obj
 
 
 @pytest.mark.parametrize("ndims", [2, 3, 4, 5])
@@ -228,3 +228,20 @@ def test_ticked_names_are_distinct_names() -> None:
     named_set = nisl.make_set(isl.Set.universe(space))
 
     assert named_set.space.names == frozenset({"x", "x'"})
+
+
+def test_align_obj_returns_already_aligned_object() -> None:
+    named_set = nisl.make_set("{ [i] : i >= 0 }")
+
+    assert align_obj(named_set, named_set.space) is named_set
+
+
+def test_align_obj_promotes_renamed_dimension_with_its_named_id() -> None:
+    renamed_set = nisl.make_set("{ [i] : i = 4 }").rename_dims((("i", "n"),))
+    parameter_space = Space.from_names(param=["n"], out=[])
+
+    aligned = align_obj(
+        renamed_set, parameter_space, allow_cross_dim_type=True)
+
+    assert aligned._obj.get_dim_name(isl.dim_type.param, 0) == "n"
+    assert aligned.equals(nisl.make_set("[n] -> { [] : n = 4 }"))
