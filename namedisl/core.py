@@ -360,6 +360,9 @@ def align_obj(
     *, allow_cross_dim_type: bool = False,
     obj_larger_than_space_ok: bool = False,
 ) -> NamedIslObjectT:
+    if named_obj.space.order_equals(space):
+        return named_obj
+
     obj = named_obj._obj
     running_name_to_dim_id = dict(named_obj.space.name_to_dim)
 
@@ -393,6 +396,11 @@ def align_obj(
                         else:
                             another_dim_type = DimType.in_
 
+                    if another_dim_type == DimType.param:
+                        # Only promoted dimensions need consistent parameter IDs.
+                        obj = _set_dim_name(
+                            obj, old_dim_id.dim_type, old_dim_id.dim_index, name)
+
                     obj = obj.move_dims(
                         another_dim_type.as_isl(), 0,
                         old_dim_id.dim_type.as_isl(), old_dim_id.dim_index,
@@ -405,6 +413,10 @@ def align_obj(
                 else:
                     if not allow_cross_dim_type:
                         raise ValueError("moves across dim_types are not allowed")
+
+                    if target_dt == DimType.param:
+                        obj = _set_dim_name(
+                            obj, old_dim_id.dim_type, old_dim_id.dim_index, name)
 
                     obj = obj.move_dims(
                         target_dim_id.dim_type.as_isl(), target_dim_id.dim_index,
