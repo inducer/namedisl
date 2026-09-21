@@ -40,7 +40,7 @@ THE SOFTWARE.
 import enum
 import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from functools import cached_property
 from importlib import metadata
 from typing import (
@@ -954,6 +954,19 @@ class NamedIslObject(Generic[IslObjectT_co]):
         object.__setattr__(self, "_obj", res)  # ruff: ignore[unnecessary-dunder-call]
         object.__setattr__(self, "_isl_names_ok", True)  # ruff: ignore[unnecessary-dunder-call]
         return res
+
+    @override
+    def __reduce__(self):
+        return (type(self),
+            (
+                # islpy's pickle protocol requires unique raw dimension names.
+                self.as_isl(),
+                *(
+                    getattr(self, f.name)
+                    for f in fields(self)[1:]
+                )
+            )
+        )
 
     def involves_dims(self, names: Collection[str]) -> bool:
         """True if *self* involves any of the given dimensions."""
