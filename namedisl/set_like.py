@@ -513,6 +513,7 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
     .. automethod:: dim_max
     .. automethod:: dim_min
     .. automethod:: stride_info
+    .. automethod:: is_box
     .. automethod:: card
     .. autoattribute:: var_affs
     .. autoattribute:: var_pw_affs
@@ -560,6 +561,9 @@ class Set(_NamedIslSetLike[isl.Set], _NamedIslUnbasic[isl.Set]):
             raise ValueError("can only find stride with respect to set dimensions")
         return StrideInfo(with_cache(cache,
             isl.Set.get_stride_info, self._obj, idx))
+
+    def is_box(self) -> bool:
+        return self._obj.is_box()
 
     def card(self, *, cache: Cache | None = None) -> PwQPolynomial:
         """Available if the underlying :mod:`islpy` was built with barvinok.
